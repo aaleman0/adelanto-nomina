@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #161513;
+  --primary: #33553c;
+  --primary-strong: #26412e;
+  --secondary: #006b8f;
+  --secondary-strong: #00516d;
+  --accent: #33553c;
+  --surface: #ffffff;
+  --surface-muted: #f6f7f4;
+  --text-primary: #161513;
+  --text-muted: #667085;
+  --border: #d7ded6;
+  --link: #f0cc71;
+  --radius-base: 4px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-strong: var(--primary-strong);
+  --color-secondary: var(--secondary);
+  --color-secondary-strong: var(--secondary-strong);
+  --color-accent: var(--accent);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-text-primary: var(--text-primary);
+  --color-text-muted: var(--text-muted);
+  --color-border: var(--border);
+  --color-link: var(--link);
+  --radius-base: var(--radius-base);
+  --text-h1: 20px;
+  --text-h2: 20px;
+  --text-body: 16px;
+  --font-sans: "OracleSansVF", "Aptos", "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", "Cascadia Code", monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "OracleSansVF", "Aptos", "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+a {
+  color: var(--link);
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Adelantos EasyLex"
+  short_description: "Contratos y firma con EasyLex"
+  default_prompt: "Use $adelantos-easylex para integrar contratos y firma con EasyLex."

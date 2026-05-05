@@ -1,0 +1,4 @@
+interface:
+  display_name: "Adelantos Design System"
+  short_description: "Guia visual y componentes del backoffice"
+  default_prompt: "Use $adelantos-design-system para disenar o refactorizar UI del backoffice de adelantos."

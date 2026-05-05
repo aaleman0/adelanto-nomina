@@ -1,0 +1,4 @@
+interface:
+  display_name: "Adelantos Backoffice"
+  short_description: "Panel interno de operacion y evidencia"
+  default_prompt: "Use $adelantos-backoffice para disenar o construir el panel interno de adelantos."

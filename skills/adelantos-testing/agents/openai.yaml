@@ -1,0 +1,4 @@
+interface:
+  display_name: "Adelantos Testing"
+  short_description: "Pruebas funcionales y E2E del sistema de adelantos"
+  default_prompt: "Crea o ejecuta pruebas funcionales y E2E del flujo de adelantos con confirmacion de funcionamiento."

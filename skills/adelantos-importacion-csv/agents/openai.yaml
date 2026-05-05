@@ -1,0 +1,4 @@
+interface:
+  display_name: "Adelantos Importacion CSV"
+  short_description: "Importacion masiva CSV a base de datos"
+  default_prompt: "Use $adelantos-importacion-csv para disenar o implementar una importacion masiva desde CSV."

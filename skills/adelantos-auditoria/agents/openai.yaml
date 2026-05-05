@@ -1,0 +1,4 @@
+interface:
+  display_name: "Adelantos Auditoria"
+  short_description: "Trazabilidad y evidencia operativa"
+  default_prompt: "Use $adelantos-auditoria para auditar evidencia, eventos y trazabilidad del sistema de adelantos."

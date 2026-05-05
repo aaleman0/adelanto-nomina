@@ -1,0 +1,4 @@
+interface:
+  display_name: "Adelantos Backend"
+  short_description: "Backend operativo de adelantos"
+  default_prompt: "Use $adelantos-backend para implementar endpoints, reglas y workers del sistema de adelantos."

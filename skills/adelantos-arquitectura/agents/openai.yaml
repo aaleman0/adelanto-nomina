@@ -1,0 +1,4 @@
+interface:
+  display_name: "Adelantos Arquitectura"
+  short_description: "Arquitectura del sistema de adelantos"
+  default_prompt: "Use $adelantos-arquitectura para diseñar o revisar el flujo completo de adelantos."
