@@ -94,9 +94,23 @@ type RequestContractResult = {
   attempt_id?: string;
   link_easylex?: string;
   expires_at?: string;
+  expires_at_formatted?: string;
 };
 
 const LINK_TTL_HOURS = 2;
+
+function formatDateForDisplay(isoDate: string): string {
+  const date = new Date(isoDate);
+  const options: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/Mexico_City",
+  };
+  return date.toLocaleDateString("es-MX", options);
+}
 
 export function parseRequestContractPayload(
   payload: RequestContractPayload,
@@ -284,6 +298,9 @@ export async function requestContractFromManyChat(
     attempt_id: attempt.id,
     link_easylex: attempt.signing_url ?? undefined,
     expires_at: attempt.expires_at ?? undefined,
+    expires_at_formatted: attempt.expires_at
+      ? formatDateForDisplay(attempt.expires_at)
+      : undefined,
   };
 
   await logBusinessResult(input, employee.id, result, correlationId);

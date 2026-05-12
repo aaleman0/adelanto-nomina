@@ -45,7 +45,7 @@ export function ContractControlFilters({
               className="h-10 rounded-base border border-border bg-surface px-3 text-sm font-normal text-text-primary outline-none focus:border-primary"
               defaultValue={filters.q ?? ""}
               name="q"
-              placeholder="RFC, telefono, nombre o subscriber"
+              placeholder="RFC, teléfono, nombre o subscriber"
               type="search"
             />
           </label>
@@ -88,7 +88,7 @@ export function ContractControlFilters({
           <div className="flex items-end">
             <Link
               className="inline-flex h-10 items-center justify-center rounded-base border border-border bg-surface px-4 text-sm font-semibold text-text-primary hover:bg-surface-muted"
-              href="/"
+              href="/contracts"
             >
               Limpiar
             </Link>
@@ -101,7 +101,7 @@ export function ContractControlFilters({
             de <span className="font-semibold text-text-primary">{total}</span>{" "}
             resultados.
           </p>
-          <p>Limite operativo actual: {limit} registros por vista.</p>
+          <p>Límite operativo actual: {limit} registros por vista.</p>
         </div>
       </CardBody>
     </Card>

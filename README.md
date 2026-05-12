@@ -36,10 +36,91 @@ El empleado final no usa esta aplicacion. La experiencia del empleado vive en Wh
 8. Se devuelve un `link_easylex` al flujo conversacional.
 9. El backoffice muestra mensaje enviado, solicitud, link, expiracion, firma y errores.
 
+## Flujo detallado en ManyChat
+
+El flujo conversacional en ManyChat funciona así:
+
+**1. Mensaje inicial (WhatsApp):**
+- ManyChat envía un broadcast a empleados elegibles
+- Mensaje: "Adelanto de nómina desde tu celular"
+- Incluye: `First Name`, `Empleado`, `Monto Prestamo Autorizado`
+- Botón: "SOLICITA AQUÍ"
+
+**2. External Request al backend:**
+- URL: `POST /api/manychat/request-contract`
+- Payload enviado:
+  - `subscriber_id`: ID del contacto en ManyChat
+  - `rfc`: RFC del empleado
+  - `telefono_normalizado`: Teléfono normalizado
+  - `first_name`, `last_name`: Nombre del empleado
+- Response mapping:
+  - `last_backend_status` ← `status`
+  - `link_easylex` ← `link_easylex`
+
+**3. Condiciones basadas en `last_backend_status`:**
+
+- **Si `contract_ready`:**
+  - Enviar mensaje con el link de firma
+  - Mostrar: `last_backend_status` y `link_easylex`
+
+- **Si `already_signed`:**
+  - Enviar mensaje: "Tu contrato ya fue firmado correctamente. No es necesario volver a solicitarlo."
+
+- **Otros estados (`not_found`, `not_eligible`, `no_offer`):**
+  - Enviar mensaje de error correspondiente al `message` del backend
+
+**Variables de ManyChat utilizadas:**
+- `First Name`: Nombre del usuario
+- `Empleado`: Nombre del empleado o empresa
+- `Monto Prestamo Autorizado`: Cantidad del préstamo
+- `last_backend_status`: Estado devuelto por el backend
+- `link_easylex`: Enlace al contrato devuelto por el backend
+
+**Mensajes sugeridos para ManyChat:**
+
+**Cuando el backend está caído (error de conexión):**
+```
+Lo sentimos, tenemos problemas técnicos en este momento. Por favor intenta más tarde o contacta a RRHH.
+```
+
+**Para cada estado del backend:**
+
+**`contract_ready`:**
+```
+✅ Tu contrato está listo para firma.
+📄 Link: {{link_easylex}}
+⏰ Expira: {{expires_at}}
+```
+
+**`already_signed`:**
+```
+✅ Tu contrato ya fue firmado correctamente. No es necesario volver a solicitarlo.
+```
+
+**`not_found`:**
+```
+❌ No encontramos una oferta disponible para este RFC. Por favor contacta a RRHH.
+```
+
+**`not_eligible`:**
+```
+❌ Tu oferta no está disponible para solicitar adelanto. Por favor contacta a RRHH.
+```
+
+**`no_offer`:**
+```
+❌ No hay una oferta vigente para generar contrato. Por favor contacta a RRHH.
+```
+
+**`invalid_request`:**
+```
+❌ Hubo un error al procesar tu solicitud. Por favor intenta de nuevo o contacta a RRHH.
+```
+
 ## Estado actual
 
 - `Fase 0` a `Fase 6`: listas
-- `Fase 7 ManyChat real`: funcional con External Request, response mapping y condiciones
+- `Fase 7 ManyChat real`: ✅ **funcional y probado** - External Request, response mapping y condiciones operando correctamente
 - `EasyLex real`: pendiente
 - `Webhook real de firma EasyLex`: pendiente
 
@@ -47,7 +128,8 @@ Hoy el proyecto ya tiene integrado:
 
 - importacion y aplicacion de CSV
 - control visual de contratos
-- endpoint ManyChat funcional
+- endpoint ManyChat funcional y probado en producción
+- integración ManyChat con response mapping y condiciones operativas
 - contratos mock
 - firma mock
 - acciones operativas desde backoffice para regenerar link y reintentar flujo
