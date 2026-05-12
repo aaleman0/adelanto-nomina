@@ -18,6 +18,10 @@ export function ApplyImportButton({ batchId }: { batchId: string }) {
   const [result, setResult] = useState<ApplyResult | null>(null);
 
   async function applyImport() {
+    if (!window.confirm("Esto aplicará las filas válidas a empleados y ofertas. ¿Deseas continuar?")) {
+      return;
+    }
+
     setIsApplying(true);
     setResult(null);
 
@@ -48,16 +52,11 @@ export function ApplyImportButton({ batchId }: { batchId: string }) {
         onClick={applyImport}
         type="button"
       >
-        {isApplying ? "Aplicando..." : "Aplicar"}
+        {isApplying ? "Aplicando..." : "Aplicar filas válidas"}
       </Button>
-      {result?.error ? (
-        <p className="text-xs text-red-700">{result.error}</p>
-      ) : null}
+      {result?.error ? <p className="text-xs text-red-700">{result.error}</p> : null}
       {result && !result.error ? (
-        <p className="text-xs text-primary">
-          {result.changedRows ?? 0} cambios, {result.unchangedRows ?? 0} sin
-          cambios.
-        </p>
+        <p className="text-xs text-primary">Importación aplicada: {result.changedRows ?? 0} cambios, {result.unchangedRows ?? 0} sin cambios.</p>
       ) : null}
     </div>
   );

@@ -4,7 +4,8 @@ import {
   retryContractFlowAction,
 } from "@/app/contracts/actions";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import { CopyLinkButton } from "@/components/ui/copy-link-button";
 import { Metric } from "@/components/ui/metric";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { StatusTone } from "@/components/ui/status-badge";
@@ -62,9 +63,9 @@ export function ContractDetailView({
             />
             <Link
               className="inline-flex h-8 items-center rounded-base border border-border px-3 text-sm font-semibold text-text-primary hover:bg-surface-muted"
-              href="/"
+              href="/contracts"
             >
-              Volver
+              Volver a contratos
             </Link>
           </div>
         </CardHeader>
@@ -88,6 +89,8 @@ export function ContractDetailView({
           </div>
         </CardBody>
       </Card>
+
+      <ProgressFlow control={control} />
 
       <ActionsCard control={control} />
 
@@ -150,6 +153,36 @@ export function ContractDetailView({
   );
 }
 
+function ProgressFlow({ control }: { control: ContractControlRow }) {
+  const steps = [
+    ["Importado", true],
+    ["Mensaje", Boolean(control.message_sent_at || control.message_clicked_at)],
+    ["Click", Boolean(control.message_clicked_at || control.contract_requested_at)],
+    ["Contrato", Boolean(control.contract_generated_at || control.easylex_contract_id)],
+    ["Firma", Boolean(control.contract_signed_at || control.attempt_signed_at)],
+  ] as const;
+
+  return (
+    <Card>
+      <CardHeader>
+        <h3 className="text-h2 font-semibold text-text-primary">Progreso operativo</h3>
+        <p className="text-sm text-text-muted">Importado → Mensaje → Click → Contrato → Firma</p>
+      </CardHeader>
+      <CardBody>
+        <div className="grid gap-3 md:grid-cols-5">
+          {steps.map(([label, done], index) => (
+            <div className={["rounded-base border px-4 py-3 transition", done ? "border-primary bg-primary/5" : "border-border bg-surface-muted"].join(" ")} key={label}>
+              <p className="text-xs font-semibold uppercase text-text-muted">Paso {index + 1}</p>
+              <p className="mt-1 font-semibold text-text-primary">{label}</p>
+              <p className={done ? "mt-1 text-sm text-primary" : "mt-1 text-sm text-text-muted"}>{done ? "Completado" : "Pendiente"}</p>
+            </div>
+          ))}
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
 function ActionsCard({ control }: { control: ContractControlRow }) {
   const isSigned =
     control.operational_status === "firmado" ||
@@ -176,9 +209,12 @@ function ActionsCard({ control }: { control: ContractControlRow }) {
               value={control.contract_request_id ?? ""}
             />
             <input name="employee_id" type="hidden" value={control.employee_id} />
-            <Button disabled={actionsDisabled} type="submit">
+            <ConfirmSubmitButton
+              confirmMessage="Se generará o reutilizará un link vigente para este contrato. ¿Continuar?"
+              disabled={actionsDisabled}
+            >
               Regenerar link
-            </Button>
+            </ConfirmSubmitButton>
           </form>
 
           <form action={retryContractFlowAction}>
@@ -188,19 +224,26 @@ function ActionsCard({ control }: { control: ContractControlRow }) {
               value={control.contract_request_id ?? ""}
             />
             <input name="employee_id" type="hidden" value={control.employee_id} />
-            <Button disabled={actionsDisabled} type="submit" variant="secondary">
+            <ConfirmSubmitButton
+              confirmMessage="Se reintentará el flujo operativo y quedará evidencia en el timeline. ¿Continuar?"
+              disabled={actionsDisabled}
+              variant="secondary"
+            >
               Reintentar flujo
-            </Button>
+            </ConfirmSubmitButton>
           </form>
 
           {control.signing_url ? (
-            <Link
-              className="inline-flex h-10 items-center justify-center rounded-base border border-border bg-surface px-4 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted"
-              href={control.signing_url}
-              target="_blank"
-            >
-              Abrir link
-            </Link>
+            <>
+              <Link
+                className="inline-flex h-10 items-center justify-center rounded-base border border-border bg-surface px-4 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted"
+                href={control.signing_url}
+                target="_blank"
+              >
+                Abrir link
+              </Link>
+              <CopyLinkButton value={control.signing_url} />
+            </>
           ) : null}
         </div>
 

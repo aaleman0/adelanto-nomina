@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Adelantos Admin",
-  description: "Backoffice interno para flujo de adelantos.",
+  title: "Backoffice Adelantos",
+  description: "Panel operativo para adelantos de nómina.",
 };
 
 export default function RootLayout({
