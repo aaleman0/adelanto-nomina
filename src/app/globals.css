@@ -1,48 +1,187 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #161513;
-  --primary: #33553c;
-  --primary-strong: #26412e;
-  --secondary: #006b8f;
-  --secondary-strong: #00516d;
-  --accent: #33553c;
+  /* Fondos (escala de grises) */
+  --background: #f5f5f5;
   --surface: #ffffff;
-  --surface-muted: #f6f7f4;
-  --text-primary: #161513;
-  --text-muted: #667085;
-  --border: #d7ded6;
-  --link: #f0cc71;
+  --surface-muted: #f0f0f0;
+  --surface-alt: #e5e5e5;
+
+  /* Sidebar (escala de grises oscura) */
+  --sidebar: #1a1a1a;
+  --sidebar-hover: #2a2a2a;
+  --sidebar-active: #333333;
+  --sidebar-border: #000000;
+  --sidebar-text: #ffffff;
+  --sidebar-text-muted: #cccccc;
+  --sidebar-text-active: #ffffff;
+
+  /* Texto (escala de grises) */
+  --text-primary: #000000;
+  --text-secondary: #1a1a1a;
+  --text-muted: #666666;
+  --text-disabled: #999999;
+  --text-inverse: #ffffff;
+
+  /* Acciones (escala de grises) */
+  --primary: #000000;
+  --primary-hover: #1a1a1a;
+  --primary-light: #f0f0f0;
+  --primary-border: #cccccc;
+  --secondary: #666666;
+  --secondary-hover: #555555;
+  --secondary-light: #f5f5f5;
+  --secondary-border: #dddddd;
+
+  /* Estados de employees (único lugar con color) */
+  --success: #10b981;
+  --success-bg: #d1fae5;
+  --success-border: #6ee7b7;
+  --warning: #f59e0b;
+  --warning-bg: #fef3c7;
+  --warning-border: #fcd34d;
+  --danger: #ef4444;
+  --danger-bg: #fee2e2;
+  --danger-border: #fca5a5;
+  --neutral: #666666;
+  --neutral-bg: #f5f5f5;
+  --neutral-border: #cccccc;
+
+  /* Estados de contratos (escala de grises) */
+  --contract-pending: #666666;
+  --contract-message-sent: #555555;
+  --contract-clicked: #444444;
+  --contract-requested: #333333;
+  --contract-generated: #222222;
+  --contract-expired: #666666;
+  --contract-signed: #000000;
+  --contract-error: #333333;
+
+  /* Estados de importación (escala de grises) */
+  --import-draft: #666666;
+  --import-uploading: #555555;
+  --import-validating: #444444;
+  --import-ready: #222222;
+  --import-applied: #000000;
+  --import-partial: #444444;
+  --import-error: #333333;
+
+  /* Bordes (escala de grises) */
+  --border: #cccccc;
+  --border-subtle: #e5e5e5;
+  --border-strong: #999999;
+
+  /* Links (escala de grises) */
+  --link: #000000;
+  --link-hover: #1a1a1a;
+  --link-visited: #666666;
+
+  /* Otros */
+  --divider: #e5e5e5;
+  --overlay: rgba(0, 0, 0, 0.5);
+  --shadow: rgba(0, 0, 0, 0.1);
   --radius-base: 4px;
 }
 
 @theme inline {
+  /* Fondos */
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-primary: var(--primary);
-  --color-primary-strong: var(--primary-strong);
-  --color-secondary: var(--secondary);
-  --color-secondary-strong: var(--secondary-strong);
-  --color-accent: var(--accent);
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
+  --color-surface-alt: var(--surface-alt);
+
+  /* Sidebar */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-text: var(--sidebar-text);
+  --color-sidebar-text-muted: var(--sidebar-text-muted);
+  --color-sidebar-text-active: var(--sidebar-text-active);
+
+  /* Texto */
   --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
+  --color-text-disabled: var(--text-disabled);
+  --color-text-inverse: var(--text-inverse);
+
+  /* Acciones */
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-light: var(--primary-light);
+  --color-primary-border: var(--primary-border);
+  --color-secondary: var(--secondary);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-light: var(--secondary-light);
+  --color-secondary-border: var(--secondary-border);
+
+  /* Estados de employees (único lugar con color) */
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-border: var(--warning-border);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-border: var(--danger-border);
+  --color-neutral: var(--neutral);
+  --color-neutral-bg: var(--neutral-bg);
+  --color-neutral-border: var(--neutral-border);
+
+  /* Estados de contratos (escala de grises) */
+  --color-contract-pending: var(--contract-pending);
+  --color-contract-message-sent: var(--contract-message-sent);
+  --color-contract-clicked: var(--contract-clicked);
+  --color-contract-requested: var(--contract-requested);
+  --color-contract-generated: var(--contract-generated);
+  --color-contract-expired: var(--contract-expired);
+  --color-contract-signed: var(--contract-signed);
+  --color-contract-error: var(--contract-error);
+
+  /* Estados de importación (escala de grises) */
+  --color-import-draft: var(--import-draft);
+  --color-import-uploading: var(--import-uploading);
+  --color-import-validating: var(--import-validating);
+  --color-import-ready: var(--import-ready);
+  --color-import-applied: var(--import-applied);
+  --color-import-partial: var(--import-partial);
+  --color-import-error: var(--import-error);
+
+  /* Bordes */
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-subtle: var(--border-subtle);
+
+  /* Links */
   --color-link: var(--link);
+  --color-link-hover: var(--link-hover);
+  --color-link-visited: var(--link-visited);
+
+  /* Otros */
+  --color-divider: var(--divider);
+  --color-overlay: var(--overlay);
+  --color-shadow: var(--shadow);
   --radius-base: var(--radius-base);
+
+  /* Typography */
   --text-h1: 20px;
   --text-h2: 20px;
+  --text-h3: 18px;
+  --text-h4: 16px;
   --text-body: 16px;
-  --font-sans: "OracleSansVF", "Aptos", "Segoe UI", sans-serif;
+  --text-small: 14px;
+
+  /* Fonts */
+  --font-sans: "Comfortaa", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "SFMono-Regular", "Cascadia Code", monospace;
 }
 
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: "OracleSansVF", "Aptos", "Segoe UI", sans-serif;
+  color: var(--text-primary);
+  font-family: "Comfortaa", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 16px;
   line-height: 1.5;
 }

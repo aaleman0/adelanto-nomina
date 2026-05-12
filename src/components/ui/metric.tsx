@@ -15,7 +15,7 @@ export function Metric({
   }[tone];
 
   return (
-    <div>
+    <div className="flex flex-col items-center justify-center text-center">
       <p className={`text-xs font-semibold uppercase ${labelColor}`}>
         {label}
       </p>

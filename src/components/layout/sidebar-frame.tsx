@@ -32,7 +32,7 @@ export function SidebarFrame({
     <div className="min-h-screen bg-surface-muted lg:grid lg:grid-cols-[auto_1fr]">
       <aside
         className={[
-          "sticky top-0 z-20 hidden h-screen border-r border-border bg-primary-strong text-white shadow-xl transition-[width] duration-200 lg:flex lg:flex-col",
+          "sticky top-0 z-20 hidden h-screen border-r border-border bg-primary-strong text-text-primary shadow-xl transition-[width] duration-200 lg:flex lg:flex-col",
           collapsed ? "w-20" : "w-72",
         ].join(" ")}
       >
@@ -43,13 +43,13 @@ export function SidebarFrame({
             </div>
             {!collapsed ? (
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">Backoffice Adelantos</p>
-                <p className="truncate text-xs text-white/65">Panel Operativo</p>
+                <p className="truncate text-sm font-semibold text-text-primary">Backoffice Adelantos</p>
+                <p className="truncate text-xs text-text-secondary">Panel Operativo</p>
               </div>
             ) : null}
           </div>
           <button
-            className="grid h-8 w-8 place-items-center rounded-base text-white/80 transition hover:bg-white/10 hover:text-white"
+            className="grid h-8 w-8 place-items-center rounded-base text-text-primary transition hover:bg-white/10 hover:text-text-primary"
             onClick={toggleSidebar}
             type="button"
             aria-label="Alternar sidebar"
@@ -64,14 +64,14 @@ export function SidebarFrame({
               <Link
                 className={[
                   "group flex h-11 items-center gap-3 rounded-base px-3 text-sm font-semibold transition-all",
-                  active ? "bg-white text-primary-strong shadow-sm" : "text-white/78 hover:bg-white/10 hover:text-white",
+                  active ? "bg-white text-primary-strong shadow-sm" : "text-text-primary hover:bg-white/10 hover:text-text-primary",
                 ].join(" ")}
                 href={item.href}
                 key={item.href}
                 title={item.label}
               >
                 <span className={["grid h-7 w-7 shrink-0 place-items-center rounded-base text-xs", active ? "bg-primary text-white" : "bg-white/10"].join(" ")}>{item.icon}</span>
-                {!collapsed ? <span className="truncate">{item.label}</span> : null}
+                {!collapsed ? <span className="truncate text-text-primary">{item.label}</span> : null}
               </Link>
             );
           })}

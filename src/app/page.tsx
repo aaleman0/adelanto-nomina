@@ -17,7 +17,7 @@ export default async function Home() {
       <PageHeader
         title="Dashboard operativo"
         description="Resumen ejecutivo de adelantos: prioridades, contratos y accesos rápidos para operación diaria."
-        action={<Link className="inline-flex h-10 items-center rounded-base bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-strong" href="/imports">Nueva importación</Link>}
+        action={<Link className="inline-flex h-10 items-center rounded-base border border-border px-4 text-sm font-semibold text-text-primary transition hover:bg-surface-muted" href="/imports">Nueva importación</Link>}
       />
       {result.setupError ? (
         <section className="rounded-base border border-link bg-link/20 p-5 text-sm text-text-primary">

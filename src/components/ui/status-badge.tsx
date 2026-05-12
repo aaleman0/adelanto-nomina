@@ -1,10 +1,10 @@
 export type StatusTone = "neutral" | "success" | "warning" | "danger";
 
 const toneClasses: Record<StatusTone, string> = {
-  neutral: "bg-text-primary text-white",
-  success: "bg-primary text-white",
-  warning: "bg-link text-text-primary",
-  danger: "bg-red-700 text-white",
+  neutral: "bg-neutral text-white",
+  success: "bg-success text-white",
+  warning: "bg-warning text-white",
+  danger: "bg-danger text-white",
 };
 
 export function StatusBadge({

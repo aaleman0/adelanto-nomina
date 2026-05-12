@@ -5,7 +5,7 @@ import type { ContractControlMetric, ContractControlMetricKey } from "@/lib/back
 const metricTone: Partial<Record<ContractControlMetricKey, "success" | "warning" | "danger" | "neutral">> = {
   pendingSend: "warning",
   messageSent: "success",
-  requested: "neutral",
+  requested: "success",
   contractGenerated: "success",
   signed: "success",
   expired: "warning",
@@ -16,8 +16,8 @@ export function ContractControlDashboard({ metrics }: { metrics: ContractControl
   return (
     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
       {metrics.map((metric) => (
-        <Card className="transition hover:-translate-y-0.5 hover:shadow-md" key={metric.key}>
-          <CardBody className="p-4">
+        <Card className="h-full transition hover:-translate-y-0.5 hover:shadow-md" key={metric.key}>
+          <CardBody className="flex h-full items-center justify-center p-4">
             <Metric label={metric.label} value={metric.value} tone={metric.value > 0 ? metricTone[metric.key] ?? "neutral" : "neutral"} />
           </CardBody>
         </Card>

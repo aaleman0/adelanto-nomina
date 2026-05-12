@@ -103,7 +103,7 @@ export function ContractControlTable({
                 </DataTableCell>
                 <DataTableCell>
                   <Link
-                    className="inline-flex h-8 items-center rounded-base border border-border px-3 text-sm font-semibold text-text-primary hover:bg-surface-muted"
+                    className="inline-flex h-8 items-center rounded-base border border-border px-3 text-xs font-semibold text-text-primary hover:bg-surface-muted"
                     href={`/contracts/${row.employee_id}`}
                   >
                     Ver detalle
@@ -112,7 +112,7 @@ export function ContractControlTable({
               </tr>
             ))
           ) : (
-            <DataTableEmpty colSpan={12}>
+            <DataTableEmpty colSpan={11}>
               Todavia no hay empleados/ofertas para control de contratos.
             </DataTableEmpty>
           )}
