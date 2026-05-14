@@ -283,6 +283,60 @@ function buildContractControlMetrics(
   ];
 }
 
+export type DashboardKpis = {
+  totalElegibles: number;
+  firmados: number;
+  expiringLinks: ExpiringLinkRow[];
+};
+
+export type ExpiringLinkRow = {
+  employee_id: string;
+  empleado: string | null;
+  empleador: string | null;
+  monto_prestamo_autorizado: number | null;
+  link_expires_at: string;
+  signing_url: string | null;
+};
+
+export async function getDashboardKpis(): Promise<DashboardKpis> {
+  const supabase = getSupabaseAdmin();
+
+  const now = new Date();
+  const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+  const [eligibleResult, firmadosResult, expiringResult] = await Promise.all([
+    // Total de empleados elegibles
+    supabase
+      .from("backoffice_contract_control_v1")
+      .select("employee_id", { count: "exact", head: true })
+      .eq("is_eligible", true),
+
+    // Total firmados
+    supabase
+      .from("backoffice_contract_control_v1")
+      .select("employee_id", { count: "exact", head: true })
+      .eq("operational_status", "firmado"),
+
+    // Links que expiran en las próximas 24h (solo los aún vigentes)
+    supabase
+      .from("backoffice_contract_control_v1")
+      .select("employee_id, empleado, empleador, monto_prestamo_autorizado, link_expires_at, signing_url")
+      .gt("link_expires_at", now.toISOString())
+      .lte("link_expires_at", in24h.toISOString())
+      .order("link_expires_at", { ascending: true }),
+  ]);
+
+  if (eligibleResult.error) throw eligibleResult.error;
+  if (firmadosResult.error) throw firmadosResult.error;
+  if (expiringResult.error) throw expiringResult.error;
+
+  return {
+    totalElegibles: eligibleResult.count ?? 0,
+    firmados: firmadosResult.count ?? 0,
+    expiringLinks: (expiringResult.data ?? []) as ExpiringLinkRow[],
+  };
+}
+
 function escapePostgrestSearch(value: string) {
   return value.replace(/[%_,]/g, "");
 }
