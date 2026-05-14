@@ -4,13 +4,16 @@ import { AppShell, PageHeader } from "@/components/layout/app-shell";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EMPTY_CONTRACT_CONTROL_METRICS, getContractControlData, type ContractControlRow } from "@/lib/backoffice/contract-control";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const result = await getContractControlResult();
+  const [result, recent] = await Promise.all([
+    getContractControlResult(),
+    getRecentActivityRows(),
+  ]);
   const attention = result.rows.filter((row) => ["error", "link_expirado", "contrato_en_proceso"].includes(row.operational_status)).slice(0, 6);
-  const recent = result.rows.slice(0, 6);
 
   return (
     <AppShell>
@@ -74,11 +77,19 @@ function QuickActions() {
   );
 }
 
-function RecentActivity({ rows }: { rows: ContractControlRow[] }) {
+type RecentActivityRow = {
+  employee_id: string;
+  empleado: string | null;
+  operational_status: string;
+  last_movement_at: string | null;
+};
+
+function RecentActivity({ rows }: { rows: RecentActivityRow[] }) {
   return (
     <Card>
       <CardHeader>
         <h2 className="text-h2 font-semibold text-text-primary">Actividad reciente</h2>
+        <p className="mt-1 text-sm text-text-muted">Últimos 6 movimientos de toda la base de datos.</p>
       </CardHeader>
       <CardBody className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {rows.length > 0 ? rows.map((row) => (
@@ -98,6 +109,22 @@ async function getContractControlResult() {
     return { ...(await getContractControlData()), setupError: null };
   } catch (error) {
     return { rows: [], metrics: EMPTY_CONTRACT_CONTROL_METRICS, empleadores: [], total: 0, limit: 50, setupError: error instanceof Error ? error.message : "No se pudo leer el control de contratos." };
+  }
+}
+
+async function getRecentActivityRows(): Promise<RecentActivityRow[]> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("backoffice_contract_control_v1")
+      .select("employee_id, empleado, operational_status, last_movement_at")
+      .not("last_movement_at", "is", null)
+      .order("last_movement_at", { ascending: false })
+      .limit(6);
+    if (error) return [];
+    return (data ?? []) as RecentActivityRow[];
+  } catch {
+    return [];
   }
 }
 

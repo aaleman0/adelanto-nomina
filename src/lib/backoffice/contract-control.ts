@@ -139,45 +139,58 @@ export async function getContractControlData(
 ): Promise<ContractControlData> {
   const supabase = getSupabaseAdmin();
   const limit = 50;
-  let query = supabase
-    .from("backoffice_contract_control_v1")
-    .select(CONTRACT_CONTROL_SELECT);
-
-  if (filters.status && filters.status !== "all") {
-    query = query.eq("operational_status", filters.status);
-  }
-
-  if (filters.empleador) {
-    query = query.eq("empleador", filters.empleador);
-  }
-
-  if (filters.q) {
-    const term = escapePostgrestSearch(filters.q.trim());
-    query = query.or(
-      [
+  const term = filters.q ? escapePostgrestSearch(filters.q.trim()) : null;
+  const orClause = term
+    ? [
         `empleado.ilike.%${term}%`,
         `rfc.ilike.%${term}%`,
         `telefono_normalizado.ilike.%${term}%`,
         `manychat_subscriber_id.ilike.%${term}%`,
-      ].join(","),
-    );
-  }
+      ].join(",")
+    : null;
 
-  const { data, error } = await query
-    .order("last_movement_at", { ascending: false })
-    .limit(limit);
+  // Query 1: rows paginados con filtros aplicados
+  let rowsQuery = supabase
+    .from("backoffice_contract_control_v1")
+    .select(CONTRACT_CONTROL_SELECT);
+  if (filters.status && filters.status !== "all") rowsQuery = rowsQuery.eq("operational_status", filters.status);
+  if (filters.empleador) rowsQuery = rowsQuery.eq("empleador", filters.empleador);
+  if (orClause) rowsQuery = rowsQuery.or(orClause);
+  const rowsQueryFinal = rowsQuery.order("last_movement_at", { ascending: false }).limit(limit);
 
-  if (error) {
-    throw error;
-  }
+  // Query 2: COUNT real con los mismos filtros (para paginación correcta)
+  let countQuery = supabase
+    .from("backoffice_contract_control_v1")
+    .select("employee_id", { count: "exact", head: true });
+  if (filters.status && filters.status !== "all") countQuery = countQuery.eq("operational_status", filters.status);
+  if (filters.empleador) countQuery = countQuery.eq("empleador", filters.empleador);
+  if (orClause) countQuery = countQuery.or(orClause);
 
-  const rows = (data ?? []) as unknown as ContractControlRow[];
+  // Query 3: métricas globales sin filtros (reflejan el universo completo)
+  const metricsQuery = supabase
+    .from("backoffice_contract_control_v1")
+    .select("operational_status");
+
+  const [rowsResult, countResult, metricsResult, empleadores] = await Promise.all([
+    rowsQueryFinal,
+    countQuery,
+    metricsQuery,
+    getEmpleadores(),
+  ]);
+
+  if (rowsResult.error) throw rowsResult.error;
+  if (countResult.error) throw countResult.error;
+  if (metricsResult.error) throw metricsResult.error;
+
+  const rows = (rowsResult.data ?? []) as unknown as ContractControlRow[];
+  const total = countResult.count ?? rows.length;
+  const allStatuses = (metricsResult.data ?? []) as Array<{ operational_status: ContractOperationalStatus }>;
 
   return {
     rows,
-    metrics: buildContractControlMetrics(rows),
-    empleadores: await getEmpleadores(),
-    total: rows.length,
+    metrics: buildContractControlMetrics(allStatuses),
+    empleadores,
+    total,
     limit,
   };
 }
@@ -223,67 +236,49 @@ async function getEmpleadores() {
 }
 
 function buildContractControlMetrics(
-  rows: ContractControlRow[],
+  rows: Array<{ operational_status: ContractOperationalStatus }>,
 ): ContractControlMetric[] {
-  const count = (predicate: (row: ContractControlRow) => boolean) =>
-    rows.filter(predicate).length;
+  // Cada fila cuenta una sola vez en su estado exacto (no acumulativo).
+  const count = (status: ContractOperationalStatus | ContractOperationalStatus[]) => {
+    const statuses = Array.isArray(status) ? status : [status];
+    return rows.filter((row) => statuses.includes(row.operational_status)).length;
+  };
 
   return [
     {
       key: "pendingSend",
       label: "Pendiente envio",
-      value: count((row) => row.operational_status === "pendiente_envio"),
+      value: count("pendiente_envio"),
     },
     {
       key: "messageSent",
       label: "Mensaje enviado",
-      value: count((row) =>
-        [
-          "mensaje_enviado",
-          "solicitado",
-          "contrato_en_proceso",
-          "contrato_generado",
-          "link_expirado",
-          "firmado",
-        ].includes(row.operational_status),
-      ),
+      value: count("mensaje_enviado"),
     },
     {
       key: "requested",
       label: "Solicitudes",
-      value: count((row) =>
-        [
-          "solicitado",
-          "contrato_en_proceso",
-          "contrato_generado",
-          "link_expirado",
-          "firmado",
-        ].includes(row.operational_status),
-      ),
+      value: count(["solicitado", "contrato_en_proceso"]),
     },
     {
       key: "contractGenerated",
       label: "Contrato generado",
-      value: count((row) =>
-        ["contrato_generado", "link_expirado", "firmado"].includes(
-          row.operational_status,
-        ),
-      ),
+      value: count("contrato_generado"),
     },
     {
       key: "signed",
       label: "Firmados",
-      value: count((row) => row.operational_status === "firmado"),
+      value: count("firmado"),
     },
     {
       key: "expired",
       label: "Links expirados",
-      value: count((row) => row.operational_status === "link_expirado"),
+      value: count("link_expirado"),
     },
     {
       key: "errors",
       label: "Errores",
-      value: count((row) => row.operational_status === "error"),
+      value: count("error"),
     },
   ];
 }

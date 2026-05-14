@@ -183,12 +183,18 @@ function ProgressFlow({ control }: { control: ContractControlRow }) {
   );
 }
 
+function isLinkVigente(linkExpiresAt: string | null): boolean {
+  if (!linkExpiresAt) return false;
+  return new Date(linkExpiresAt) > new Date();
+}
+
 function ActionsCard({ control }: { control: ContractControlRow }) {
   const isSigned =
     control.operational_status === "firmado" ||
     Boolean(control.contract_signed_at || control.attempt_signed_at);
   const hasRequest = Boolean(control.contract_request_id);
   const actionsDisabled = !hasRequest || isSigned;
+  const linkVigente = isLinkVigente(control.link_expires_at);
 
   return (
     <Card>
@@ -235,13 +241,22 @@ function ActionsCard({ control }: { control: ContractControlRow }) {
 
           {control.signing_url ? (
             <>
-              <Link
-                className="inline-flex h-10 items-center justify-center rounded-base border border-border bg-surface px-4 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted"
-                href={control.signing_url}
-                target="_blank"
-              >
-                Abrir link
-              </Link>
+              {linkVigente ? (
+                <Link
+                  className="inline-flex h-10 items-center justify-center rounded-base border border-border bg-surface px-4 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted"
+                  href={control.signing_url}
+                  target="_blank"
+                >
+                  Abrir link
+                </Link>
+              ) : (
+                <span
+                  className="inline-flex h-10 cursor-not-allowed items-center justify-center rounded-base border border-border bg-surface-muted px-4 text-sm font-semibold text-text-muted"
+                  title={`Link expirado${control.link_expires_at ? ` el ${new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(control.link_expires_at))}` : ""}`}
+                >
+                  Link expirado
+                </span>
+              )}
               <CopyLinkButton value={control.signing_url} />
             </>
           ) : null}
