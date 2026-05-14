@@ -19,6 +19,7 @@ export function SidebarFrame({
       ? false
       : localStorage.getItem("backoffice-sidebar") === "compact",
   );
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   function toggleSidebar() {
     setCollapsed((current) => {
@@ -30,6 +31,7 @@ export function SidebarFrame({
 
   return (
     <div className="min-h-screen bg-surface-muted lg:grid lg:grid-cols-[auto_1fr]">
+      {/* Sidebar desktop */}
       <aside
         className={[
           "sticky top-0 z-20 hidden h-screen border-r border-border bg-primary-strong text-text-primary shadow-xl transition-[width] duration-200 lg:flex lg:flex-col",
@@ -77,11 +79,44 @@ export function SidebarFrame({
           })}
         </nav>
       </aside>
+
       <div className="flex min-w-0 flex-col">
-        <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface/95 px-4 backdrop-blur lg:hidden">
-          <p className="font-semibold text-text-primary">Backoffice Adelantos</p>
-          <Link className="text-sm font-semibold text-primary" href="/imports">Nueva importación</Link>
+        {/* Top-bar móvil con menú hamburguesa */}
+        <div className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur lg:hidden">
+          <div className="flex h-14 items-center justify-between px-4">
+            <p className="font-semibold text-text-primary">Backoffice Adelantos</p>
+            <button
+              aria-label={mobileOpen ? "Cerrar menú" : "Abrir menú"}
+              className="grid h-9 w-9 place-items-center rounded-base border border-border text-text-primary transition hover:bg-surface-muted"
+              onClick={() => setMobileOpen((v) => !v)}
+              type="button"
+            >
+              {mobileOpen ? "✕" : "☰"}
+            </button>
+          </div>
+          {mobileOpen ? (
+            <nav className="flex flex-col gap-1 border-t border-border bg-primary-strong px-3 py-3">
+              {navigation.map((item) => {
+                const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                return (
+                  <Link
+                    className={[
+                      "flex h-11 items-center gap-3 rounded-base px-3 text-sm font-semibold transition-all",
+                      active ? "bg-white text-primary-strong" : "text-text-primary hover:bg-white/10",
+                    ].join(" ")}
+                    href={item.href}
+                    key={item.href}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <span className={["grid h-7 w-7 shrink-0 place-items-center rounded-base text-xs", active ? "bg-primary text-white" : "bg-white/10"].join(" ")}>{item.icon}</span>
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+          ) : null}
         </div>
+
         {children}
       </div>
     </div>

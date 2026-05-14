@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
+import { SearchInput } from "@/components/contracts/search-input";
 import type {
   ContractControlFilters,
   ContractOperationalStatus,
@@ -41,13 +42,7 @@ export function ContractControlFilters({
         <form className="grid gap-4 lg:grid-cols-[1fr_220px_220px_auto_auto]">
           <label className="flex flex-col gap-2 text-sm font-semibold text-text-primary">
             Buscar
-            <input
-              className="h-10 rounded-base border border-border bg-surface px-3 text-sm font-normal text-text-primary outline-none focus:border-primary"
-              defaultValue={filters.q ?? ""}
-              name="q"
-              placeholder="RFC, teléfono, nombre o subscriber"
-              type="search"
-            />
+            <SearchInput defaultValue={filters.q} />
           </label>
 
           <label className="flex flex-col gap-2 text-sm font-semibold text-text-primary">
