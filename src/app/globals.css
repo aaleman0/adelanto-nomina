@@ -1,39 +1,45 @@
 @import "tailwindcss";
 
 :root {
-  /* Fondos (escala de grises) */
-  --background: #f5f5f5;
+  /* Fondos — ligeramente azulados para dar profundidad */
+  --background: #f0f4ff;
   --surface: #ffffff;
-  --surface-muted: #f0f0f0;
-  --surface-alt: #e5e5e5;
+  --surface-muted: #f4f7ff;
+  --surface-alt: #e8eeff;
 
-  /* Sidebar (escala de grises oscura) */
-  --sidebar: #1a1a1a;
-  --sidebar-hover: #2a2a2a;
-  --sidebar-active: #333333;
-  --sidebar-border: #000000;
-  --sidebar-text: #ffffff;
-  --sidebar-text-muted: #cccccc;
+  /* Sidebar — degradado oscuro azul-pizarra */
+  --sidebar: #0f172a;
+  --sidebar-hover: #1e293b;
+  --sidebar-active: #1e3a5f;
+  --sidebar-border: #1e293b;
+  --sidebar-text: #f1f5f9;
+  --sidebar-text-muted: #94a3b8;
   --sidebar-text-active: #ffffff;
 
-  /* Texto (escala de grises) */
-  --text-primary: #000000;
-  --text-secondary: #1a1a1a;
-  --text-muted: #666666;
-  --text-disabled: #999999;
+  /* Texto */
+  --text-primary: #0f172a;
+  --text-secondary: #1e293b;
+  --text-muted: #64748b;
+  --text-disabled: #94a3b8;
   --text-inverse: #ffffff;
 
-  /* Acciones (escala de grises) */
-  --primary: #000000;
-  --primary-hover: #1a1a1a;
-  --primary-light: #f0f0f0;
-  --primary-border: #cccccc;
-  --secondary: #666666;
-  --secondary-hover: #555555;
-  --secondary-light: #f5f5f5;
-  --secondary-border: #dddddd;
+  /* Primario — azul índigo vibrante */
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-light: #eef2ff;
+  --primary-border: #c7d2fe;
 
-  /* Estados de employees (único lugar con color) */
+  /* Secundario */
+  --secondary: #6366f1;
+  --secondary-hover: #4f46e5;
+  --secondary-light: #f0f4ff;
+  --secondary-border: #e0e7ff;
+
+  /* Acento / highlight */
+  --accent: #06b6d4;
+  --accent-light: #ecfeff;
+
+  /* Estados semánticos */
   --success: #10b981;
   --success-bg: #d1fae5;
   --success-border: #6ee7b7;
@@ -43,44 +49,48 @@
   --danger: #ef4444;
   --danger-bg: #fee2e2;
   --danger-border: #fca5a5;
-  --neutral: #666666;
-  --neutral-bg: #f5f5f5;
-  --neutral-border: #cccccc;
+  --neutral: #6366f1;
+  --neutral-bg: #eef2ff;
+  --neutral-border: #c7d2fe;
 
-  /* Estados de contratos (escala de grises) */
-  --contract-pending: #666666;
-  --contract-message-sent: #555555;
-  --contract-clicked: #444444;
-  --contract-requested: #333333;
-  --contract-generated: #222222;
-  --contract-expired: #666666;
-  --contract-signed: #000000;
-  --contract-error: #333333;
+  /* Estados de contratos — ahora con color propio */
+  --contract-pending: #94a3b8;
+  --contract-message-sent: #6366f1;
+  --contract-clicked: #8b5cf6;
+  --contract-requested: #3b82f6;
+  --contract-generated: #06b6d4;
+  --contract-expired: #f59e0b;
+  --contract-signed: #10b981;
+  --contract-error: #ef4444;
 
-  /* Estados de importación (escala de grises) */
-  --import-draft: #666666;
-  --import-uploading: #555555;
-  --import-validating: #444444;
-  --import-ready: #222222;
-  --import-applied: #000000;
-  --import-partial: #444444;
-  --import-error: #333333;
+  /* Estados de importación */
+  --import-draft: #94a3b8;
+  --import-uploading: #6366f1;
+  --import-validating: #f59e0b;
+  --import-ready: #06b6d4;
+  --import-applied: #10b981;
+  --import-partial: #f59e0b;
+  --import-error: #ef4444;
 
-  /* Bordes (escala de grises) */
-  --border: #cccccc;
-  --border-subtle: #e5e5e5;
-  --border-strong: #999999;
+  /* Bordes */
+  --border: #e2e8f0;
+  --border-subtle: #f1f5f9;
+  --border-strong: #94a3b8;
 
-  /* Links (escala de grises) */
-  --link: #000000;
-  --link-hover: #1a1a1a;
-  --link-visited: #666666;
+  /* Links */
+  --link: #4f46e5;
+  --link-hover: #4338ca;
+  --link-visited: #6366f1;
 
   /* Otros */
-  --divider: #e5e5e5;
-  --overlay: rgba(0, 0, 0, 0.5);
-  --shadow: rgba(0, 0, 0, 0.1);
-  --radius-base: 4px;
+  --divider: #e2e8f0;
+  --overlay: rgba(15, 23, 42, 0.5);
+  --shadow: rgba(15, 23, 42, 0.08);
+  --shadow-lg: rgba(15, 23, 42, 0.16);
+  --radius-base: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
 }
 
 @theme inline {
@@ -115,8 +125,10 @@
   --color-secondary-hover: var(--secondary-hover);
   --color-secondary-light: var(--secondary-light);
   --color-secondary-border: var(--secondary-border);
+  --color-accent: var(--accent);
+  --color-accent-light: var(--accent-light);
 
-  /* Estados de employees (único lugar con color) */
+  /* Estados de employees */
   --color-success: var(--success);
   --color-success-bg: var(--success-bg);
   --color-success-border: var(--success-border);
@@ -130,7 +142,7 @@
   --color-neutral-bg: var(--neutral-bg);
   --color-neutral-border: var(--neutral-border);
 
-  /* Estados de contratos (escala de grises) */
+  /* Estados de contratos */
   --color-contract-pending: var(--contract-pending);
   --color-contract-message-sent: var(--contract-message-sent);
   --color-contract-clicked: var(--contract-clicked);
@@ -140,7 +152,7 @@
   --color-contract-signed: var(--contract-signed);
   --color-contract-error: var(--contract-error);
 
-  /* Estados de importación (escala de grises) */
+  /* Estados de importación */
   --color-import-draft: var(--import-draft);
   --color-import-uploading: var(--import-uploading);
   --color-import-validating: var(--import-validating);
@@ -164,28 +176,92 @@
   --color-overlay: var(--overlay);
   --color-shadow: var(--shadow);
   --radius-base: var(--radius-base);
+  --radius-sm: var(--radius-sm);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
 
   /* Typography */
-  --text-h1: 20px;
-  --text-h2: 20px;
-  --text-h3: 18px;
-  --text-h4: 16px;
-  --text-body: 16px;
-  --text-small: 14px;
+  --text-h1: 22px;
+  --text-h2: 18px;
+  --text-h3: 16px;
+  --text-h4: 15px;
+  --text-body: 15px;
+  --text-small: 13px;
 
   /* Fonts */
   --font-sans: "Comfortaa", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "SFMono-Regular", "Cascadia Code", monospace;
 }
 
+/* Smooth scrolling and selection */
+* {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: #c7d2fe;
+  color: #1e1b4b;
+}
+
 body {
   background: var(--background);
   color: var(--text-primary);
   font-family: "Comfortaa", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 16px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
   color: var(--link);
+  transition: color 0.15s ease;
+}
+
+a:hover {
+  color: var(--link-hover);
+}
+
+/* Scrollbar sutil */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #c7d2fe;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a5b4fc;
+}
+
+/* Focus ring moderno */
+:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Animaciones de entrada */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-up {
+  animation: fadeSlideUp 0.25s ease forwards;
 }

@@ -30,102 +30,114 @@ export function ContractControlTable({
     <Card className="overflow-hidden">
       <CardHeader className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
         <div>
-          <h2 className="text-h2 font-semibold text-text-primary">
+          <h2 className="text-[16px] font-bold text-text-primary">
             Control de contratos
           </h2>
-          <p className="text-sm text-text-muted">
+          <p className="text-[12px] text-text-muted mt-0.5">
             Evidencia operativa de mensaje, solicitud, link, firma y tiempos.
           </p>
         </div>
-        <p className="text-sm font-semibold text-text-muted">
+        <span className="inline-flex items-center rounded-lg bg-surface-muted px-3 py-1 text-[11px] font-bold text-text-muted border border-border/60">
           {rows.length} registros visibles
-        </p>
+        </span>
       </CardHeader>
 
+      {/* Desktop table */}
       <div className="hidden lg:block">
-        <DataTable className="min-w-[960px]">
-        <DataTableHead>
-          <tr>
-            <DataTableHeaderCell>Empleado</DataTableHeaderCell>
-            <DataTableHeaderCell>RFC</DataTableHeaderCell>
-            <DataTableHeaderCell>Empleador</DataTableHeaderCell>
-            <DataTableHeaderCell>Monto</DataTableHeaderCell>
-            <DataTableHeaderCell>Mensaje</DataTableHeaderCell>
-            <DataTableHeaderCell>Contrato</DataTableHeaderCell>
-            <DataTableHeaderCell>Vence link</DataTableHeaderCell>
-            <DataTableHeaderCell>Firmado</DataTableHeaderCell>
-            <DataTableHeaderCell>Ultimo movimiento</DataTableHeaderCell>
-            <DataTableHeaderCell>Prioridad</DataTableHeaderCell>
-            <DataTableHeaderCell>Detalle</DataTableHeaderCell>
-          </tr>
-        </DataTableHead>
-        <tbody>
-          {rows.length > 0 ? (
-            rows.map((row) => (
-              <tr className="border-t border-border/70" key={row.employee_id}>
-                <DataTableCell className="font-medium text-text-primary">
-                  {row.empleado || "-"}
-                </DataTableCell>
-                <DataTableCell>{row.rfc || "-"}</DataTableCell>
-                <DataTableCell>{row.empleador || "-"}</DataTableCell>
-                <DataTableCell>{formatMoney(row.monto_prestamo_autorizado)}</DataTableCell>
-                <DataTableCell>
-                  <div className="flex flex-col gap-1">
-                    <StatusBadge
-                      status={formatStatus(row.message_status)}
-                      tone={getMessageStatusTone(row.message_status)}
-                    />
-                    <span className="text-xs text-text-muted">
-                      {formatDate(row.message_sent_at || row.message_clicked_at)}
-                    </span>
-                  </div>
-                </DataTableCell>
-                <DataTableCell>
-                  <div className="flex flex-col gap-1">
-                    <StatusBadge
-                      status={formatStatus(row.operational_status)}
-                      tone={getOperationalStatusTone(row.operational_status)}
-                    />
-                    {row.easylex_contract_id ? (
-                      <span className="text-xs text-text-muted">
-                        {row.easylex_contract_id}
+        <DataTable className="w-full">
+          <DataTableHead>
+            <tr>
+              <DataTableHeaderCell>Empleado</DataTableHeaderCell>
+              <DataTableHeaderCell>RFC</DataTableHeaderCell>
+              <DataTableHeaderCell>Empleador</DataTableHeaderCell>
+              <DataTableHeaderCell>Monto</DataTableHeaderCell>
+              <DataTableHeaderCell>Mensaje</DataTableHeaderCell>
+              <DataTableHeaderCell>Contrato</DataTableHeaderCell>
+              <DataTableHeaderCell>Vence link</DataTableHeaderCell>
+              <DataTableHeaderCell>Firmado</DataTableHeaderCell>
+              <DataTableHeaderCell>Detalle</DataTableHeaderCell>
+            </tr>
+          </DataTableHead>
+          <tbody>
+            {rows.length > 0 ? (
+              rows.map((row, i) => (
+                <tr
+                  className={[
+                    "border-t border-border/40 transition-colors hover:bg-primary-light/40",
+                    i % 2 === 1 ? "bg-surface-muted/30" : "",
+                  ].join(" ")}
+                  key={row.employee_id}
+                >
+                  <DataTableCell className="font-bold text-text-primary">
+                    {row.empleado || "-"}
+                  </DataTableCell>
+                  <DataTableCell className="text-text-muted">{row.rfc || "-"}</DataTableCell>
+                  <DataTableCell className="text-text-muted">{row.empleador || "-"}</DataTableCell>
+                  <DataTableCell className="font-semibold text-text-primary">{formatMoney(row.monto_prestamo_autorizado)}</DataTableCell>
+                  <DataTableCell>
+                    <div className="flex flex-col gap-1">
+                      <StatusBadge
+                        status={formatStatus(row.message_status)}
+                        tone={getMessageStatusTone(row.message_status)}
+                      />
+                      <span className="text-[11px] text-text-muted">
+                        {formatDate(row.message_sent_at || row.message_clicked_at)}
                       </span>
-                    ) : null}
-                  </div>
-                </DataTableCell>
-                <DataTableCell>{formatDate(row.link_expires_at)}</DataTableCell>
-                <DataTableCell>
-                  {formatDate(row.contract_signed_at || row.attempt_signed_at)}
-                </DataTableCell>
-                <DataTableCell>{formatDate(row.last_movement_at)}</DataTableCell>
-                <DataTableCell>
-                  <StatusBadge status={getPriorityLabel(row.operational_status)} tone={getPriorityTone(row.operational_status)} />
-                </DataTableCell>
-                <DataTableCell>
-                  <Link
-                    className="inline-flex h-8 items-center rounded-base border border-border px-3 text-xs font-semibold text-text-primary hover:bg-surface-muted"
-                    href={`/contracts/${row.employee_id}`}
-                  >
-                    Ver detalle
-                  </Link>
-                </DataTableCell>
-              </tr>
-            ))
-          ) : (
-            <DataTableEmpty colSpan={11}>
-              Todavia no hay empleados/ofertas para control de contratos.
-            </DataTableEmpty>
-          )}
-        </tbody>
+                    </div>
+                  </DataTableCell>
+                  <DataTableCell>
+                    <div className="flex flex-col gap-1">
+                      <StatusBadge
+                        status={formatStatus(row.operational_status)}
+                        tone={getOperationalStatusTone(row.operational_status)}
+                      />
+                      {row.easylex_contract_id ? (
+                        <span className="text-[11px] text-text-muted">
+                          {row.easylex_contract_id}
+                        </span>
+                      ) : null}
+                    </div>
+                  </DataTableCell>
+                  <DataTableCell className="text-[12px] text-text-muted">{formatDate(row.link_expires_at)}</DataTableCell>
+                  <DataTableCell className="text-[12px] text-text-muted">
+                    {formatDate(row.contract_signed_at || row.attempt_signed_at)}
+                  </DataTableCell>
+                  <DataTableCell>
+                    <Link
+                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-primary-border bg-primary-light px-3 text-[11px] font-bold text-primary transition hover:bg-primary hover:text-white"
+                      href={`/contracts/${row.employee_id}`}
+                    >
+                      Ver
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </Link>
+                  </DataTableCell>
+                </tr>
+              ))
+            ) : (
+              <DataTableEmpty colSpan={9}>
+                Todavía no hay empleados/ofertas para control de contratos.
+              </DataTableEmpty>
+            )}
+          </tbody>
         </DataTable>
       </div>
+
+      {/* Mobile cards */}
       <div className="grid gap-3 p-4 lg:hidden">
         {rows.length > 0 ? rows.map((row) => (
-          <Link className="rounded-base border border-border bg-surface p-4 transition hover:border-primary" href={`/contracts/${row.employee_id}`} key={row.employee_id}>
+          <Link
+            className="group rounded-xl border border-border bg-surface p-4 transition-all hover:border-primary hover:shadow-md hover:-translate-y-0.5"
+            href={`/contracts/${row.employee_id}`}
+            key={row.employee_id}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-semibold text-text-primary">{row.empleado || "Empleado sin nombre"}</p>
-                <p className="text-sm text-text-muted">{row.rfc || "Sin RFC"} · {formatMoney(row.monto_prestamo_autorizado)}</p>
+                <p className="font-bold text-text-primary group-hover:text-primary transition-colors">
+                  {row.empleado || "Empleado sin nombre"}
+                </p>
+                <p className="text-[12px] text-text-muted">{row.rfc || "Sin RFC"} · {formatMoney(row.monto_prestamo_autorizado)}</p>
               </div>
               <StatusBadge status={getPriorityLabel(row.operational_status)} tone={getPriorityTone(row.operational_status)} />
             </div>
@@ -135,19 +147,19 @@ export function ContractControlTable({
             </div>
           </Link>
         )) : (
-          <p className="rounded-base border border-border bg-surface-muted p-6 text-center text-sm text-text-muted">Todavia no hay empleados/ofertas para control de contratos.</p>
+          <div className="rounded-xl border border-dashed border-border p-8 text-center text-[13px] text-text-muted">
+            Todavía no hay empleados/ofertas para control de contratos.
+          </div>
         )}
       </div>
+
       <PaginationControls baseHref="/contracts" limit={limit} total={total} visible={rows.length} />
     </Card>
   );
 }
 
 function formatMoney(value: number | null) {
-  if (value === null) {
-    return "-";
-  }
-
+  if (value === null) return "-";
   return new Intl.NumberFormat("es-MX", {
     style: "currency",
     currency: "MXN",
@@ -156,50 +168,26 @@ function formatMoney(value: number | null) {
 }
 
 function formatDate(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-
+  if (!value) return "-";
   return dateFormatter.format(new Date(value));
 }
 
 function formatStatus(value: string | null) {
-  if (!value) {
-    return "pendiente";
-  }
-
+  if (!value) return "pendiente";
   return value.replaceAll("_", " ");
 }
 
 function getMessageStatusTone(status: string | null): StatusTone {
-  if (status === "error") {
-    return "danger";
-  }
-
-  if (status === "click" || status === "enviado" || status === "entregado") {
-    return "success";
-  }
-
-  if (status === "pendiente_envio") {
-    return "warning";
-  }
-
+  if (status === "error") return "danger";
+  if (status === "click" || status === "enviado" || status === "entregado") return "success";
+  if (status === "pendiente_envio") return "warning";
   return "neutral";
 }
 
 function getOperationalStatusTone(status: string): StatusTone {
-  if (status === "error") {
-    return "danger";
-  }
-
-  if (status === "firmado" || status === "contrato_generado") {
-    return "success";
-  }
-
-  if (status === "link_expirado" || status === "pendiente_envio") {
-    return "warning";
-  }
-
+  if (status === "error") return "danger";
+  if (status === "firmado" || status === "contrato_generado") return "success";
+  if (status === "link_expirado" || status === "pendiente_envio") return "warning";
   return "neutral";
 }
 

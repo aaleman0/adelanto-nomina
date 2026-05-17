@@ -12,7 +12,7 @@ const statusOptions: Array<{
   label: string;
 }> = [
   { value: "all", label: "Todos" },
-  { value: "pendiente_envio", label: "Pendiente envio" },
+  { value: "pendiente_envio", label: "Pendiente envío" },
   { value: "mensaje_enviado", label: "Mensaje enviado" },
   { value: "solicitado", label: "Solicitado" },
   { value: "contrato_en_proceso", label: "Contrato en proceso" },
@@ -22,6 +22,9 @@ const statusOptions: Array<{
   { value: "error", label: "Error" },
   { value: "no_elegible", label: "No elegible" },
 ];
+
+const selectCls =
+  "h-10 w-full rounded-xl border border-border bg-surface px-3 text-[13px] font-normal text-text-primary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 export function ContractControlFilters({
   filters,
@@ -39,16 +42,16 @@ export function ContractControlFilters({
   return (
     <Card>
       <CardBody className="flex flex-col gap-4">
-        <form className="grid gap-4 lg:grid-cols-[1fr_220px_220px_auto_auto]">
-          <label className="flex flex-col gap-2 text-sm font-semibold text-text-primary">
+        <form className="grid gap-3 lg:grid-cols-[1fr_200px_200px_auto_auto]">
+          <label className="flex flex-col gap-1.5 text-[12px] font-bold text-text-muted uppercase tracking-[0.1em]">
             Buscar
             <SearchInput defaultValue={filters.q} />
           </label>
 
-          <label className="flex flex-col gap-2 text-sm font-semibold text-text-primary">
+          <label className="flex flex-col gap-1.5 text-[12px] font-bold text-text-muted uppercase tracking-[0.1em]">
             Estado
             <select
-              className="h-10 rounded-base border border-border bg-surface px-3 text-sm font-normal text-text-primary outline-none focus:border-primary"
+              className={selectCls}
               defaultValue={filters.status ?? "all"}
               name="status"
             >
@@ -60,10 +63,10 @@ export function ContractControlFilters({
             </select>
           </label>
 
-          <label className="flex flex-col gap-2 text-sm font-semibold text-text-primary">
+          <label className="flex flex-col gap-1.5 text-[12px] font-bold text-text-muted uppercase tracking-[0.1em]">
             Empleador
             <select
-              className="h-10 rounded-base border border-border bg-surface px-3 text-sm font-normal text-text-primary outline-none focus:border-primary"
+              className={selectCls}
               defaultValue={filters.empleador ?? ""}
               name="empleador"
             >
@@ -77,26 +80,35 @@ export function ContractControlFilters({
           </label>
 
           <div className="flex items-end">
-            <Button type="submit">Filtrar</Button>
+            <Button type="submit">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              Filtrar
+            </Button>
           </div>
 
           <div className="flex items-end">
             <Link
-              className="inline-flex h-10 items-center justify-center rounded-base border border-border bg-surface px-4 text-sm font-semibold text-text-primary hover:bg-surface-muted"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-text-muted transition hover:bg-surface-muted hover:text-text-primary"
               href="/contracts"
             >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
               Limpiar
             </Link>
           </div>
         </form>
 
-        <div className="flex flex-col gap-1 text-sm text-text-muted md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-1 border-t border-border/50 pt-3 text-[12px] text-text-muted md:flex-row md:items-center md:justify-between">
           <p>
-            Mostrando <span className="font-semibold text-text-primary">{visible}</span>{" "}
-            de <span className="font-semibold text-text-primary">{total}</span>{" "}
+            Mostrando{" "}
+            <span className="font-bold text-text-primary">{visible}</span>{" "}
+            de <span className="font-bold text-text-primary">{total}</span>{" "}
             resultados.
           </p>
-          <p>Límite operativo actual: {limit} registros por vista.</p>
+          <p className="text-text-disabled">Límite operativo: {limit} registros por vista.</p>
         </div>
       </CardBody>
     </Card>

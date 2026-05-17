@@ -4,7 +4,7 @@ export function Card({ className = "", ...props }: HTMLAttributes<HTMLElement>) 
   return (
     <section
       className={[
-        "rounded-base border border-border bg-surface shadow-sm",
+        "rounded-2xl border border-border bg-surface shadow-sm",
         className,
       ].join(" ")}
       {...props}
@@ -18,7 +18,7 @@ export function CardHeader({
 }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={["border-b border-border px-6 py-5", className].join(" ")}
+      className={["border-b border-border/60 px-6 py-5", className].join(" ")}
       {...props}
     />
   );
