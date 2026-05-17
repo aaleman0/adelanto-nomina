@@ -33,19 +33,8 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <header className="relative overflow-hidden flex flex-col gap-4 rounded-2xl border border-primary-border bg-white px-6 py-6 shadow-sm md:flex-row md:items-center md:justify-between">
-      {/* Decorative gradient blob */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-10 -top-10 h-48 w-48 rounded-full opacity-[0.06]"
-        style={{ background: "radial-gradient(circle, #4f46e5 0%, transparent 70%)" }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -bottom-6 left-1/3 h-32 w-32 rounded-full opacity-[0.04]"
-        style={{ background: "radial-gradient(circle, #06b6d4 0%, transparent 70%)" }}
-      />
-      <div className="relative">
+    <header className="flex flex-col gap-4 rounded-2xl border border-primary-border bg-white px-6 py-6 shadow-sm md:flex-row md:items-center md:justify-between">
+      <div>
         <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary-light px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
           <span className="h-1.5 w-1.5 rounded-full bg-primary" />
           {eyebrow}
@@ -55,7 +44,7 @@ export function PageHeader({
         </h1>
         <p className="mt-1.5 max-w-2xl text-[13px] text-text-muted">{description}</p>
       </div>
-      {action ? <div className="relative flex shrink-0 items-center gap-2">{action}</div> : null}
+      {action ? <div className="flex shrink-0 items-center gap-2 w-full md:w-auto">{action}</div> : null}
     </header>
   );
 }

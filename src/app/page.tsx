@@ -33,13 +33,14 @@ export default async function Home() {
         description="Resumen ejecutivo de adelantos: prioridades, contratos y accesos rápidos para operación diaria."
         action={
           <Link
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 text-sm font-semibold text-white shadow-sm shadow-indigo-200 transition hover:from-indigo-700 hover:to-violet-700 hover:shadow-md"
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 text-sm font-semibold shadow-sm shadow-indigo-200 transition hover:from-indigo-700 hover:to-violet-700 hover:shadow-md w-full sm:w-auto justify-center sm:justify-start"
+            style={{ color: '#ffffff' }}
             href="/imports"
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="#ffffff" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
-            Nueva importación
+            <span style={{ color: '#ffffff' }}>Nueva importación</span>
           </Link>
         }
       />
