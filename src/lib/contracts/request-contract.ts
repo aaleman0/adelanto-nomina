@@ -141,7 +141,10 @@ export function parseRequestContractPayload(
   };
 }
 
-export async function requestContractFromManyChat(
+/** @deprecated Usar requestContractFromWhatsApp */
+export const requestContractFromManyChat = requestContractFromWhatsApp;
+
+export async function requestContractFromWhatsApp(
   input: RequestContractInput,
 ): Promise<RequestContractResult> {
   const correlationId = randomUUID();
@@ -166,7 +169,7 @@ export async function requestContractFromManyChat(
   }
 
   const offer = await getCurrentOffer(employee.id);
-  await upsertManyChatContact(input, employee.id);
+  await upsertWhatsAppContact(input, employee.id);
 
   if (!offer) {
     const result: RequestContractResult = {
@@ -175,7 +178,7 @@ export async function requestContractFromManyChat(
       message: "No hay una oferta vigente para generar contrato.",
       estatus_contrato: "no_disponible",
     };
-    await recordManyChatClick({
+    await recordWhatsAppInteraction({
       input,
       employee,
       offer: null,
@@ -194,7 +197,7 @@ export async function requestContractFromManyChat(
       message: "Tu oferta no esta disponible para solicitar adelanto.",
       estatus_contrato: "no_disponible",
     };
-    await recordManyChatClick({
+    await recordWhatsAppInteraction({
       input,
       employee,
       offer,
@@ -218,8 +221,8 @@ export async function requestContractFromManyChat(
       entityType: "contract_requests",
       entityId: contractRequest.id,
       employeeId: employee.id,
-      source: "manychat",
-      summary: `Solicitud de contrato creada desde ManyChat para RFC ${employee.rfc}.`,
+      source: "whatsapp",
+      summary: `Solicitud de contrato creada desde WhatsApp para RFC ${employee.rfc}.`,
       metadata: {
         offer_id: offer.id,
         subscriber_id: input.subscriberId,
@@ -238,7 +241,7 @@ export async function requestContractFromManyChat(
       request_id: contractRequest.id,
       attempt_id: signedAttempt?.id,
     };
-    await recordManyChatClick({
+    await recordWhatsAppInteraction({
       input,
       employee,
       offer,
@@ -255,7 +258,7 @@ export async function requestContractFromManyChat(
   const attempt = reusableAttempt ?? (await regenerateMockAttempt(contractRequest, latestAttempt));
 
   await updateContractRequestLinkGenerated(contractRequest.id);
-  await recordManyChatClick({
+  await recordWhatsAppInteraction({
     input,
     employee,
     offer,
@@ -358,21 +361,22 @@ async function getActiveBankAccount(employeeId: string) {
   return data as BankAccount | null;
 }
 
-async function upsertManyChatContact(
+async function upsertWhatsAppContact(
   input: RequestContractInput,
   employeeId: string,
 ) {
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("manychat_contacts").upsert(
+  const { error } = await supabase.from("whatsapp_contacts").upsert(
     {
       employee_id: employeeId,
       subscriber_id: input.subscriberId,
+      wa_id: input.telefonoNormalizado ?? input.subscriberId,
       telefono_normalizado: input.telefonoNormalizado,
       first_name: input.firstName,
       last_name: input.lastName,
       last_seen_at: new Date().toISOString(),
       metadata: {
-        source: "request_contract_mock",
+        source: "request_contract_whatsapp",
       },
     },
     { onConflict: "subscriber_id" },
@@ -411,8 +415,8 @@ async function createContractRequest(
       employee_id: employee.id,
       offer_id: offer.id,
       status: "generando",
-      requested_from: "manychat",
-      manychat_subscriber_id: input.subscriberId,
+      requested_from: "whatsapp",
+      whatsapp_subscriber_id: input.subscriberId,
       contract_snapshot: {
         nombre: employee.nombre,
         apellidos: employee.apellidos,
@@ -574,7 +578,7 @@ async function updateContractRequestLinkGenerated(contractRequestId: string) {
   }
 }
 
-async function recordManyChatClick(input: {
+async function recordWhatsAppInteraction(input: {
   input: RequestContractInput;
   employee: Employee;
   offer: AdvanceOffer | null;
@@ -583,13 +587,14 @@ async function recordManyChatClick(input: {
   metadata: JsonRecord;
 }) {
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("manychat_contract_messages").insert({
+  const { error } = await supabase.from("whatsapp_contract_messages").insert({
     employee_id: input.employee.id,
     offer_id: input.offer?.id ?? null,
     contract_request_id: input.contractRequestId,
-    manychat_subscriber_id: input.input.subscriberId,
+    whatsapp_subscriber_id: input.input.subscriberId,
     message_type: "contract_offer",
     status: "click",
+    delivery_status: "sent",
     clicked_at: new Date().toISOString(),
     correlation_id: input.correlationId,
     metadata: input.metadata,
@@ -626,9 +631,9 @@ async function createIntegrationLog(input: {
 }) {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from("integration_logs").insert({
-    provider: "manychat",
+    provider: "whatsapp",
     direction: "inbound",
-    endpoint: "/api/manychat/request-contract",
+    endpoint: "/api/whatsapp/request-contract",
     method: "POST",
     request_payload: input.requestPayload,
     response_payload: input.responsePayload,
@@ -650,7 +655,7 @@ async function createAuditEvent(input: {
   entityType: string;
   entityId: string;
   employeeId: string;
-  source: "manychat" | "backend";
+  source: "whatsapp" | "backend";
   summary: string;
   metadata: JsonRecord;
 }) {
@@ -714,6 +719,6 @@ function sanitizePayload(payload: JsonRecord) {
         payload.telefono_normalizado ?? payload.telefono ?? payload.phone,
       ),
     ),
-    source: "manychat_request_contract",
+    source: "whatsapp_request_contract",
   };
 }

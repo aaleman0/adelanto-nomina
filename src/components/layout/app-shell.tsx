@@ -6,6 +6,7 @@ const navigation = [
   { href: "/", label: "Dashboard", icon: "D" },
   { href: "/imports", label: "Importaciones", icon: "I" },
   { href: "/contracts", label: "Control de contratos", icon: "C" },
+  { href: "/whatsapp/send", label: "WhatsApp Masivo", icon: "W" },
   { href: "/settings", label: "Configuración", icon: "S" },
 ];
 

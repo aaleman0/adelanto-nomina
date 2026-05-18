@@ -16,13 +16,13 @@ export type ContractControlRow = {
   is_eligible: boolean | null;
   offer_status: string | null;
   estatus_conversion: string | null;
-  manychat_message_id: string | null;
+  whatsapp_message_id: string | null;
   message_status: string | null;
   message_sent_at: string | null;
   message_delivered_at: string | null;
   message_clicked_at: string | null;
   message_error: string | null;
-  manychat_subscriber_id: string | null;
+  whatsapp_subscriber_id: string | null;
   contract_status: string | null;
   contract_requested_at: string | null;
   contract_signed_at: string | null;
@@ -108,13 +108,13 @@ export const CONTRACT_CONTROL_SELECT = [
   "is_eligible",
   "offer_status",
   "estatus_conversion",
-  "manychat_message_id",
+  "whatsapp_message_id",
   "message_status",
   "message_sent_at",
   "message_delivered_at",
   "message_clicked_at",
   "message_error",
-  "manychat_subscriber_id",
+  "whatsapp_subscriber_id",
   "contract_status",
   "contract_requested_at",
   "contract_signed_at",
@@ -145,7 +145,7 @@ export async function getContractControlData(
         `empleado.ilike.%${term}%`,
         `rfc.ilike.%${term}%`,
         `telefono_normalizado.ilike.%${term}%`,
-        `manychat_subscriber_id.ilike.%${term}%`,
+        `whatsapp_subscriber_id.ilike.%${term}%`,
       ].join(",")
     : null;
 
