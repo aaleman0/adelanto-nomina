@@ -244,3 +244,25 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_contract_messages_wa_message_id
 
 CREATE INDEX IF NOT EXISTS idx_whatsapp_bulk_sends_import_id
   ON whatsapp_bulk_sends(import_id);
+
+-- -------------------------------------------------------
+-- 11. Tabla de templates (Milestone 2)
+-- -------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS whatsapp_templates (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  meta_template_id TEXT NOT NULL UNIQUE,
+  name             TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'PENDING',
+  category         TEXT NOT NULL DEFAULT 'UTILITY',
+  language         TEXT NOT NULL DEFAULT 'es_MX',
+  components       JSONB NOT NULL DEFAULT '[]',
+  synced_at        TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_templates_name
+  ON whatsapp_templates(name);
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_templates_status
+  ON whatsapp_templates(status);

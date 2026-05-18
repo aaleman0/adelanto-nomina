@@ -1,0 +1,305 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { Card, CardBody, CardHeader } from "@/components/ui/card";
+
+type BulkSend = {
+  id: string;
+  mode: string;
+  status: string;
+  eligible_count: number | null;
+  sent_count: number | null;
+  failed_count: number | null;
+  created_at: string | null;
+  import_id: string | null;
+};
+
+type Message = {
+  id: string;
+  employee_id: string;
+  nombre: string | null;
+  apellidos: string | null;
+  rfc: string | null;
+  telefono: string | null;
+  delivery_status: string | null;
+  status: string | null;
+  error_message: string | null;
+  created_at: string | null;
+  wa_message_id: string | null;
+};
+
+type DetailResponse = {
+  ok: boolean;
+  bulkSend: BulkSend;
+  messages: Message[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  error?: string;
+};
+
+const PAGE_SIZE = 50;
+
+const fmtDate = (d: string | null) =>
+  d
+    ? new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(d))
+    : "-";
+
+function DeliveryBadge({ status }: { status: string | null }) {
+  const map: Record<string, string> = {
+    sent: "bg-blue-50 text-blue-700 ring-blue-200",
+    delivered: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    read: "bg-indigo-50 text-indigo-700 ring-indigo-200",
+    failed: "bg-red-50 text-red-700 ring-red-200",
+  };
+  const labels: Record<string, string> = {
+    sent: "Enviado", delivered: "Entregado", read: "Leído", failed: "Error",
+  };
+  const s = status ?? "sent";
+  const cls = map[s] ?? "bg-surface-muted text-text-muted ring-border";
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${cls}`}>
+      {labels[s] ?? s}
+    </span>
+  );
+}
+
+function StatusChip({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    completed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    sending: "bg-amber-50 text-amber-700 ring-amber-200",
+    failed: "bg-red-50 text-red-700 ring-red-200",
+  };
+  const labels: Record<string, string> = {
+    completed: "Completado", sending: "Enviando…", failed: "Fallido",
+  };
+  const cls = map[status] ?? "bg-surface-muted text-text-muted ring-border";
+  return (
+    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ${cls}`}>
+      {labels[status] ?? status}
+    </span>
+  );
+}
+
+function StatPill({ label, value, color }: { label: string; value: number | null; color?: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-surface px-4 py-3 text-center">
+      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">{label}</p>
+      <p className={`mt-1 text-2xl font-bold ${color ?? "text-text-primary"}`}>{value ?? "-"}</p>
+    </div>
+  );
+}
+
+export function BulkDetail({ id }: { id: string }) {
+  const [bulkSend, setBulkSend] = useState<BulkSend | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(
+    (p: number, sf: string) => {
+      setLoading(true);
+      setError(null);
+      const params = new URLSearchParams({
+        id,
+        page: String(p),
+        pageSize: String(PAGE_SIZE),
+        ...(sf ? { status: sf } : {}),
+      });
+      fetch(`/api/whatsapp/bulk/detail?${params}`)
+        .then((r) => r.json())
+        .then((json: DetailResponse) => {
+          if (!json.ok) throw new Error(json.error ?? "Error al cargar detalle.");
+          setBulkSend(json.bulkSend);
+          setMessages(json.messages);
+          setTotal(json.total);
+          setTotalPages(json.totalPages);
+        })
+        .catch((err: Error) => setError(err.message))
+        .finally(() => setLoading(false));
+    },
+    [id],
+  );
+
+  useEffect(() => {
+    load(page, statusFilter);
+  }, [load, page, statusFilter]);
+
+  function handleFilter(sf: string) {
+    setStatusFilter(sf);
+    setPage(1);
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
+        <p className="font-semibold text-red-800">{error}</p>
+        <button
+          onClick={() => load(page, statusFilter)}
+          className="mt-2 text-sm font-semibold text-red-600 underline"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Resumen del bulk send */}
+      {loading && !bulkSend ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-20 animate-pulse rounded-xl bg-surface-muted" />
+          ))}
+        </div>
+      ) : bulkSend ? (
+        <>
+          {/* Header info */}
+          <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border bg-surface p-5">
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-bold text-text-primary">Envío masivo</p>
+                <StatusChip status={bulkSend.status} />
+              </div>
+              <p className="mt-1 font-mono text-xs text-text-muted">{bulkSend.id}</p>
+              <p className="mt-1 text-xs text-text-muted">
+                {fmtDate(bulkSend.created_at)} · Modo:{" "}
+                <span className="font-semibold">
+                  {bulkSend.mode === "import" ? "Importación" : "Manual"}
+                </span>
+              </p>
+            </div>
+            <Link
+              href="/whatsapp/history"
+              className="text-sm font-semibold text-primary hover:underline"
+            >
+              ← Volver al historial
+            </Link>
+          </div>
+
+          {/* Stats */}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <StatPill label="Elegibles" value={bulkSend.eligible_count} />
+            <StatPill label="Enviados" value={bulkSend.sent_count} color="text-emerald-600" />
+            <StatPill
+              label="Fallidos"
+              value={bulkSend.failed_count}
+              color={(bulkSend.failed_count ?? 0) > 0 ? "text-red-600" : "text-text-muted"}
+            />
+          </div>
+        </>
+      ) : null}
+
+      {/* Filtros */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold text-text-muted">Filtrar mensajes:</span>
+        {["", "sent", "delivered", "failed"].map((s) => (
+          <button
+            key={s || "all"}
+            onClick={() => handleFilter(s)}
+            className={[
+              "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
+              statusFilter === s
+                ? "bg-primary text-white shadow-sm"
+                : "border border-border bg-surface text-text-muted hover:bg-surface-muted",
+            ].join(" ")}
+          >
+            {s === "" ? "Todos" : s === "sent" ? "Enviados" : s === "delivered" ? "Entregados" : "Fallidos"}
+          </button>
+        ))}
+        {total > 0 && (
+          <span className="ml-auto text-xs text-text-muted">{total} mensajes</span>
+        )}
+      </div>
+
+      {/* Tabla de mensajes */}
+      <Card>
+        <CardHeader>
+          <h3 className="text-h2 font-semibold text-text-primary">Detalle por empleado</h3>
+          <p className="text-sm text-text-muted">Estado de entrega de cada mensaje enviado</p>
+        </CardHeader>
+        <CardBody className="p-0">
+          {loading ? (
+            <div className="divide-y divide-border">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-4 px-6 py-4">
+                  <div className="h-4 w-40 animate-pulse rounded bg-surface-muted" />
+                  <div className="h-4 w-24 animate-pulse rounded bg-surface-muted" />
+                  <div className="ml-auto h-5 w-16 animate-pulse rounded-full bg-surface-muted" />
+                </div>
+              ))}
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="px-6 py-16 text-center">
+              <p className="font-semibold text-text-muted">
+                {statusFilter ? "No hay mensajes con ese estado." : "No hay mensajes registrados para este envío."}
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {/* Column headers */}
+              <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 px-6 py-2.5">
+                <span className="text-xs font-bold uppercase tracking-wide text-text-muted">Empleado</span>
+                <span className="text-xs font-bold uppercase tracking-wide text-text-muted">Teléfono</span>
+                <span className="text-xs font-bold uppercase tracking-wide text-text-muted">Fecha</span>
+                <span className="text-xs font-bold uppercase tracking-wide text-text-muted">Estado</span>
+              </div>
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 px-6 py-3.5 hover:bg-surface-muted/40"
+                >
+                  <div className="min-w-0">
+                    <Link
+                      href={`/contracts/${msg.employee_id}`}
+                      className="truncate text-sm font-semibold text-primary hover:underline"
+                    >
+                      {[msg.nombre, msg.apellidos].filter(Boolean).join(" ") || "—"}
+                    </Link>
+                    <p className="font-mono text-xs text-text-muted">{msg.rfc ?? "—"}</p>
+                    {msg.error_message && (
+                      <p className="mt-0.5 text-xs text-red-600">{msg.error_message}</p>
+                    )}
+                  </div>
+                  <span className="font-mono text-xs text-text-muted">{msg.telefono ?? "—"}</span>
+                  <span className="text-xs text-text-muted">{fmtDate(msg.created_at)}</span>
+                  <DeliveryBadge status={msg.delivery_status} />
+                </div>
+              ))}
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
+      {/* Paginación */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <button
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text-muted transition hover:bg-surface-muted disabled:opacity-40"
+          >
+            ← Anterior
+          </button>
+          <span className="text-sm text-text-muted">
+            Página {page} de {totalPages}
+          </span>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => p + 1)}
+            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text-muted transition hover:bg-surface-muted disabled:opacity-40"
+          >
+            Siguiente →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

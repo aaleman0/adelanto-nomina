@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type TabMode = "import" | "manual";
 
@@ -48,6 +49,7 @@ export function BulkSendForm() {
   const [result, setResult] = useState<SendResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState("adelanto_contrato");
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Cargar importaciones recientes
   useEffect(() => {
@@ -371,12 +373,22 @@ export function BulkSendForm() {
                 {error}
               </div>
             )}
-            <Button disabled={sendState === "sending"} onClick={handleSend}>
+            <Button disabled={sendState === "sending"} onClick={() => setConfirmOpen(true)}>
               {sendState === "sending" ? "Enviando..." : `Enviar mensajes a ${selectedEligible} employees`}
             </Button>
           </CardBody>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="¿Confirmar envío masivo?"
+        description={`Se enviará el template "${templateName}" a ${selectedEligible} empleados vía WhatsApp. Esta acción no se puede deshacer.`}
+        confirmLabel={`Enviar a ${selectedEligible} empleados`}
+        cancelLabel="Cancelar"
+        onConfirm={() => { setConfirmOpen(false); handleSend(); }}
+        onCancel={() => setConfirmOpen(false)}
+      />
 
       {/* Resultado final */}
       {sendState === "done" && result && (
