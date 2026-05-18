@@ -2,6 +2,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getWhatsAppClient } from "@/lib/whatsapp/client";
 import { getEmployeesEligibility } from "@/lib/whatsapp/eligibility";
 import { getEmployeesFromImport } from "@/lib/whatsapp/imports";
+import { logger } from "@/lib/logger";
 
 const BATCH_SIZE = 100;
 const BATCH_DELAY_MS = 1000;
@@ -77,6 +78,15 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
   if (bulkError) throw bulkError;
 
   const bulkSendId = bulkSendData.id as string;
+  logger.info("whatsapp.bulk_send.started", {
+    bulkSendId,
+    mode: params.mode,
+    importId: params.importId,
+    totalEmployees: employeeIds.length,
+    eligibleCount: eligible.length,
+    templateName,
+  });
+
   const progress: BulkSendProgress = {
     total: employeeIds.length,
     eligible: eligible.length,
@@ -113,7 +123,14 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
         await recordMessage({ supabase, bulkSendId, emp, status: "sent", waMessageId: result.messageId });
       } else {
         progress.failed++;
-        progress.errors.push({ employeeId: emp.employee_id, rfc: emp.rfc, error: result.error ?? "Error desconocido" });
+        const errMsg = result.error ?? "Error desconocido";
+        progress.errors.push({ employeeId: emp.employee_id, rfc: emp.rfc, error: errMsg });
+        logger.warn("whatsapp.message.send_failed", {
+          bulkSendId,
+          employeeId: emp.employee_id,
+          rfc: emp.rfc,
+          error: errMsg,
+        });
         await recordMessage({ supabase, bulkSendId, emp, status: "failed", error: result.error });
       }
     }

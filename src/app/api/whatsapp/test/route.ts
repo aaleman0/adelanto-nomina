@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { WhatsAppClient } from "@/lib/whatsapp/client";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
       displayName: result.displayName,
     });
   } catch (err) {
-    console.error("[whatsapp/test]", err);
+    logger.error("whatsapp.test_connection.error", err);
     return NextResponse.json({ ok: false, error: "Error inesperado." }, { status: 500 });
   }
 }

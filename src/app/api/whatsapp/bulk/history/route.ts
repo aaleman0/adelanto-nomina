@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
-// GET /api/whatsapp/bulk/history?page=1&pageSize=20&status=completed
+// GET /api/whatsapp/bulk/history?page=1&pageSize=20&status=completed&mode=import&dateFrom=2024-01-01&dateTo=2024-12-31
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const page = Math.max(1, Number(searchParams.get("page") ?? "1"));
     const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize") ?? "20")));
-    const status = searchParams.get("status"); // completed | sending | failed | null (todos)
+    const status = searchParams.get("status");   // completed | sending | failed | null (todos)
+    const mode = searchParams.get("mode");        // import | manual | null (todos)
+    const dateFrom = searchParams.get("dateFrom"); // ISO date string
+    const dateTo = searchParams.get("dateTo");     // ISO date string
 
     const supabase = getSupabaseAdmin();
     const from = (page - 1) * pageSize;
@@ -21,8 +25,14 @@ export async function GET(request: Request) {
       .order("created_at", { ascending: false })
       .range(from, to);
 
-    if (status) {
-      query = query.eq("status", status);
+    if (status) query = query.eq("status", status);
+    if (mode) query = query.eq("mode", mode);
+    if (dateFrom) query = query.gte("created_at", new Date(dateFrom).toISOString());
+    if (dateTo) {
+      // dateTo inclusivo: agregar 1 día
+      const end = new Date(dateTo);
+      end.setDate(end.getDate() + 1);
+      query = query.lt("created_at", end.toISOString());
     }
 
     const { data, count, error } = await query;
@@ -38,7 +48,7 @@ export async function GET(request: Request) {
       totalPages: Math.ceil((count ?? 0) / pageSize),
     });
   } catch (err) {
-    console.error("[whatsapp/bulk/history]", err);
+    logger.error("whatsapp.bulk_history.error", err);
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : "Error inesperado." },
       { status: 500 },

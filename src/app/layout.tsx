@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Comfortaa } from "next/font/google";
 import "./globals.css";
+import { ToastProvider } from "@/components/ui/toast";
 
 const comfortaa = Comfortaa({
   subsets: ["latin"],
@@ -21,7 +22,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className={`h-full antialiased ${comfortaa.variable}`}>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }

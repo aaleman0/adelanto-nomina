@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -77,7 +78,7 @@ export async function GET() {
       }),
     });
   } catch (err) {
-    console.error("[whatsapp/stats]", err);
+    logger.error("whatsapp.stats.error", err);
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : "Error inesperado." },
       { status: 500 },

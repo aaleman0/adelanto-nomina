@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { useToast } from "@/components/ui/toast";
 
 type TemplateComponent = {
   type: string;
@@ -107,6 +108,7 @@ export function TemplatesPanel() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [selected, setSelected] = useState<Template | null>(null);
+  const toastify = useToast();
 
   async function fetchTemplates() {
     setLoadState("loading");
@@ -132,10 +134,14 @@ export function TemplatesPanel() {
       const res = await fetch("/api/whatsapp/templates/sync", { method: "POST" });
       const json = await res.json();
       if (!json.ok) throw new Error(json.error ?? "Error al sincronizar.");
-      setSyncMsg({ ok: true, text: `Sincronizados ${json.synced} templates desde Meta.` });
+      const msg = `Sincronizados ${json.synced} templates desde Meta.`;
+      setSyncMsg({ ok: true, text: msg });
+      toastify.success(msg);
       await fetchTemplates();
     } catch (err) {
-      setSyncMsg({ ok: false, text: err instanceof Error ? err.message : "Error de red." });
+      const msg = err instanceof Error ? err.message : "Error de red.";
+      setSyncMsg({ ok: false, text: msg });
+      toastify.error(`Error al sincronizar templates: ${msg}`);
     } finally {
       setSyncing(false);
     }

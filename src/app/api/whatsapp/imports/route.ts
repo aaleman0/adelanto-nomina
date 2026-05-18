@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRecentImports, getEmployeesFromImport } from "@/lib/whatsapp/imports";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
     const imports = await getRecentImports();
     return NextResponse.json({ ok: true, imports });
   } catch (err) {
-    console.error("[whatsapp/imports]", err);
+    logger.error("whatsapp.imports.error", err);
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : "Error inesperado." },
       { status: 500 },

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sendBulkMessages, validateBulkEligibility } from "@/lib/whatsapp/bulk-send";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -36,9 +37,17 @@ export async function POST(request: Request) {
 
     // action === "send"
     const result = await sendBulkMessages({ mode, importId, employeeIds, templateName });
+    logger.info("whatsapp.bulk_send.completed", {
+      bulkSendId: result.bulkSendId,
+      mode,
+      importId,
+      total: result.total,
+      sent: result.sent,
+      failed: result.failed,
+    });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
-    console.error("[whatsapp/bulk]", err);
+    logger.error("whatsapp.bulk_send.error", err);
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : "Error inesperado." },
       { status: 500 },

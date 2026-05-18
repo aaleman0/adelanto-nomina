@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 type Stats = {
   sentToday: number;
@@ -63,6 +64,14 @@ function SkeletonCard() {
 }
 
 export function WhatsAppDashboard() {
+  return (
+    <ErrorBoundary section="WhatsApp Dashboard">
+      <WhatsAppDashboardInner />
+    </ErrorBoundary>
+  );
+}
+
+function WhatsAppDashboardInner() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [recent, setRecent] = useState<RecentMessage[]>([]);
   const [loading, setLoading] = useState(true);

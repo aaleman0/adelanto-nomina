@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,8 @@ export async function GET(request: Request) {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
+    const searchQuery = searchParams.get("q")?.trim(); // Búsqueda por RFC o nombre
+
     let msgQuery = supabase
       .from("whatsapp_contract_messages")
       .select(
@@ -46,6 +49,11 @@ export async function GET(request: Request) {
 
     if (statusFilter) {
       msgQuery = msgQuery.eq("delivery_status", statusFilter);
+    }
+
+    // Búsqueda por RFC en la tabla de employees relacionada
+    if (searchQuery) {
+      msgQuery = msgQuery.ilike("employees.rfc", `%${searchQuery}%`);
     }
 
     const { data: messages, count, error: msgError } = await msgQuery;
@@ -82,7 +90,7 @@ export async function GET(request: Request) {
       totalPages: Math.ceil((count ?? 0) / pageSize),
     });
   } catch (err) {
-    console.error("[whatsapp/bulk/detail]", err);
+    logger.error("whatsapp.bulk_detail.error", err);
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : "Error inesperado." },
       { status: 500 },

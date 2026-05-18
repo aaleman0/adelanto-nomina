@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
+import { validateWhatsAppEnv } from "@/lib/env";
 
 export const runtime = "nodejs";
 
@@ -22,9 +24,16 @@ export async function GET() {
       config[row.key] = row.value;
     }
 
-    return NextResponse.json({ ok: true, config });
+    // Incluir estado de validación de env vars
+    const envValidation = validateWhatsAppEnv();
+    return NextResponse.json({
+      ok: true,
+      config,
+      envValid: envValidation.ok,
+      envErrors: envValidation.ok ? [] : envValidation.errors,
+    });
   } catch (err) {
-    console.error("[whatsapp/config GET]", err);
+    logger.error("whatsapp.config.get_error", err);
     return NextResponse.json({ ok: false, error: "Error al obtener configuración." }, { status: 500 });
   }
 }
@@ -61,9 +70,10 @@ export async function POST(request: Request) {
 
     if (error) throw error;
 
+    logger.info("whatsapp.config.saved");
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("[whatsapp/config POST]", err);
+    logger.error("whatsapp.config.save_error", err);
     return NextResponse.json({ ok: false, error: "Error al guardar configuración." }, { status: 500 });
   }
 }

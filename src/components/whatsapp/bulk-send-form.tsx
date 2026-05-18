@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 
 type TabMode = "import" | "manual";
 
@@ -50,6 +51,7 @@ export function BulkSendForm() {
   const [error, setError] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState("adelanto_contrato");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const toastify = useToast();
 
   // Cargar importaciones recientes
   useEffect(() => {
@@ -135,9 +137,14 @@ export function BulkSendForm() {
       if (!json.ok) throw new Error(json.error ?? "Error al enviar.");
       setResult(json as SendResult);
       setSendState("done");
+      toastify.success(
+        `Envío completado: ${(json as SendResult).sent} enviados, ${(json as SendResult).failed} errores.`,
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error.");
+      const msg = err instanceof Error ? err.message : "Error.";
+      setError(msg);
       setSendState("ready");
+      toastify.error(`Error al enviar mensajes: ${msg}`);
     }
   }
 

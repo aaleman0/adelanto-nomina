@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { ErrorBoundary } from "@/components/error-boundary";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 
 type BulkSend = {
   id: string;
@@ -93,25 +95,34 @@ function StatPill({ label, value, color }: { label: string; value: number | null
 }
 
 export function BulkDetail({ id }: { id: string }) {
+  return (
+    <ErrorBoundary section="Detalle de envío masivo">
+      <BulkDetailInner id={id} />
+    </ErrorBoundary>
+  );
+}
+
+function BulkDetailInner({ id }: { id: string }) {
   const [bulkSend, setBulkSend] = useState<BulkSend | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [searchInput, setSearchInput] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const searchQuery = useDebounce(searchInput, 300);
+
   const load = useCallback(
-    (p: number, sf: string) => {
+    (p: number, sf: string, q: string) => {
       setLoading(true);
       setError(null);
-      const params = new URLSearchParams({
-        id,
-        page: String(p),
-        pageSize: String(PAGE_SIZE),
-        ...(sf ? { status: sf } : {}),
-      });
+      const params = new URLSearchParams({ id, page: String(p), pageSize: String(PAGE_SIZE) });
+      if (sf) params.set("status", sf);
+      if (q) params.set("q", q);
+
       fetch(`/api/whatsapp/bulk/detail?${params}`)
         .then((r) => r.json())
         .then((json: DetailResponse) => {
@@ -128,8 +139,8 @@ export function BulkDetail({ id }: { id: string }) {
   );
 
   useEffect(() => {
-    load(page, statusFilter);
-  }, [load, page, statusFilter]);
+    load(page, statusFilter, searchQuery);
+  }, [load, page, statusFilter, searchQuery]);
 
   function handleFilter(sf: string) {
     setStatusFilter(sf);
@@ -141,7 +152,7 @@ export function BulkDetail({ id }: { id: string }) {
       <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
         <p className="font-semibold text-red-800">{error}</p>
         <button
-          onClick={() => load(page, statusFilter)}
+          onClick={() => load(page, statusFilter, searchQuery)}
           className="mt-2 text-sm font-semibold text-red-600 underline"
         >
           Reintentar
@@ -197,15 +208,32 @@ export function BulkDetail({ id }: { id: string }) {
         </>
       ) : null}
 
-      {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold text-text-muted">Filtrar mensajes:</span>
+      {/* Filtros + búsqueda */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Búsqueda por RFC */}
+        <div className="relative flex-1 min-w-[180px]">
+          <svg
+            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Buscar por RFC..."
+            value={searchInput}
+            onChange={(e) => { setSearchInput(e.target.value); setPage(1); }}
+            className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
+        </div>
+
+        <span className="text-xs font-semibold text-text-muted">Estado:</span>
         {["", "sent", "delivered", "failed"].map((s) => (
           <button
             key={s || "all"}
             onClick={() => handleFilter(s)}
             className={[
-              "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
+              "rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all",
               statusFilter === s
                 ? "bg-primary text-white shadow-sm"
                 : "border border-border bg-surface text-text-muted hover:bg-surface-muted",

@@ -3,6 +3,7 @@ import {
   parseRequestContractPayload,
   requestContractFromWhatsApp,
 } from "@/lib/contracts/request-contract";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     if (!isExpectedBadRequest(error)) {
-      console.error(error);
+      logger.error("whatsapp.request_contract.error", error);
     }
 
     return NextResponse.json(

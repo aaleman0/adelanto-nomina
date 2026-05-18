@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyWebhook, handleWebhook } from "@/lib/whatsapp/webhooks";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -22,10 +23,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
+    logger.debug("whatsapp.webhook.received", { object: (payload as Record<string, unknown>)?.object });
     await handleWebhook(payload);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("[webhooks/whatsapp POST]", err);
+    logger.error("whatsapp.webhook.error", err);
     return NextResponse.json({ ok: false }, { status: 500 });
   }
 }
