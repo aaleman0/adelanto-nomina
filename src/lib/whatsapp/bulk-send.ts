@@ -151,6 +151,23 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
     })
     .eq("id", bulkSendId);
 
+  // 6. Alerta de error rate: si >10% de elegibles fallaron, emitir warn
+  const totalAttempted = progress.sent + progress.failed;
+  if (totalAttempted > 0) {
+    const errorRate = Math.round((progress.failed / totalAttempted) * 100);
+    if (errorRate > 10) {
+      logger.warn("whatsapp.bulk_send.high_error_rate", {
+        bulkSendId,
+        errorRate,
+        sent: progress.sent,
+        failed: progress.failed,
+        totalAttempted,
+        threshold: 10,
+        action: "Revisar configuración de WhatsApp API o lista de teléfonos.",
+      });
+    }
+  }
+
   return { ...progress, bulkSendId, status: "completed" };
 }
 
