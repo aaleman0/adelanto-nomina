@@ -3,6 +3,7 @@ import {
   mockSignContract,
   parseMockSignPayload,
 } from "@/lib/contracts/mock-sign";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (!isExpectedBadRequest(error)) {
-      console.error(error);
+      logger.error("easylex.mock_sign.error", error);
     }
 
     return NextResponse.json(

@@ -141,9 +141,6 @@ export function parseRequestContractPayload(
   };
 }
 
-/** @deprecated Usar requestContractFromWhatsApp */
-export const requestContractFromManyChat = requestContractFromWhatsApp;
-
 export async function requestContractFromWhatsApp(
   input: RequestContractInput,
 ): Promise<RequestContractResult> {

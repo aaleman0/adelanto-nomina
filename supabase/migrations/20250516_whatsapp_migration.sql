@@ -167,7 +167,7 @@ END $$;
 CREATE TABLE IF NOT EXISTS whatsapp_bulk_sends (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   mode            TEXT NOT NULL CHECK (mode IN ('import', 'manual')),
-  import_id       UUID REFERENCES imports(id),
+  import_id       UUID,
   employee_ids    TEXT[] NOT NULL DEFAULT '{}',
   eligible_count  INTEGER NOT NULL DEFAULT 0,
   sent_count      INTEGER DEFAULT 0,

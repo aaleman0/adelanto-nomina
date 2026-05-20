@@ -22,7 +22,7 @@ export async function getRecentImports(limit = 10): Promise<RecentImport[]> {
   const supabase = getSupabaseAdmin();
 
   const { data, error } = await supabase
-    .from("imports")
+    .from("import_batches")
     .select("id, original_filename, row_count, applied_at, status")
     .eq("status", "applied")
     .order("applied_at", { ascending: false })
