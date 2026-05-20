@@ -81,7 +81,7 @@ function NavLink({
       )}
       <NavIcon icon={item.icon} active={active} />
       {!collapsed && (
-        <span className={["text-[13px] font-semibold truncate", active ? "text-white" : ""].join(" ")}>
+        <span className="text-[13px] font-semibold truncate" style={{ color: '#ffffff' }}>
           {item.label}
         </span>
       )}
@@ -100,7 +100,7 @@ function NavGroupItem({
   onClick?: () => void;
 }) {
   const pathname = usePathname();
-  const groupActive = pathname.startsWith(group.prefix);
+  const groupActive = group.items.some(item => pathname === item.href || pathname.startsWith(item.href));
 
   const [open, setOpen] = useState(groupActive);
 
@@ -139,15 +139,15 @@ function NavGroupItem({
           <span className="absolute -left-px top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-indigo-400" />
         )}
         <NavIcon icon={group.icon} active={groupActive} />
-        <span className="flex-1 truncate text-left text-[13px] font-semibold">{group.label}</span>
+        <span className="flex-1 truncate text-left text-[13px] font-semibold" style={{ color: '#ffffff' }}>{group.label}</span>
         <svg
           className={[
-            "h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform duration-200",
+            "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
             open ? "rotate-180" : "",
           ].join(" ")}
           fill="none"
           viewBox="0 0 24 24"
-          stroke="currentColor"
+          stroke="#ffffff"
           strokeWidth={2.5}
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -158,7 +158,7 @@ function NavGroupItem({
       {open && (
         <div className="mt-0.5 ml-4 flex flex-col gap-0.5 border-l border-white/[0.07] pl-3">
           {group.items.map((item) => {
-            const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            const active = item.href === "/" ? pathname === "/" : pathname === item.href;
             return (
               <Link
                 key={item.href}
@@ -168,8 +168,9 @@ function NavGroupItem({
                   "flex h-9 items-center rounded-lg px-3 text-[12.5px] font-semibold transition-colors",
                   active
                     ? "bg-indigo-600/80 text-white"
-                    : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
+                    : "hover:bg-white/[0.06]",
                 ].join(" ")}
+                style={{ color: '#ffffff' }}
               >
                 {item.label}
               </Link>
@@ -235,18 +236,19 @@ export function SidebarFrame({
           </div>
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-bold text-white leading-tight">Backoffice Adelantos</p>
-              <p className="truncate text-[11px] text-slate-400 leading-tight mt-0.5">Panel Operativo</p>
+              <p className="truncate text-[13px] font-bold leading-tight" style={{ color: '#ffffff' }}>Backoffice Adelantos</p>
+              <p className="truncate text-[11px] leading-tight mt-0.5" style={{ color: '#ffffff' }}>Panel Operativo</p>
             </div>
           )}
           {!collapsed && (
             <button
-              className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+              className="ml-auto grid h-7 w-7 place-items-center rounded-lg transition-all hover:bg-white/10"
               onClick={toggleSidebar}
               type="button"
               aria-label="Colapsar sidebar"
+              style={{ color: '#ffffff' }}
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="#ffffff" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
               </svg>
             </button>
@@ -255,12 +257,13 @@ export function SidebarFrame({
 
         {collapsed && (
           <button
-            className="mx-auto mt-2 grid h-7 w-7 place-items-center rounded-lg text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+            className="mx-auto mt-2 grid h-7 w-7 place-items-center rounded-lg transition-all hover:bg-white/10"
             onClick={toggleSidebar}
             type="button"
             aria-label="Expandir sidebar"
+            style={{ color: '#ffffff' }}
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="#ffffff" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
             </svg>
           </button>
@@ -269,13 +272,13 @@ export function SidebarFrame({
         {/* Nav */}
         <nav className={["flex flex-1 flex-col gap-1 overflow-y-auto py-4", collapsed ? "px-2" : "px-3"].join(" ")}>
           {!collapsed && (
-            <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Menú principal</p>
+            <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.15em]" style={{ color: '#ffffff' }}>Menú principal</p>
           )}
           {renderNavEntries()}
         </nav>
 
         <div className={["border-t border-white/[0.08] py-4", collapsed ? "px-2" : "px-4"].join(" ")}>
-          {!collapsed && <p className="text-[11px] text-slate-600 text-center">v0.2 · backoffice</p>}
+          {!collapsed && <p className="text-[11px] text-center" style={{ color: '#ffffff' }}>v0.2 · backoffice</p>}
         </div>
       </aside>
 

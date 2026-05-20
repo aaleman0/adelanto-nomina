@@ -5,6 +5,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
+import { useNotifications } from "@/components/ui/notifications";
 
 type TabMode = "import" | "manual";
 
@@ -52,6 +53,7 @@ export function BulkSendForm() {
   const [templateName, setTemplateName] = useState("adelanto_contrato");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const toastify = useToast();
+  const { addNotification } = useNotifications();
 
   // Cargar importaciones recientes
   useEffect(() => {
@@ -137,9 +139,19 @@ export function BulkSendForm() {
       if (!json.ok) throw new Error(json.error ?? "Error al enviar.");
       setResult(json as SendResult);
       setSendState("done");
+      const sent = (json as SendResult).sent;
+      const failed = (json as SendResult).failed;
       toastify.success(
-        `Envío completado: ${(json as SendResult).sent} enviados, ${(json as SendResult).failed} errores.`,
+        `Envío completado: ${sent} enviados, ${failed} errores.`,
       );
+      // Notificación persistente en la campana
+      addNotification({
+        type: failed > 0 ? "warning" : "success",
+        title: "Envío masivo completado",
+        message: `${sent} mensajes enviados${failed > 0 ? `, ${failed} fallidos` : ""}. Ver historial para detalles.`,
+        actionUrl: "/whatsapp/history",
+        actionLabel: "Ver historial",
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error.";
       setError(msg);

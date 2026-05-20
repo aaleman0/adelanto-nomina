@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { SidebarFrame } from "./sidebar-frame";
 import type { NavEntry } from "./sidebar-frame";
+import { NotificationsProvider, NotificationBell } from "@/components/ui/notifications";
 
 const navigation: NavEntry[] = [
   { href: "/", label: "Dashboard", icon: "D" },
@@ -24,13 +25,19 @@ const navigation: NavEntry[] = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
-    <SidebarFrame navigation={navigation}>
-      <main className="min-h-screen bg-background text-text-primary">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-          {children}
-        </div>
-      </main>
-    </SidebarFrame>
+    <NotificationsProvider>
+      <SidebarFrame navigation={navigation}>
+        <main className="min-h-screen bg-background text-text-primary">
+          {/* Header with notification bell */}
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-end gap-2 px-4 py-3 sm:px-6 lg:px-8">
+            <NotificationBell />
+          </div>
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-6 sm:px-6 lg:px-8">
+            {children}
+          </div>
+        </main>
+      </SidebarFrame>
+    </NotificationsProvider>
   );
 }
 
