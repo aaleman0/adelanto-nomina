@@ -1,11 +1,24 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { SidebarFrame } from "./sidebar-frame";
+import type { NavEntry } from "./sidebar-frame";
 
-const navigation = [
+const navigation: NavEntry[] = [
   { href: "/", label: "Dashboard", icon: "D" },
   { href: "/imports", label: "Importaciones", icon: "I" },
   { href: "/contracts", label: "Control de contratos", icon: "C" },
+  {
+    label: "WhatsApp",
+    icon: "W",
+    prefix: "/whatsapp",
+    items: [
+      { href: "/whatsapp", label: "Dashboard", icon: "W" },
+      { href: "/whatsapp/send", label: "Enviar mensajes", icon: "W" },
+      { href: "/whatsapp/history", label: "Historial de envíos", icon: "W" },
+      { href: "/settings/whatsapp/templates", label: "Templates", icon: "W" },
+      { href: "/settings/whatsapp", label: "Configuración", icon: "W" },
+    ],
+  },
   { href: "/settings", label: "Configuración", icon: "S" },
 ];
 

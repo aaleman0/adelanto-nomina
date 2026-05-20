@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import type { StatusTone } from "@/components/ui/status-badge";
 import type { ContractControlRow } from "@/lib/backoffice/contract-control";
 import type { ContractTimelineRow } from "@/lib/backoffice/contract-detail";
+import { MessageHistory } from "@/components/contracts/message-history";
 
 const dateFormatter = new Intl.DateTimeFormat("es-MX", {
   dateStyle: "medium",
@@ -83,8 +84,8 @@ export function ContractDetailView({
               value={formatDate(control.last_movement_at)}
             />
             <Metric
-              label="Subscriber"
-              value={control.manychat_subscriber_id || "-"}
+              label="WhatsApp ID"
+              value={control.whatsapp_subscriber_id || "-"}
             />
           </div>
         </CardBody>
@@ -96,7 +97,7 @@ export function ContractDetailView({
 
       <section className="grid gap-6 lg:grid-cols-2">
         <StatusCard
-          title="Mensaje ManyChat"
+          title="Mensaje WhatsApp"
           status={control.message_status || "pendiente_envio"}
           tone={getMessageStatusTone(control.message_status)}
           rows={[
@@ -147,6 +148,8 @@ export function ContractDetailView({
           ]}
         />
       </section>
+
+      <MessageHistory employeeId={control.employee_id} />
 
       <TimelineCard timeline={timeline} />
     </div>
@@ -264,7 +267,7 @@ function ActionsCard({ control }: { control: ContractControlRow }) {
 
         <div className="rounded-base border border-border bg-surface-muted px-4 py-3 text-sm text-text-muted">
           {!hasRequest
-            ? "Las acciones se habilitan cuando el empleado solicita desde ManyChat."
+            ? "Las acciones se habilitan cuando el empleado solicita desde WhatsApp."
             : isSigned
               ? "Este contrato ya esta firmado; no se debe regenerar ni reintentar."
               : "Si el link sigue vigente, el sistema lo reutiliza. Si vencio o hubo error, crea un nuevo intento y deja evidencia en timeline."}
