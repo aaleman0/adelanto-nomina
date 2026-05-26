@@ -1,4 +1,0 @@
-interface:
-  display_name: "Adelantos ManyChat"
-  short_description: "Flujos ManyChat para adelantos"
-  default_prompt: "Use $adelantos-manychat para configurar o depurar flujos de ManyChat."

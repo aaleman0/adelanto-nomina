@@ -9,11 +9,13 @@
 - `raw_import_rows`: fila cruda, numero de fila, payload original, errores y batch.
 - `employees`: identidad operativa del empleado.
 - `advance_offers`: monto aprobado y vigencia por empleado.
-- `manychat_contacts`: relacion entre empleado, telefono normalizado y subscriber_id.
+- `whatsapp_messages`: registro de mensajes enviados por WhatsApp Cloud API, estado de entrega y lectura.
+- `whatsapp_bulk_sends`: envios masivos, modo (import/manual), estado y conteos de enviados/fallidos.
+- `whatsapp_bulk_send_recipients`: detalle de cada destinatario dentro de un envio masivo.
 - `contract_requests`: solicitud de contrato, estado, contract_id, signing_url y timestamps.
 - `contract_events`: eventos recibidos desde EasyLex o generados por backend.
 - `payments`: estado de dispersion, clave_cep, fecha_dispersion y referencia.
-- `integration_logs`: llamadas a ManyChat, EasyLex y webhooks externos.
+- `integration_logs`: llamadas a WhatsApp API, EasyLex y webhooks externos.
 - `audit_events`: timeline humano de cambios importantes.
 
 ## Estados Recomendados
@@ -28,13 +30,16 @@
 
 - `csv.imported`
 - `employee.upserted`
-- `manychat.contract_requested`
+- `whatsapp.bulk_send_started`
+- `whatsapp.message_sent`
+- `whatsapp.message_delivered`
+- `whatsapp.message_read`
+- `whatsapp.message_failed`
+- `whatsapp.contract_requested`
 - `backend.eligibility_checked`
 - `easylex.contract_created`
 - `easylex.contract_signed`
 - `payment.updated`
-- `manychat.help_requested`
-- `manychat.help_answered`
 - `integration.error`
 
 ## Reglas Transversales
@@ -54,7 +59,8 @@
 - Si el link expira, permitir regenerar link como nuevo intento dentro de la misma solicitud.
 - Congelar snapshot de contrato al generar link EasyLex para que cambios futuros de CSV no alteren lo firmado.
 - Confirmar con EasyLex si el plan/API contratado permite webhook o postback de firma. Si no existe, disenar fallback por polling, descarga/consulta operativa o conciliacion manual desde backoffice.
-- Usar idempotency keys en clics de ManyChat y webhooks de EasyLex.
+- Usar idempotency keys en solicitudes de contrato y webhooks de EasyLex.
+- Para WhatsApp Cloud API: enviar mensajes usando plantillas aprobadas por Meta; guardar `wamid` por mensaje para rastreo de entrega.
 - Guardar payload crudo y payload resumido cuando sea posible.
 - No exponer datos sensibles completos en vistas operativas.
 - Permitir reintentos manuales solo con auditoria.

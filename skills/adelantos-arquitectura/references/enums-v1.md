@@ -56,9 +56,22 @@ Preparado para fase posterior:
 - `operaciones`
 - `solo_lectura`
 
+## `whatsapp_message_status`
+
+- `sent`
+- `delivered`
+- `read`
+- `failed`
+
+## `whatsapp_bulk_send_status`
+
+- `sending`
+- `completed`
+- `failed`
+
 ## `integration_provider`
 
-- `manychat`
+- `whatsapp`
 - `easylex`
 - `supabase`
 - `backend`
@@ -66,7 +79,7 @@ Preparado para fase posterior:
 ## `audit_source`
 
 - `csv`
-- `manychat`
+- `whatsapp`
 - `backend`
 - `easylex`
 - `backoffice`

@@ -1,57 +1,109 @@
 # Backend - Endpoints Y Estados
 
-## `POST /manychat/request-contract`
+## Endpoints Implementados
 
-Entrada: subscriber_id, telefono, rfc y campos conocidos por ManyChat.
+### Contratos
 
-Regla de elegibilidad inicial: solo avanzar si el empleado/oferta viene de una fila con `Estatus Conversión = Aceptada`.
+#### `POST /api/manychat/request-contract`
 
-Identidad: autenticar y buscar empleado principalmente por RFC. Usar telefono normalizado para vincular ManyChat y como dato de contacto.
+Entrada: `subscriber_id`, `telefono_normalizado`, `rfc`, `first_name`, `last_name`.
 
-Solicitud: permitir solo una solicitud por oferta vigente y no permitir mas de una solicitud activa por empleado. Si ya firmo, responder que el contrato ya fue firmado. Si el link expiro, regenerar link como nuevo intento dentro de la misma solicitud.
+Regla de elegibilidad: solo avanzar si el empleado tiene oferta vigente con `Estatus Conversión = Aceptada`.
 
-Salida:
+Identidad: buscar empleado principalmente por RFC. Usar telefono normalizado como dato de contacto.
 
-```json
-{
-  "status": "processing",
-  "request_id": "req_123",
-  "estatus_contrato": "generando"
-}
-```
+Solicitud: permitir solo una solicitud por oferta vigente. Si ya firmo, responder `already_signed`. Si el link expiro, regenerar como nuevo intento. Si no hay oferta, responder `no_offer`. Si no se encuentra el RFC, responder `not_found`.
 
-o:
+Salida posible:
 
 ```json
-{
-  "status": "contract_ready",
-  "request_id": "req_123",
-  "link_easylex": "https://...",
-  "estatus_contrato": "generado"
-}
+{ "status": "contract_ready", "link_easylex": "https://...", "expires_at": "..." }
 ```
 
-## `POST /manychat/help`
+```json
+{ "status": "already_signed", "message": "Tu contrato ya fue firmado." }
+```
 
-Responder desde BD. No depender del CSV original ni de ManyChat como fuente de verdad.
+```json
+{ "status": "not_found", "message": "RFC no encontrado." }
+```
 
-## `POST /webhooks/easylex`
+```json
+{ "status": "not_eligible", "message": "Oferta no elegible." }
+```
 
-Validar autenticidad, aplicar idempotencia, guardar evento, actualizar contrato y disparar sincronizacion ManyChat.
+```json
+{ "status": "no_offer", "message": "Sin oferta vigente." }
+```
 
-Pendiente de confirmacion con EasyLex: disponibilidad de webhook/postback de firma en el plan/API contratado. Si no existe, usar endpoint o job de conciliacion.
+### Importaciones
+
+#### `POST /api/imports`
+Subida y validacion de CSV. Crea `import_batch` y `raw_import_rows`. Retorna resumen de filas validas, invalidas y duplicadas.
+
+#### `POST /api/imports/[batchId]/apply`
+Aplica filas validas de un lote a tablas operativas (`employees`, `advance_offers`, `employee_bank_accounts`). Registra auditoria.
+
+### WhatsApp Cloud API
+
+#### `POST /api/whatsapp/bulk`
+Inicia un envio masivo. Con `?action=validate` solo valida elegibilidad sin enviar. Con `?action=send` (default) envia.
+
+Entrada: `{ "mode": "import" | "manual", "importId"?: "uuid", "employeeIds"?: [], "templateName"?: "adelanto_contrato" }`
+
+Salida: `{ "ok": true, "bulkSendId": "uuid", "total": N, "eligible": N, "sent": N, "failed": N, "status": "completed" }`
+
+#### `GET /api/whatsapp/bulk/history`
+Historial paginado. Parametros: `page`, `pageSize`, `status`, `mode`, `dateFrom`, `dateTo`.
+
+#### `GET /api/whatsapp/bulk/detail`
+Detalle de un envio masivo. Parametros: `id`, `page`, `q` (busqueda por RFC).
+
+#### `GET/POST /api/whatsapp/config`
+Obtener o guardar credenciales de WhatsApp en `settings` de Supabase.
+
+#### `GET /api/whatsapp/stats`
+Estadisticas: mensajes enviados, tasa de entrega, tasa de lectura, errores ultimas 24h.
+
+#### `GET /api/whatsapp/templates`
+Listar plantillas almacenadas en BD.
+
+#### `POST /api/whatsapp/templates/sync`
+Sincronizar plantillas desde Meta API.
+
+### Webhooks
+
+#### `GET /api/webhooks/whatsapp`
+Verificacion del webhook por Meta (`hub.mode`, `hub.verify_token`, `hub.challenge`).
+
+#### `POST /api/webhooks/whatsapp`
+Recibe eventos de Meta: `sent`, `delivered`, `read`, `failed`. Actualiza estado en `whatsapp_messages`.
+
+#### `POST /api/webhooks/easylex/mock-sign`
+Simula firma de contrato para pruebas. Actualiza `contract_attempts` y `contract_requests`.
+
+#### `POST /api/webhooks/easylex` _(pendiente — Fase 9)_
+Webhook real de firma EasyLex. Validar autenticidad, aplicar idempotencia, actualizar contrato y notificar al empleado por WhatsApp.
+
+### Health
+
+#### `GET /api/health`
+Estado general: Supabase + WhatsApp. Incluye `errorRate24h` y flag `alerting` si tasa de error supera 10%.
+
+#### `GET /api/health/whatsapp`
+Estado especifico de WhatsApp: credenciales configuradas, tasa de error reciente.
 
 ## Estados Operativos
 
 - Solicitud: `recibida`, `validando`, `en_cola`, `procesando`, `completada`, `fallida`.
 - Contrato: `solicitado`, `generando`, `generado`, `firmado`, `expirado`, `error`.
 - Pago: `pendiente`, `en_proceso`, `pagado`, `fallido`, `cancelado`.
-- Job: `queued`, `running`, `succeeded`, `failed`, `dead`.
+- WhatsApp mensaje: `sent`, `delivered`, `read`, `failed`.
+- WhatsApp envio masivo: `sending`, `completed`, `failed`.
 
 ## Idempotencia
 
-Usar claves como:
-
-- ManyChat: `subscriber_id + offer_id + action`
-- EasyLex: `event_id` si existe; si no, `contract_id + status + signed_at`
+- Contrato: `employee_id + offer_id + action`
+- EasyLex webhook: `event_id` si existe; si no, `contract_id + status + signed_at`
 - Importacion: `batch_id + row_number`
+- WhatsApp webhook: `wamid + status`
