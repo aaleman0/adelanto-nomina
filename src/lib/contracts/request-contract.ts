@@ -218,7 +218,8 @@ export async function requestContractFromWhatsApp(
       entityType: "contract_requests",
       entityId: contractRequest.id,
       employeeId: employee.id,
-      source: "whatsapp",
+      // TODO: cambiar a "whatsapp" cuando se aplique la migración que extiende el enum audit_source
+      source: "backend",
       summary: `Solicitud de contrato creada desde WhatsApp para RFC ${employee.rfc}.`,
       metadata: {
         offer_id: offer.id,
@@ -413,7 +414,9 @@ async function createContractRequest(
       offer_id: offer.id,
       status: "generando",
       requested_from: "whatsapp",
-      whatsapp_subscriber_id: input.subscriberId,
+      // Columna renombrada pendiente de migración: usar manychat_subscriber_id hasta que
+      // supabase/migrations/20250526_contract_requests_whatsapp_subscriber.sql sea aplicada.
+      manychat_subscriber_id: input.subscriberId,
       contract_snapshot: {
         nombre: employee.nombre,
         apellidos: employee.apellidos,
@@ -628,7 +631,8 @@ async function createIntegrationLog(input: {
 }) {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from("integration_logs").insert({
-    provider: "whatsapp",
+    // TODO: cambiar a "whatsapp" cuando se aplique la migración que extiende el enum
+    provider: "backend",
     direction: "inbound",
     endpoint: "/api/whatsapp/request-contract",
     method: "POST",
