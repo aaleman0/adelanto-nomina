@@ -54,8 +54,7 @@ export async function handleWebhook(payload: {
       // Mensajes entrantes
       for (const msg of value.messages ?? []) {
         await supabase.from("integration_logs").insert({
-          // TODO: cambiar a "whatsapp" cuando se aplique la migración que extiende el enum
-          provider: "backend",
+          provider: "whatsapp",
           direction: "inbound",
           endpoint: "/api/webhooks/whatsapp",
           method: "POST",
