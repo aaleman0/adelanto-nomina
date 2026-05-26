@@ -2,8 +2,8 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 export type RecentImport = {
   id: string;
-  original_filename: string | null;
-  row_count: number | null;
+  filename: string | null;
+  total_rows: number | null;
   applied_at: string | null;
   status: string | null;
 };
@@ -23,8 +23,8 @@ export async function getRecentImports(limit = 10): Promise<RecentImport[]> {
 
   const { data, error } = await supabase
     .from("import_batches")
-    .select("id, original_filename, row_count, applied_at, status")
-    .eq("status", "applied")
+    .select("id, filename, total_rows, applied_at, status")
+    .eq("status", "aplicada")
     .order("applied_at", { ascending: false })
     .limit(limit);
 
