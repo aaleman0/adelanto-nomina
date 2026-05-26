@@ -22,8 +22,14 @@ import { getSupabaseTestClient } from "../helpers/supabase";
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Crea un import_batch con un raw_import_row aplicado para tener un importId
- * real con empleados. Retorna el importId o null si Supabase no está disponible.
+ * Crea un import_batch aplicado con un empleado elegible vinculado vía
+ * advance_offers.source_batch_id. Retorna el importId o null si Supabase
+ * no está disponible.
+ *
+ * Orden de creación necesario para respetar FK:
+ *   1. import_batch (status = 'aplicada')
+ *   2. employee
+ *   3. advance_offer con source_batch_id = batch.id
  */
 async function createImportFixture(): Promise<{
   importId: string;
@@ -33,10 +39,33 @@ async function createImportFixture(): Promise<{
   if (!supabase) return null;
 
   const unique = randomUUID().replace(/-/g, "");
-  const rfc = `SEND${unique.slice(0, 6).toUpperCase()}010101A01`;
+  // RFC formato estándar: 4 letras + 6 dígitos fecha + 3 alfanuméricos = 13 chars
+  const letters = unique.replace(/[^a-f]/g, "").padEnd(4, "a").slice(0, 4).toUpperCase();
+  const suffix = unique.replace(/[^a-z0-9]/gi, "").padEnd(3, "0").slice(-3).toUpperCase();
+  const rfc = `${letters}010101${suffix}`;
   const telefono = `52${unique.replace(/\D/g, "").padEnd(10, "1").slice(0, 10)}`;
 
-  // Crear empleado elegible
+  // 1. Crear import_batch en estado 'aplicada' (valor exacto del enum import_status)
+  const { data: batch, error: batchErr } = await supabase
+    .from("import_batches")
+    .insert({
+      filename: "e2e-send-flow-test.csv",
+      total_rows: 1,
+      valid_rows: 1,
+      invalid_rows: 0,
+      duplicate_rows: 0,
+      status: "aplicada",
+      applied_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (batchErr || !batch) {
+    console.error("createImportFixture: batch insert error", batchErr?.message);
+    return null;
+  }
+
+  // 2. Crear empleado elegible
   const { data: emp, error: empErr } = await supabase
     .from("employees")
     .insert({
@@ -52,9 +81,28 @@ async function createImportFixture(): Promise<{
     .select("id")
     .single();
 
-  if (empErr || !emp) return null;
+  if (empErr || !emp) {
+    console.error("createImportFixture: employee insert error", empErr?.message);
+    return null;
+  }
 
-  // Crear oferta elegible
+  // 3. Crear cuenta bancaria activa (requerida por getEmployeesEligibility)
+  //    CLABE debe ser exactamente 18 dígitos numéricos
+  const clabeDigits = unique.replace(/\D/g, "").padEnd(18, "0").slice(0, 18);
+  const { error: bankErr } = await supabase.from("employee_bank_accounts").insert({
+    employee_id: emp.id,
+    clabe: clabeDigits,
+    banco: "E2E Banco",
+    is_active: true,
+  });
+
+  if (bankErr) {
+    console.error("createImportFixture: bank account insert error", bankErr?.message);
+    return null;
+  }
+
+  // 4. Crear oferta elegible vinculada al batch (source_batch_id es el vínculo
+  //    que usa getEmployeesFromImport para asociar employees con una importación)
   const { error: offerErr } = await supabase.from("advance_offers").insert({
     employee_id: emp.id,
     monto_prestamo_autorizado: 3000,
@@ -64,36 +112,13 @@ async function createImportFixture(): Promise<{
     is_current: true,
     status: "vigente",
     source_hash: `e2e-send-${randomUUID()}`,
+    source_batch_id: batch.id,
   });
 
-  if (offerErr) return null;
-
-  // Crear import_batch aplicado
-  const { data: batch, error: batchErr } = await supabase
-    .from("import_batches")
-    .insert({
-      filename: "e2e-send-flow-test.csv",
-      total_rows: 1,
-      valid_rows: 1,
-      invalid_rows: 0,
-      duplicate_rows: 0,
-      status: "applied",
-      applied_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
-
-  if (batchErr || !batch) return null;
-
-  // Vincular empleado al batch via raw_import_rows
-  await supabase.from("raw_import_rows").insert({
-    batch_id: batch.id,
-    row_number: 1,
-    raw_data: { rfc, telefono },
-    parsed_data: { rfc, telefono_normalizado: telefono, empleador: "E2E Empleador" },
-    validation_status: "valid",
-    employee_id: emp.id,
-  });
+  if (offerErr) {
+    console.error("createImportFixture: offer insert error", offerErr?.message);
+    return null;
+  }
 
   return { importId: batch.id, employeeId: emp.id };
 }
@@ -345,7 +370,8 @@ test("clic en Enviar abre el modal de confirmación con datos correctos", async 
     page.getByRole("heading", { name: /Empleados/i }),
   ).toBeVisible({ timeout: 10_000 });
 
-  await page.getByRole("button", { name: /Enviar \d+ mensaje/i }).click();
+  // Clic en el botón de la barra sticky (el primero, no el del modal)
+  await page.getByRole("button", { name: /Enviar \d+ mensaje/i }).first().click();
 
   // El modal debe aparecer
   const dialog = page.getByRole("dialog");
@@ -353,12 +379,12 @@ test("clic en Enviar abre el modal de confirmación con datos correctos", async 
   await expect(dialog).toContainText(/Confirmar envío masivo/i);
   await expect(dialog).toContainText(/adelanto_contrato/i);
 
-  // Debe tener el botón de confirmar y cancelar
+  // Debe tener el botón de confirmar (dentro del dialog) y cancelar
   await expect(
-    page.getByRole("button", { name: /Cancelar/i }),
+    dialog.getByRole("button", { name: /Cancelar/i }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /Enviar \d+ mensaje/i }),
+    dialog.getByRole("button", { name: /Enviar \d+ mensaje/i }),
   ).toBeVisible();
 });
 
