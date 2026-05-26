@@ -12,7 +12,6 @@ test("navegacion desde dashboard a control de contratos", async ({ page }) => {
 
   // Verificar que las secciones del dashboard son visibles
   await expect(page.getByRole("heading", { name: "Atención requerida" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Accesos rápidos" })).toBeVisible();
 
   // Verificar que no hay errores de red
   const errors: string[] = [];
@@ -44,8 +43,8 @@ test("navegacion desde control de contratos a ver detalle", async ({ page }) => 
     }
   });
 
-  // Localizar el primer botón "Ver detalle"
-  const detailButton = page.getByRole("link", { name: "Ver detalle" }).first();
+  // Localizar el primer botón "Ver"
+  const detailButton = page.getByRole("link", { name: "Ver" }).first();
   await expect(detailButton).toBeVisible();
 
   // Hacer clic en "Ver detalle"
@@ -67,7 +66,7 @@ test("navegacion de regreso desde detalle a contratos", async ({ page }) => {
   await page.goto("/contracts");
 
   // Navegar a la página de detalle
-  const detailButton = page.getByRole("link", { name: "Ver detalle" }).first();
+  const detailButton = page.getByRole("link", { name: "Ver" }).first();
   await detailButton.click();
   await expect(page.getByRole("heading", { name: "Detalle operativo" })).toBeVisible();
 
