@@ -12,11 +12,10 @@ test("dashboard WhatsApp carga con métricas y acciones", async ({ page }) => {
   await page.goto("/whatsapp");
 
   // Header de la página
-  await expect(page.getByRole("heading", { name: /WhatsApp/i })).toBeVisible();
-  await expect(page.getByText(/Dashboard|Métricas|envíos/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /WhatsApp · Dashboard/i })).toBeVisible();
 
   // Botón de nuevo envío
-  const newSendLink = page.getByRole("link", { name: /Nuevo envío/i });
+  const newSendLink = page.getByRole("link", { name: /Nuevo envío/i }).first();
   await expect(newSendLink).toBeVisible();
   await expect(newSendLink).toHaveAttribute("href", "/whatsapp/send");
 });
@@ -36,7 +35,7 @@ test("página de nuevo envío muestra el formulario BulkSendForm", async ({ page
   await expect(page.getByRole("heading", { name: /Envío Masivo WhatsApp/i })).toBeVisible();
 
   // El formulario debe tener los controles de modo
-  await expect(page.getByText(/Por importación|Por selección|import|manual/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Por Importación/i })).toBeVisible();
 });
 
 test("formulario de envío tiene selector de modo", async ({ page }) => {
@@ -54,17 +53,15 @@ test("historial de envíos WhatsApp carga con filtros", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: /Historial de envíos/i })).toBeVisible();
 
-  // Filtros de estado
-  const statusSelect = page.getByLabel(/Estado/i);
-  await expect(statusSelect).toBeVisible();
+  // Filtros de estado — son botones, no un <select>
+  await expect(page.getByRole("button", { name: /Completados/i })).toBeVisible();
 });
 
 test("historial tiene filtros de modo y fechas", async ({ page }) => {
   await page.goto("/whatsapp/history");
 
-  // Filtros de modo
-  const modeFilter = page.getByLabel(/Modo|Tipo/i);
-  await expect(modeFilter).toBeVisible();
+  // Filtros de modo — son botones
+  await expect(page.getByRole("button", { name: /Importación/i }).first()).toBeVisible();
 
   // Inputs de fecha (dateFrom, dateTo)
   const dateInputs = page.locator("input[type='date']");
@@ -74,9 +71,8 @@ test("historial tiene filtros de modo y fechas", async ({ page }) => {
 test("historial tiene botón de limpiar filtros", async ({ page }) => {
   await page.goto("/whatsapp/history");
 
-  // Aplicar un filtro para que aparezca el botón "Limpiar"
-  const statusSelect = page.getByLabel(/Estado/i);
-  await statusSelect.selectOption("completed");
+  // Aplicar un filtro haciendo clic en el botón de estado
+  await page.getByRole("button", { name: /Completados/i }).click();
 
   const clearButton = page.getByRole("button", { name: /Limpiar/i });
   await expect(clearButton).toBeVisible();
@@ -112,8 +108,8 @@ test("página de configuración WhatsApp carga", async ({ page }) => {
   const errorBoundary = page.getByText(/algo salió mal|error inesperado/i);
   await expect(errorBoundary).not.toBeVisible();
 
-  // Debe mostrar algo relacionado con configuración de WhatsApp
-  await expect(page.getByText(/WhatsApp|Access Token|Phone Number/i)).toBeVisible();
+  // Debe mostrar el heading de configuración
+  await expect(page.getByRole("heading", { name: /Configuración de WhatsApp/i })).toBeVisible();
 });
 
 test("formulario de envío muestra alerta cuando WhatsApp no está configurado", async ({
@@ -141,9 +137,13 @@ test("página de detalle de envío muestra 404 para id inexistente", async ({ pa
 });
 
 test("sidebar contiene enlace a WhatsApp en la navegación", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/whatsapp");
 
-  // La barra lateral debe tener entrada de WhatsApp
-  const waNavLink = page.getByRole("link", { name: /WhatsApp/i });
-  await expect(waNavLink.first()).toBeVisible();
+  // La barra lateral debe tener el grupo WhatsApp expandido con sus sub-items
+  // El grupo es un <button>, los sub-items son <a> links
+  const waGroupButton = page.getByRole("button", { name: /WhatsApp/i });
+  await expect(waGroupButton.first()).toBeVisible();
+
+  // Al estar en /whatsapp el grupo debe estar abierto con sus links visibles
+  await expect(page.getByRole("link", { name: "Historial de envíos", exact: true })).toBeVisible();
 });

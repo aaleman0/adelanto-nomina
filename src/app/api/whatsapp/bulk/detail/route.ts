@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       .from("whatsapp_bulk_sends")
       .select("*")
       .eq("id", id)
-      .single();
+      .maybeSingle();
 
     if (bulkError) throw bulkError;
     if (!bulkSend) {

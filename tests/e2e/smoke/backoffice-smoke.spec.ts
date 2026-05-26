@@ -11,7 +11,7 @@ test("backoffice carga control de contratos", async ({ page }) => {
   await page.goto("/contracts");
 
   await expect(
-    page.getByRole("heading", { name: "Control de contratos" }),
+    page.getByRole("heading", { name: "Control de contratos" }).first(),
   ).toBeVisible();
 
   await expect(

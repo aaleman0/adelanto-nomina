@@ -37,7 +37,20 @@ export async function GET(request: Request) {
 
     const { data, count, error } = await query;
 
-    if (error) throw error;
+    // PGRST103: requested range not satisfiable (página fuera de rango) — devolver página vacía
+    if (error) {
+      if ((error as { code?: string }).code === "PGRST103") {
+        return NextResponse.json({
+          ok: true,
+          data: [],
+          total: count ?? 0,
+          page,
+          pageSize,
+          totalPages: Math.ceil((count ?? 0) / pageSize),
+        });
+      }
+      throw error;
+    }
 
     return NextResponse.json({
       ok: true,

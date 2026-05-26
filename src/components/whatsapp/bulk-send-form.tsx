@@ -11,8 +11,8 @@ type TabMode = "import" | "manual";
 
 type RecentImport = {
   id: string;
-  original_filename: string | null;
-  row_count: number | null;
+  filename: string | null;
+  total_rows: number | null;
   applied_at: string | null;
 };
 
@@ -225,7 +225,7 @@ export function BulkSendForm() {
                 <option value="">Selecciona una importación...</option>
                 {imports.map((imp) => (
                   <option key={imp.id} value={imp.id}>
-                    {imp.original_filename ?? imp.id} · {imp.row_count ?? "?"} filas · {fmtDate(imp.applied_at)}
+                    {imp.filename ?? imp.id} · {imp.total_rows ?? "?"} filas · {fmtDate(imp.applied_at)}
                   </option>
                 ))}
               </select>

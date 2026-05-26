@@ -14,12 +14,12 @@ test("busqueda por RFC y filtro de estado reducen el control de contratos", asyn
     "pendiente_envio",
   );
 
-  await page.goto(`/?q=${firmado.rfc}`);
+  await page.goto(`/contracts?q=${firmado.rfc}`);
   await expect(page.getByText(firmado.rfc).first()).toBeVisible();
   await expect(page.getByText(pendiente.rfc)).toHaveCount(0);
-  await expect(page.getByText("Mostrando")).toContainText("de 1 resultados");
+  await expect(page.getByText("Mostrando").first()).toContainText("de 1 resultados");
 
-  await page.goto("/?status=firmado");
-  await expect(page.getByRole("heading", { name: "Control de contratos" })).toBeVisible();
+  await page.goto(`/contracts?status=firmado`);
+  await expect(page.getByRole("heading", { name: "Control de contratos" }).first()).toBeVisible();
   await expect(page.getByText("firmado").first()).toBeVisible();
 });

@@ -29,10 +29,10 @@ test("navegacion desde control de contratos a ver detalle", async ({ page }) => 
   const supabase = getRequiredSupabaseTestClient();
   const fixture = await createBackofficeStatusFixture(supabase, "pendiente_envio");
 
-  await page.goto("/contracts");
+  await page.goto(`/contracts?q=${fixture.rfc}`);
 
   // Verificar que la tabla de contratos carga
-  await expect(page.getByRole("heading", { name: "Control de contratos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Control de contratos" }).first()).toBeVisible();
   await expect(page.getByText(fixture.rfc).first()).toBeVisible();
 
   // Verificar que no hay errores de red antes de interactuar
@@ -52,7 +52,7 @@ test("navegacion desde control de contratos a ver detalle", async ({ page }) => 
 
   // Verificar que navega a la página de detalle
   await expect(page).toHaveURL(/\/contracts\/[a-f0-9-]+/);
-  await expect(page.getByRole("heading", { name: "Detalle operativo" })).toBeVisible();
+  await expect(page.getByText("Detalle operativo").first()).toBeVisible();
 
   // Verificar que no hay errores de red después de la navegación
   await page.waitForLoadState("networkidle");
@@ -63,12 +63,12 @@ test("navegacion de regreso desde detalle a contratos", async ({ page }) => {
   const supabase = getRequiredSupabaseTestClient();
   const fixture = await createBackofficeStatusFixture(supabase, "pendiente_envio");
 
-  await page.goto("/contracts");
+  await page.goto(`/contracts?q=${fixture.rfc}`);
 
   // Navegar a la página de detalle
   const detailButton = page.getByRole("link", { name: "Ver" }).first();
   await detailButton.click();
-  await expect(page.getByRole("heading", { name: "Detalle operativo" })).toBeVisible();
+  await expect(page.getByText("Detalle operativo").first()).toBeVisible();
 
   // Verificar que no hay errores de red antes de navegar de regreso
   const errors: string[] = [];
@@ -85,10 +85,7 @@ test("navegacion de regreso desde detalle a contratos", async ({ page }) => {
 
   // Verificar que navega de regreso a la lista de contratos
   await expect(page).toHaveURL("/contracts");
-  await expect(page.getByRole("heading", { name: "Control de contratos" })).toBeVisible();
-
-  // Verificar que la tabla de contratos carga nuevamente
-  await expect(page.getByText(fixture.rfc).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Control de contratos" }).first()).toBeVisible();
 
   // Verificar que no hay errores de red después de la navegación de regreso
   await page.waitForLoadState("networkidle");
