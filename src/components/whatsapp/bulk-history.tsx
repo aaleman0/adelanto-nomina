@@ -259,37 +259,39 @@ function BulkHistoryInner() {
           ) : (
             <div className="divide-y divide-border">
               {/* Header row */}
-              <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-4 px-6 py-2.5">
+              <div className="grid grid-cols-[minmax(220px,1fr)_110px_86px_86px_86px_116px] items-center gap-4 px-6 py-2.5">
                 <span className="text-xs font-bold uppercase tracking-wide text-text-muted">Fecha</span>
-                <span className="text-xs font-bold uppercase tracking-wide text-text-muted">Modo</span>
-                <span className="text-xs font-bold uppercase tracking-wide text-text-muted text-right">Elegibles</span>
-                <span className="text-xs font-bold uppercase tracking-wide text-text-muted text-right">Enviados</span>
-                <span className="text-xs font-bold uppercase tracking-wide text-text-muted text-right">Fallidos</span>
-                <span className="text-xs font-bold uppercase tracking-wide text-text-muted">Estado</span>
+                <span className="text-center text-xs font-bold uppercase tracking-wide text-text-muted">Modo</span>
+                <span className="text-center text-xs font-bold uppercase tracking-wide text-text-muted">Elegibles</span>
+                <span className="text-center text-xs font-bold uppercase tracking-wide text-text-muted">Enviados</span>
+                <span className="text-center text-xs font-bold uppercase tracking-wide text-text-muted">Fallidos</span>
+                <span className="text-center text-xs font-bold uppercase tracking-wide text-text-muted">Estado</span>
               </div>
               {data.map((row) => (
                 <Link
                   key={row.id}
                   href={`/whatsapp/bulk/${row.id}`}
-                  className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-4 px-6 py-4 transition-colors hover:bg-surface-muted/50"
+                  className="grid grid-cols-[minmax(220px,1fr)_110px_86px_86px_86px_116px] items-center gap-4 px-6 py-4 transition-colors hover:bg-surface-muted/50"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-text-primary">{fmtDate(row.created_at)}</p>
                     <p className="truncate font-mono text-xs text-text-muted">{row.id.slice(0, 8)}…</p>
                   </div>
-                  <span className="rounded-md bg-surface-muted px-2 py-0.5 text-xs font-semibold text-text-muted capitalize">
+                  <span className="justify-self-center rounded-md bg-surface-muted px-2 py-0.5 text-xs font-semibold text-text-muted capitalize">
                     {row.mode === "import" ? "Importación" : "Manual"}
                   </span>
-                  <span className="text-right text-sm font-medium text-text-primary">
+                  <span className="text-center text-sm font-medium text-text-primary">
                     {row.eligible_count ?? "-"}
                   </span>
-                  <span className="text-right text-sm font-semibold text-emerald-600">
+                  <span className="text-center text-sm font-semibold text-emerald-600">
                     {row.sent_count ?? "-"}
                   </span>
-                  <span className={`text-right text-sm font-semibold ${(row.failed_count ?? 0) > 0 ? "text-red-600" : "text-text-muted"}`}>
+                  <span className={`text-center text-sm font-semibold ${(row.failed_count ?? 0) > 0 ? "text-red-600" : "text-text-muted"}`}>
                     {row.failed_count ?? "-"}
                   </span>
-                  <StatusBadge status={row.status} />
+                  <div className="justify-self-center">
+                    <StatusBadge status={row.status} />
+                  </div>
                 </Link>
               ))}
             </div>
