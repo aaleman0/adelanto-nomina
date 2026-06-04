@@ -1,7 +1,9 @@
 import Link from "next/link";
+import Form from "next/form";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { SearchInput } from "@/components/contracts/search-input";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import type {
   ContractControlFilters,
   ContractOperationalStatus,
@@ -32,17 +34,29 @@ export function ContractControlFilters({
   total,
   visible,
   limit,
+  page,
+  totalPages,
 }: {
   filters: ContractControlFilters;
   empleadores: string[];
   total: number;
   visible: number;
   limit: number;
+  page: number;
+  totalPages: number;
 }) {
+  // Params activos sin `page` — se pasan a PaginationControls para que cada
+  // link de página preserve los filtros actuales.
+  const activeParams: Record<string, string> = {};
+  if (filters.q) activeParams.q = filters.q;
+  if (filters.status && filters.status !== "all") activeParams.status = filters.status;
+  if (filters.empleador) activeParams.empleador = filters.empleador;
+
   return (
     <Card>
       <CardBody className="flex flex-col gap-4">
-        <form className="grid gap-3 lg:grid-cols-[1fr_200px_200px_auto_auto]">
+        {/* Usar next/form para client-side navigation con prefetch automático */}
+        <Form action="/contracts" className="grid gap-3 lg:grid-cols-[1fr_200px_200px_auto_auto]">
           <label className="flex flex-col gap-1.5 text-[12px] font-bold text-text-muted uppercase tracking-[0.1em]">
             Buscar
             <SearchInput defaultValue={filters.q} />
@@ -99,17 +113,17 @@ export function ContractControlFilters({
               Limpiar
             </Link>
           </div>
-        </form>
+        </Form>
 
-        <div className="flex flex-col gap-1 border-t border-border/50 pt-3 text-[12px] text-text-muted md:flex-row md:items-center md:justify-between">
-          <p>
-            Mostrando{" "}
-            <span className="font-bold text-text-primary">{visible}</span>{" "}
-            de <span className="font-bold text-text-primary">{total}</span>{" "}
-            resultados.
-          </p>
-          <p className="text-text-disabled">Límite operativo: {limit} registros por vista.</p>
-        </div>
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          visible={visible}
+          limit={limit}
+          baseHref="/contracts"
+          currentParams={activeParams}
+        />
       </CardBody>
     </Card>
   );

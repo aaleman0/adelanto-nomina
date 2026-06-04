@@ -7,7 +7,6 @@ import {
   DataTableHead,
   DataTableHeaderCell,
 } from "@/components/ui/data-table";
-import { PaginationControls } from "@/components/ui/pagination-controls";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { StatusTone } from "@/components/ui/status-badge";
 import type { ContractControlRow } from "@/lib/backoffice/contract-control";
@@ -17,15 +16,7 @@ const dateFormatter = new Intl.DateTimeFormat("es-MX", {
   timeStyle: "short",
 });
 
-export function ContractControlTable({
-  rows,
-  total = rows.length,
-  limit = rows.length,
-}: {
-  rows: ContractControlRow[];
-  total?: number;
-  limit?: number;
-}) {
+export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
@@ -153,7 +144,6 @@ export function ContractControlTable({
         )}
       </div>
 
-      <PaginationControls baseHref="/contracts" limit={limit} total={total} visible={rows.length} />
     </Card>
   );
 }

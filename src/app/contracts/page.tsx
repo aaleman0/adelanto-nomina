@@ -1,7 +1,13 @@
 import { ContractControlFilters } from "@/components/contracts/contract-control-filters";
 import { ContractControlTable } from "@/components/contracts/contract-control-table";
 import { AppShell, PageHeader } from "@/components/layout/app-shell";
-import { EMPTY_CONTRACT_CONTROL_METRICS, getContractControlData, parseContractOperationalStatus, type ContractControlFilters as ContractFilters } from "@/lib/backoffice/contract-control";
+import {
+  EMPTY_CONTRACT_CONTROL_METRICS,
+  getContractControlData,
+  parseContractOperationalStatus,
+  parsePageParam,
+  type ContractControlFilters as ContractFilters,
+} from "@/lib/backoffice/contract-control";
 import { ContractControlDashboard } from "@/components/contracts/contract-control-dashboard";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +31,16 @@ export default async function ContractsPage({ searchParams }: ContractsPageProps
         </section>
       ) : null}
       <ContractControlDashboard metrics={result.metrics} />
-      <ContractControlFilters empleadores={result.empleadores} filters={filters} limit={result.limit} total={result.total} visible={result.rows.length} />
-      <ContractControlTable rows={result.rows} total={result.total} limit={result.limit} />
+      <ContractControlFilters
+        empleadores={result.empleadores}
+        filters={filters}
+        limit={result.limit}
+        total={result.total}
+        visible={result.rows.length}
+        page={result.page}
+        totalPages={result.totalPages}
+      />
+      <ContractControlTable rows={result.rows} />
     </AppShell>
   );
 }
@@ -35,7 +49,13 @@ function parseFilters(searchParams: Record<string, string | string[] | undefined
   const q = getSingleSearchParam(searchParams.q)?.trim();
   const empleador = getSingleSearchParam(searchParams.empleador)?.trim();
   const rawStatus = getSingleSearchParam(searchParams.status);
-  return { q: q || undefined, empleador: empleador || undefined, status: parseContractOperationalStatus(rawStatus) };
+  const rawPage = getSingleSearchParam(searchParams.page);
+  return {
+    q: q || undefined,
+    empleador: empleador || undefined,
+    status: parseContractOperationalStatus(rawStatus),
+    page: parsePageParam(rawPage),
+  };
 }
 
 function getSingleSearchParam(value: string | string[] | undefined) {
@@ -52,6 +72,8 @@ async function getContractControlResult(filters: ContractFilters) {
       empleadores: [],
       total: 0,
       limit: 50,
+      page: 1,
+      totalPages: 1,
       setupError: error instanceof Error ? error.message : "No se pudo leer el control de contratos.",
     };
   }

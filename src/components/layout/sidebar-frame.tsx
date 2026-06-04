@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export type NavItem = { href: string; label: string; icon: string };
 export type NavGroup = { label: string; icon: string; prefix: string; items: NavItem[] };
@@ -190,17 +190,19 @@ export function SidebarFrame({
   children: React.ReactNode;
   navigation: NavEntry[];
 }) {
-  const [collapsed, setCollapsed] = useState(() =>
-    typeof window === "undefined"
-      ? false
-      : localStorage.getItem("backoffice-sidebar") === "compact",
-  );
+  const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    setCollapsed(localStorage.getItem("backoffice-sidebar") === "compact");
+  }, []);
 
   function toggleSidebar() {
     setCollapsed((current) => {
       const next = !current;
-      localStorage.setItem("backoffice-sidebar", next ? "compact" : "open");
+      if (typeof window !== "undefined") {
+        localStorage.setItem("backoffice-sidebar", next ? "compact" : "open");
+      }
       return next;
     });
   }

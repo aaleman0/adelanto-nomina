@@ -72,6 +72,7 @@ export type ContractControlFilters = {
   q?: string;
   status?: ContractOperationalStatus | "all";
   empleador?: string;
+  page?: number;
 };
 
 export type ContractControlData = {
@@ -80,6 +81,8 @@ export type ContractControlData = {
   empleadores: string[];
   total: number;
   limit: number;
+  page: number;
+  totalPages: number;
 };
 
 export const EMPTY_CONTRACT_CONTROL_METRICS: ContractControlMetric[] = [
@@ -139,6 +142,10 @@ export async function getContractControlData(
 ): Promise<ContractControlData> {
   const supabase = getSupabaseAdmin();
   const limit = 50;
+  // Página mínima 1, sin máximo aquí (se acota después con totalPages).
+  const page = Math.max(1, filters.page ?? 1);
+  const offset = (page - 1) * limit;
+
   const term = filters.q ? escapePostgrestSearch(filters.q.trim()) : null;
   const orClause = term
     ? [
@@ -149,16 +156,18 @@ export async function getContractControlData(
       ].join(",")
     : null;
 
-  // Query 1: rows paginados con filtros aplicados
+  // Query 1: filas de la página actual con filtros aplicados.
   let rowsQuery = supabase
     .from("backoffice_contract_control_v1")
     .select(CONTRACT_CONTROL_SELECT);
   if (filters.status && filters.status !== "all") rowsQuery = rowsQuery.eq("operational_status", filters.status);
   if (filters.empleador) rowsQuery = rowsQuery.eq("empleador", filters.empleador);
   if (orClause) rowsQuery = rowsQuery.or(orClause);
-  const rowsQueryFinal = rowsQuery.order("last_movement_at", { ascending: false }).limit(limit);
+  const rowsQueryFinal = rowsQuery
+    .order("last_movement_at", { ascending: false })
+    .range(offset, offset + limit - 1);
 
-  // Query 2: COUNT real con los mismos filtros (para paginación correcta)
+  // Query 2: COUNT real con los mismos filtros (para calcular totalPages).
   let countQuery = supabase
     .from("backoffice_contract_control_v1")
     .select("employee_id", { count: "exact", head: true });
@@ -166,7 +175,7 @@ export async function getContractControlData(
   if (filters.empleador) countQuery = countQuery.eq("empleador", filters.empleador);
   if (orClause) countQuery = countQuery.or(orClause);
 
-  // Query 3: métricas globales sin filtros (reflejan el universo completo)
+  // Query 3: métricas globales sin filtros (reflejan el universo completo).
   const metricsQuery = supabase
     .from("backoffice_contract_control_v1")
     .select("operational_status");
@@ -184,6 +193,7 @@ export async function getContractControlData(
 
   const rows = (rowsResult.data ?? []) as unknown as ContractControlRow[];
   const total = countResult.count ?? rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
   const allStatuses = (metricsResult.data ?? []) as Array<{ operational_status: ContractOperationalStatus }>;
 
   return {
@@ -192,7 +202,18 @@ export async function getContractControlData(
     empleadores,
     total,
     limit,
+    page,
+    totalPages,
   };
+}
+
+/**
+ * Parsea el parámetro de página de la URL.
+ * Garantiza que el resultado sea un entero >= 1.
+ */
+export function parsePageParam(value: string | undefined): number {
+  const n = parseInt(value ?? "1", 10);
+  return Number.isFinite(n) && n >= 1 ? n : 1;
 }
 
 export function parseContractOperationalStatus(value: string | undefined) {
