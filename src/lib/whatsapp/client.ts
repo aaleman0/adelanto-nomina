@@ -84,6 +84,46 @@ export class WhatsAppClient {
     }
   }
 
+  async sendTextMessage(to: string, text: string): Promise<SendTemplateResult> {
+    if (!this.accessToken || !this.phoneNumberId) {
+      return { ok: false, error: "WhatsApp no configurado (token o phone_number_id faltante)." };
+    }
+
+    const body = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "text",
+      text: {
+        preview_url: false,
+        body: text,
+      },
+    };
+
+    try {
+      const res = await fetch(`${BASE_URL}/${this.phoneNumberId}/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        const errMsg = json?.error?.message ?? `HTTP ${res.status}`;
+        return { ok: false, error: errMsg };
+      }
+
+      const messageId = json?.messages?.[0]?.id as string | undefined;
+      return { ok: true, messageId };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Error de red." };
+    }
+  }
+
   async testConnection(): Promise<TestConnectionResult> {
     if (!this.accessToken || !this.phoneNumberId) {
       return { ok: false, error: "Credenciales no configuradas." };

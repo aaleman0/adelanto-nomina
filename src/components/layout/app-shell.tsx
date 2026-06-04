@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { SidebarFrame } from "./sidebar-frame";
 import type { NavEntry } from "./sidebar-frame";
 import { NotificationsProvider, NotificationBell } from "@/components/ui/notifications";
+import { getUser } from "@/lib/supabase/session";
 
 const navigation: NavEntry[] = [
   { href: "/", label: "Dashboard", icon: "D" },
@@ -23,14 +24,21 @@ const navigation: NavEntry[] = [
   { href: "/settings", label: "Configuración", icon: "S" },
 ];
 
-export function AppShell({ children }: { children: ReactNode }) {
+export async function AppShell({ children }: { children: ReactNode }) {
+  // getUser() puede fallar si SUPABASE_ANON_KEY no está configurada aún.
+  const user = await getUser().catch(() => null);
+  const displayName = user?.user_metadata?.full_name as string | undefined;
+  const avatarUrl = user?.user_metadata?.avatar_url as string | undefined;
+  const email = user?.email ?? "";
+
   return (
     <NotificationsProvider>
       <SidebarFrame navigation={navigation}>
         <main className="min-h-screen bg-background text-text-primary">
-          {/* Header with notification bell */}
-          <div className="mx-auto flex w-full max-w-7xl items-center justify-end gap-2 px-4 py-3 sm:px-6 lg:px-8">
+          {/* Topbar: notificaciones + usuario */}
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-end gap-3 px-4 py-3 sm:px-6 lg:px-8">
             <NotificationBell />
+            <UserMenu displayName={displayName} email={email} avatarUrl={avatarUrl} />
           </div>
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-6 sm:px-6 lg:px-8">
             {children}
@@ -38,6 +46,61 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </SidebarFrame>
     </NotificationsProvider>
+  );
+}
+
+function UserMenu({
+  displayName,
+  email,
+  avatarUrl,
+}: {
+  displayName?: string;
+  email: string;
+  avatarUrl?: string;
+}) {
+  const initials = displayName
+    ? displayName.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase()
+    : email.slice(0, 2).toUpperCase();
+
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-sm shadow-sm">
+      {/* Avatar */}
+      {avatarUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={avatarUrl}
+          alt={displayName ?? email}
+          className="h-7 w-7 rounded-full object-cover ring-1 ring-[var(--border)]"
+          referrerPolicy="no-referrer"
+        />
+      ) : (
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-indigo-600 to-violet-600 text-[11px] font-bold text-white">
+          {initials}
+        </span>
+      )}
+
+      {/* Nombre / email */}
+      <span className="hidden font-medium text-[var(--text-primary)] sm:block max-w-[140px] truncate">
+        {displayName ?? email}
+      </span>
+
+      {/* Separador */}
+      <span className="hidden h-4 w-px bg-[var(--border)] sm:block" />
+
+      {/* Botón salir */}
+      <form action="/auth/logout" method="POST">
+        <button
+          type="submit"
+          className="flex items-center gap-1 text-xs text-[var(--text-muted)] transition hover:text-[var(--danger)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] rounded"
+          title="Cerrar sesión"
+        >
+          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          <span className="hidden sm:inline">Salir</span>
+        </button>
+      </form>
+    </div>
   );
 }
 

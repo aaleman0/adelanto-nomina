@@ -16,7 +16,8 @@
     "test:e2e:flows": "playwright test tests/e2e/flows"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.105.1",
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.107.0",
     "csv-parse": "^6.2.1",
     "next": "16.2.4",
     "react": "19.2.4",

@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getWhatsAppClient } from "@/lib/whatsapp/client";
 
 export function verifyWebhook(
   mode: string,
@@ -66,6 +67,29 @@ export async function handleWebhook(payload: {
           correlation_id: msg.id,
           entity_type: "whatsapp_messages",
         });
+
+        if (process.env.WHATSAPP_DEBUG_AUTO_REPLY === "true") {
+          const reply = await getWhatsAppClient().sendTextMessage(
+            msg.from,
+            `Debug conectado ✅ Recibimos tu mensaje: "${msg.text?.body ?? msg.type}"`,
+          );
+
+          if (reply.ok) {
+            await supabase.from("integration_logs").insert({
+              provider: "whatsapp",
+              direction: "outbound",
+              endpoint: "/api/webhooks/whatsapp/debug-auto-reply",
+              method: "POST",
+              request_payload: { to: msg.from, inboundMessageId: msg.id },
+              response_payload: { messageId: reply.messageId },
+              status_code: 200,
+              status: "success",
+              success: true,
+              correlation_id: reply.messageId,
+              entity_type: "whatsapp_messages",
+            });
+          }
+        }
       }
 
       // Delivery / read statuses
