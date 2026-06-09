@@ -49,7 +49,7 @@ export async function validateBulkEligibility(params: { mode: "import" | "manual
 export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSendResult> {
   const supabase = getSupabaseAdmin();
   const client = getWhatsAppClient();
-  const templateName = params.templateName ?? "adelanto_contrato";
+  const templateName = params.templateName ?? "adelanto_nomina";
 
   // 1. Obtener lista de employees
   let employeeIds: string[] = params.employeeIds ?? [];
