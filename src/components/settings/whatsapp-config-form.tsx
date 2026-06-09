@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -199,6 +200,34 @@ export function WhatsAppConfigForm() {
               </Button>
             </div>
           </form>
+        </CardBody>
+      </Card>
+
+      {/* Herramientas */}
+      <Card>
+        <CardHeader>
+          <h3 className="text-h2 font-semibold text-text-primary">Herramientas</h3>
+        </CardHeader>
+        <CardBody>
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <Link
+              href="/settings/whatsapp/phone-audit"
+              className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 transition hover:bg-surface-muted"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                </svg>
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-text-primary">Auditoría de teléfonos</p>
+                <p className="text-xs text-text-muted">Detecta y corrige formatos inválidos para WhatsApp.</p>
+              </div>
+              <svg className="ml-auto h-4 w-4 shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              </svg>
+            </Link>
+          </div>
         </CardBody>
       </Card>
 
