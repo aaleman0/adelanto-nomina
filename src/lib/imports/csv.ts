@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { parse } from "csv-parse/sync";
+import { normalizePhoneFromCsv } from "@/lib/whatsapp/phone-utils";
 
 export const REQUIRED_COLUMNS = [
   "Nombre",
@@ -200,7 +201,7 @@ function normalizeRecord(record: ParsedCsvRecord) {
     rfc,
     cp_csf: onlyDigits(record["CP según CSF"]),
     telefono,
-    telefono_normalizado: normalizePhone(telefono),
+    telefono_normalizado: normalizePhoneFromCsv(telefono),
     email: record.Email?.trim().toLowerCase() || null,
     estatus_p_esta_q: record["Estatus P/ esta Q"]?.trim() ?? "",
     estatus_conversion: estatusConversion,
@@ -218,23 +219,6 @@ function onlyDigits(value: string | undefined) {
   return digits || null;
 }
 
-function normalizePhone(value: string | undefined) {
-  const digits = onlyDigits(value);
-
-  if (!digits) {
-    return null;
-  }
-
-  if (digits.length === 10) {
-    return `52${digits}`;
-  }
-
-  if (digits.length === 12 && digits.startsWith("52")) {
-    return digits;
-  }
-
-  return digits.length >= 10 && digits.length <= 15 ? digits : null;
-}
 
 function normalizeMoney(value: string | undefined) {
   if (!value?.trim()) {
