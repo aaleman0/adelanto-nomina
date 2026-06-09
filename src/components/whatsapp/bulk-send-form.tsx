@@ -52,7 +52,7 @@ export function BulkSendForm() {
   const [sendState, setSendState] = useState<SendState>("idle");
   const [result, setResult] = useState<SendResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [templateName, setTemplateName] = useState("adelanto_contrato");
+  const [templateName, setTemplateName] = useState("adelanto_nomina");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const toastify = useToast();
   const { addNotification } = useNotifications();
