@@ -105,7 +105,15 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
       if (!to) {
         progress.failed++;
         progress.errors.push({ employeeId: emp.employee_id, rfc: emp.rfc, error: "Sin teléfono normalizado" });
-        await recordMessage({ supabase, bulkSendId, emp, status: "failed", error: "Sin teléfono normalizado" });
+        try {
+          await recordMessage({ supabase, bulkSendId, emp, status: "failed", error: "Sin teléfono normalizado" });
+        } catch (recordError) {
+          progress.errors.push({ 
+            employeeId: emp.employee_id, 
+            rfc: emp.rfc, 
+            error: `Error al registrar mensaje: ${recordError instanceof Error ? recordError.message : 'Error desconocido'}` 
+          });
+        }
         continue;
       }
 
@@ -120,7 +128,23 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
 
       if (result.ok) {
         progress.sent++;
-        await recordMessage({ supabase, bulkSendId, emp, status: "sent", waMessageId: result.messageId });
+        try {
+          await recordMessage({ supabase, bulkSendId, emp, status: "sent", waMessageId: result.messageId });
+        } catch (recordError) {
+          progress.sent--; // Revertir el contador si falló el registro
+          progress.failed++;
+          progress.errors.push({ 
+            employeeId: emp.employee_id, 
+            rfc: emp.rfc, 
+            error: `Mensaje enviado pero error al registrar: ${recordError instanceof Error ? recordError.message : 'Error desconocido'}` 
+          });
+          logger.error("whatsapp.message.record_failed", recordError instanceof Error ? recordError : new Error(String(recordError)), {
+            bulkSendId,
+            employeeId: emp.employee_id,
+            rfc: emp.rfc,
+            waMessageId: result.messageId,
+          });
+        }
       } else {
         progress.failed++;
         const errMsg = result.error ?? "Error desconocido";
@@ -131,7 +155,15 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
           rfc: emp.rfc,
           error: errMsg,
         });
-        await recordMessage({ supabase, bulkSendId, emp, status: "failed", error: result.error });
+        try {
+          await recordMessage({ supabase, bulkSendId, emp, status: "failed", error: result.error });
+        } catch (recordError) {
+          progress.errors.push({ 
+            employeeId: emp.employee_id, 
+            rfc: emp.rfc, 
+            error: `Error al registrar fallo: ${recordError instanceof Error ? recordError.message : 'Error desconocido'}` 
+          });
+        }
       }
     }
 
@@ -141,7 +173,34 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
     }
   }
 
-  // 5. Actualizar status del bulk_send
+  // 5. Verificar consistencia antes de actualizar
+  const { data: actualMessages, error: verifyError } = await supabase
+    .from("whatsapp_contract_messages")
+    .select("id, status")
+    .eq("bulk_send_id", bulkSendId);
+
+  if (verifyError) {
+    logger.error("whatsapp.bulk_send.verify_error", verifyError, { bulkSendId });
+  } else {
+    const actualSent = actualMessages?.filter(m => m.status === "sent").length ?? 0;
+    const actualFailed = actualMessages?.filter(m => m.status === "failed").length ?? 0;
+    
+    if (actualSent !== progress.sent || actualFailed !== progress.failed) {
+      logger.error("whatsapp.bulk_send.count_mismatch", {
+        bulkSendId,
+        expected_sent: progress.sent,
+        expected_failed: progress.failed,
+        actual_sent: actualSent,
+        actual_failed: actualFailed,
+        total_messages: actualMessages?.length ?? 0,
+      });
+      // Usar los contadores reales de la BD
+      progress.sent = actualSent;
+      progress.failed = actualFailed;
+    }
+  }
+
+  // 6. Actualizar status del bulk_send
   await supabase
     .from("whatsapp_bulk_sends")
     .update({
@@ -151,7 +210,7 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
     })
     .eq("id", bulkSendId);
 
-  // 6. Alerta de error rate: si >10% de elegibles fallaron, emitir warn
+  // 7. Alerta de error rate: si >10% de elegibles fallaron, emitir warn
   const totalAttempted = progress.sent + progress.failed;
   if (totalAttempted > 0) {
     const errorRate = Math.round((progress.failed / totalAttempted) * 100);
@@ -179,7 +238,7 @@ async function recordMessage(params: {
   waMessageId?: string;
   error?: string;
 }) {
-  await params.supabase.from("whatsapp_contract_messages").insert({
+  const { error } = await params.supabase.from("whatsapp_contract_messages").insert({
     employee_id: params.emp.employee_id,
     bulk_send_id: params.bulkSendId,
     message_type: "bulk_contract_offer",
@@ -188,6 +247,24 @@ async function recordMessage(params: {
     wa_message_id: params.waMessageId ?? null,
     error_message: params.error ?? null,
     whatsapp_subscriber_id: params.emp.telefono_normalizado,
+  });
+
+  if (error) {
+    logger.error("whatsapp.record_message.error", error, {
+      bulkSendId: params.bulkSendId,
+      employeeId: params.emp.employee_id,
+      rfc: params.emp.rfc,
+      status: params.status,
+      telefono_normalizado: params.emp.telefono_normalizado,
+    });
+    throw new Error(`No se pudo registrar el mensaje en whatsapp_contract_messages: ${error.message}`);
+  }
+
+  logger.info("whatsapp.record_message.success", {
+    bulkSendId: params.bulkSendId,
+    employeeId: params.emp.employee_id,
+    rfc: params.emp.rfc,
+    status: params.status,
   });
 }
 
