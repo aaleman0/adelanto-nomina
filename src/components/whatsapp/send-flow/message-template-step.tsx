@@ -20,6 +20,8 @@ type StoredTemplate = {
 type Props = {
   templateName: string;
   onTemplateChange: (name: string) => void;
+  buttonConfig: { text: string; url: string } | null;
+  onButtonConfigChange: (config: { text: string; url: string } | null) => void;
   onNext: () => void;
   onBack: () => void;
 };
@@ -102,6 +104,8 @@ function WhatsAppPreview({ bodyText, footer }: { bodyText: string; footer?: stri
 export function MessageTemplateStep({
   templateName,
   onTemplateChange,
+  buttonConfig,
+  onButtonConfigChange,
   onNext,
   onBack,
 }: Props) {
@@ -212,6 +216,80 @@ export function MessageTemplateStep({
                     Los valores <span className="font-semibold text-text-primary">[Nombre]</span> y{" "}
                     <span className="font-semibold text-text-primary">[Monto]</span> se reemplazan automáticamente con los datos de cada empleado.
                   </p>
+                </div>
+
+                {/* Configuración de botón */}
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-text-muted uppercase tracking-widest">
+                    Botón de acción (opcional)
+                  </p>
+                  <div className="rounded-xl border border-border bg-surface-muted/30 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!buttonConfig}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              onButtonConfigChange({
+                                text: "Visit website",
+                                url: "http://www.ejemplo.com",
+                              });
+                            } else {
+                              onButtonConfigChange(null);
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
+                        />
+                        <span className="text-sm font-medium text-text-primary">
+                          Incluir botón "Ir al sitio web"
+                        </span>
+                      </label>
+                    </div>
+                    
+                    {buttonConfig && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-medium text-text-muted mb-1">
+                            Texto del botón
+                          </label>
+                          <input
+                            type="text"
+                            value={buttonConfig.text}
+                            onChange={(e) =>
+                              onButtonConfigChange({
+                                ...buttonConfig,
+                                text: e.target.value,
+                              })
+                            }
+                            maxLength={25}
+                            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+                            placeholder="Visit website"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-text-muted mb-1">
+                            URL del sitio web
+                          </label>
+                          <input
+                            type="url"
+                            value={buttonConfig.url}
+                            onChange={(e) =>
+                              onButtonConfigChange({
+                                ...buttonConfig,
+                                url: e.target.value,
+                              })
+                            }
+                            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+                            placeholder="https://www.ejemplo.com"
+                          />
+                        </div>
+                        <p className="text-xs text-text-muted">
+                          El botón aparecerá en el mensaje de WhatsApp y llevará a los empleados a esta URL cuando hagan clic.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Sección avanzada: cambiar template */}

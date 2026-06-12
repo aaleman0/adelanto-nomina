@@ -97,6 +97,7 @@ export function GuidedSendFlow() {
   const [importMeta, setImportMeta] = useState<RecentImport | null>(null);
   const [manualIds, setManualIds] = useState<string[]>([]);
   const [templateName, setTemplateName] = useState(DEFAULT_TEMPLATE);
+  const [buttonConfig, setButtonConfig] = useState<{ text: string; url: string } | null>(null);
   const [validation, setValidation] = useState<ValidationSummary | null>(null);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
@@ -110,6 +111,7 @@ export function GuidedSendFlow() {
     setImportMeta(null);
     setManualIds([]);
     setTemplateName(DEFAULT_TEMPLATE);
+    setButtonConfig(null);
     setValidation(null);
     setSelectedEmployeeIds(new Set());
     setSending(false);
@@ -130,11 +132,13 @@ export function GuidedSendFlow() {
               importId: selectedImportId,
               employeeIds: [...selectedEmployeeIds],
               templateName,
+              buttonConfig,
             }
           : {
               mode: "manual",
               employeeIds: [...selectedEmployeeIds],
               templateName,
+              buttonConfig,
             };
 
       const res = await fetch("/api/whatsapp/bulk", {
@@ -234,6 +238,8 @@ export function GuidedSendFlow() {
           <MessageTemplateStep
             templateName={templateName}
             onTemplateChange={setTemplateName}
+            buttonConfig={buttonConfig}
+            onButtonConfigChange={setButtonConfig}
             onNext={() => setStep(3)}
             onBack={() => setStep(1)}
           />

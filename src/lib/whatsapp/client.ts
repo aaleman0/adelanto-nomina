@@ -3,8 +3,8 @@ const BASE_URL = "https://graph.facebook.com/v18.0";
 export type TemplateComponent = {
   type: "body" | "header" | "button";
   sub_type?: "url" | "quick_reply";
-  index?: number;
-  parameters: Array<{ type: "text"; text: string } | { type: "payload"; payload: string }>;
+  index?: number | string;
+  parameters: Array<{ type: "text"; text: string } | { type: "payload"; payload: string } | { type: "action"; action: { type: string; url?: string } }>;
 };
 
 export type SendTemplateResult = {
@@ -57,6 +57,80 @@ export class WhatsAppClient {
         name: templateName,
         language: { code: "es_MX" },
         components: bodyComponents,
+      },
+    };
+
+    try {
+      const res = await fetch(`${BASE_URL}/${this.phoneNumberId}/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        const errMsg = json?.error?.message ?? `HTTP ${res.status}`;
+        return { ok: false, error: errMsg };
+      }
+
+      const messageId = json?.messages?.[0]?.id as string | undefined;
+      return { ok: true, messageId };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Error de red." };
+    }
+  }
+
+  async sendTemplateWithButton(
+    to: string,
+    templateName: string,
+    variables: Record<string, string>,
+    buttonText?: string,
+    buttonUrl?: string,
+  ): Promise<SendTemplateResult> {
+    if (!this.accessToken || !this.phoneNumberId) {
+      return { ok: false, error: "WhatsApp no configurado (token o phone_number_id faltante)." };
+    }
+
+    const components: TemplateComponent[] = [
+      {
+        type: "body",
+        parameters: Object.entries(variables).map(([, value]) => ({
+          type: "text" as const,
+          text: value,
+        })),
+      },
+    ];
+
+    // Agregar componente de botón si se proporciona
+    if (buttonText && buttonUrl) {
+      components.push({
+        type: "button",
+        sub_type: "url",
+        index: 0,
+        parameters: [
+          {
+            type: "action",
+            action: {
+              type: "open_url",
+              url: buttonUrl,
+            },
+          },
+        ],
+      });
+    }
+
+    const body = {
+      messaging_product: "whatsapp",
+      to,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: "es_MX" },
+        components,
       },
     };
 

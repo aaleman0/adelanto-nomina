@@ -12,6 +12,10 @@ export type BulkSendParams = {
   importId?: string;
   employeeIds?: string[];
   templateName?: string;
+  buttonConfig?: {
+    text: string;
+    url: string;
+  };
 };
 
 export type BulkSendProgress = {
@@ -85,6 +89,9 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
     totalEmployees: employeeIds.length,
     eligibleCount: eligible.length,
     templateName,
+    hasButton: !!params.buttonConfig,
+    buttonText: params.buttonConfig?.text,
+    buttonUrl: params.buttonConfig?.url,
   });
 
   const progress: BulkSendProgress = {
@@ -124,7 +131,20 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
           : "N/A",
       };
 
-      const result = await client.sendTemplateMessage(to, templateName, variables);
+      let result;
+      
+      // Usar plantilla con botón si está configurada
+      if (params.buttonConfig) {
+        result = await client.sendTemplateWithButton(
+          to, 
+          templateName, 
+          variables, 
+          params.buttonConfig.text, 
+          params.buttonConfig.url
+        );
+      } else {
+        result = await client.sendTemplateMessage(to, templateName, variables);
+      }
 
       if (result.ok) {
         progress.sent++;
