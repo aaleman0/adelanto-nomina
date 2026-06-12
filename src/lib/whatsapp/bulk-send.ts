@@ -125,7 +125,8 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
       }
 
       const variables: Record<string, string> = {
-        nombre: [emp.nombre, emp.apellidos].filter(Boolean).join(" ") || "Empleado",
+        nombre: emp.nombre || "Empleado",
+        empleador: emp.empleador || "Tu empresa",
         monto: emp.monto_prestamo_autorizado
           ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(emp.monto_prestamo_autorizado)
           : "N/A",
