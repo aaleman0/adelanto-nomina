@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { DeliveryBadge } from "@/components/whatsapp/status-badges";
 
 type Stats = {
   sentToday: number;
@@ -26,26 +27,6 @@ type RecentMessage = {
 
 const fmtDate = (d: string | null) =>
   d ? new Intl.DateTimeFormat("es-MX", { dateStyle: "short", timeStyle: "short" }).format(new Date(d)) : "-";
-
-function DeliveryChip({ status }: { status: string | null }) {
-  const map: Record<string, string> = {
-    sent: "bg-blue-50 text-blue-700 ring-blue-200",
-    delivered: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    read: "bg-indigo-50 text-indigo-700 ring-indigo-200",
-    failed: "bg-red-50 text-red-700 ring-red-200",
-    click: "bg-violet-50 text-violet-700 ring-violet-200",
-  };
-  const s = status ?? "sent";
-  const cls = map[s] ?? "bg-surface-muted text-text-muted ring-border";
-  const labels: Record<string, string> = {
-    sent: "Enviado", delivered: "Entregado", read: "Leído", failed: "Error", click: "Click",
-  };
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${cls}`}>
-      {labels[s] ?? s}
-    </span>
-  );
-}
 
 function StatCard({
   label, value, sub, color,
@@ -77,7 +58,9 @@ function WhatsAppDashboardInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadStats = useCallback(() => {
+    setLoading(true);
+    setError(null);
     fetch("/api/whatsapp/stats")
       .then((r) => r.json())
       .then((json) => {
@@ -89,11 +72,15 @@ function WhatsAppDashboardInner() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
   if (error) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
         <p className="font-semibold text-red-800">{error}</p>
-        <button onClick={() => window.location.reload()} className="mt-2 text-sm font-semibold text-red-600 underline">
+        <button onClick={loadStats} className="mt-2 text-sm font-semibold text-red-600 underline">
           Reintentar
         </button>
       </div>
@@ -207,7 +194,7 @@ function WhatsAppDashboardInner() {
                   <div className="flex items-center gap-3 text-xs text-text-muted">
                     <span>{msg.message_type}</span>
                     <span>{fmtDate(msg.created_at)}</span>
-                    <DeliveryChip status={msg.delivery_status} />
+                    <DeliveryBadge status={msg.delivery_status} />
                   </div>
                 </div>
               ))}

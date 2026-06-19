@@ -148,7 +148,8 @@ export function MessageTemplateStep({
     return body?.text
       ? body.text
           .replace(/\{\{1\}\}/g, "[Nombre]")
-          .replace(/\{\{2\}\}/g, "[Monto]")
+          .replace(/\{\{2\}\}/g, "[Empleador]")
+          .replace(/\{\{3\}\}/g, "[Monto]")
       : PREVIEW_TEXT;
   })();
 
@@ -213,7 +214,8 @@ export function MessageTemplateStep({
                     {bodyText}
                   </div>
                   <p className="mt-1.5 text-xs text-text-muted">
-                    Los valores <span className="font-semibold text-text-primary">[Nombre]</span> y{" "}
+                    Los valores <span className="font-semibold text-text-primary">[Nombre]</span>,{" "}
+                    <span className="font-semibold text-text-primary">[Empleador]</span> y{" "}
                     <span className="font-semibold text-text-primary">[Monto]</span> se reemplazan automáticamente con los datos de cada empleado.
                   </p>
                 </div>
@@ -314,7 +316,7 @@ export function MessageTemplateStep({
                   {showAdvanced && (
                     <div className="mt-3 rounded-xl border border-border bg-surface p-4">
                       <p className="mb-2 text-xs text-text-muted">
-                        Solo cambia esto si necesitas usar una plantilla distinta. La plantilla por defecto es <code className="font-mono font-semibold">adelanto_nomina</code>.
+                        Solo cambia esto si necesitas usar una plantilla distinta. La plantilla por defecto es <code className="font-mono font-semibold">{DEFAULT_TEMPLATE}</code>.
                       </p>
                       {templates.length === 0 ? (
                         <p className="text-xs text-text-muted">

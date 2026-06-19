@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { BulkStatusBadge } from "@/components/whatsapp/status-badges";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 
 type BulkSend = {
@@ -33,25 +34,6 @@ const fmtDate = (d: string | null) =>
   d
     ? new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(d))
     : "-";
-
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    completed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    sending: "bg-amber-50 text-amber-700 ring-amber-200",
-    failed: "bg-red-50 text-red-700 ring-red-200",
-  };
-  const labels: Record<string, string> = {
-    completed: "Completado",
-    sending: "Enviando…",
-    failed: "Fallido",
-  };
-  const cls = map[status] ?? "bg-surface-muted text-text-muted ring-border";
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${cls}`}>
-      {labels[status] ?? status}
-    </span>
-  );
-}
 
 function SkeletonRow() {
   return (
@@ -243,6 +225,7 @@ function BulkHistoryInner() {
                 viewBox="0 0 24 24"
                 stroke="currentColor"
                 strokeWidth={1.5}
+                aria-hidden="true"
               >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -290,7 +273,7 @@ function BulkHistoryInner() {
                     {row.failed_count ?? "-"}
                   </span>
                   <div className="justify-self-center">
-                    <StatusBadge status={row.status} />
+                    <BulkStatusBadge status={row.status} />
                   </div>
                 </Link>
               ))}
@@ -305,7 +288,7 @@ function BulkHistoryInner() {
           <button
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
-            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text-muted transition hover:bg-surface-muted disabled:opacity-40"
+            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text-muted transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
           >
             ← Anterior
           </button>
@@ -315,7 +298,7 @@ function BulkHistoryInner() {
           <button
             disabled={page >= totalPages}
             onClick={() => setPage((p) => p + 1)}
-            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text-muted transition hover:bg-surface-muted disabled:opacity-40"
+            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text-muted transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
           >
             Siguiente →
           </button>

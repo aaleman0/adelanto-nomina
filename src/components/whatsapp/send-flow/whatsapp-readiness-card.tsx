@@ -5,7 +5,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
-export const DEFAULT_TEMPLATE = "adelanto_nomina";
+export const DEFAULT_TEMPLATE = "adelanto_nomina_v2";
 export const DEFAULT_LANGUAGE = "es_MX";
 
 type TemplateStatus = "approved" | "pending" | "rejected" | "not_found" | "not_synced" | "loading";
@@ -346,7 +346,7 @@ function TemplateCreationGuide() {
       {open && (
         <ol className="mt-2 flex flex-col gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
           <li>1. Ve a Meta Business → WhatsApp Manager → Plantillas de mensaje.</li>
-          <li>2. Crea una plantilla nueva con el nombre exacto: <code className="font-mono font-bold">adelanto_nomina</code></li>
+          <li>2. Crea una plantilla nueva con el nombre exacto: <code className="font-mono font-bold">{DEFAULT_TEMPLATE}</code></li>
           <li>3. Categoría: <strong>Marketing</strong>. Idioma: <strong>Spanish (MEX) / es_MX</strong>.</li>
           <li>
             4. Texto del cuerpo:{" "}
