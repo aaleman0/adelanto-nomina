@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { EasyLexClient } from "@/lib/easylex/client";
+import { EasyLexClient, type EasyLexValidationConfig } from "@/lib/easylex/client";
 import { generateContractPdf } from "@/lib/easylex/contract-pdf";
 import { getCompanySettings } from "@/lib/company-settings";
 import { logger } from "@/lib/logger";
@@ -119,6 +119,7 @@ export async function createEasyLexAttempt(
 
   const callbackUrl = process.env.EASYLEX_CALLBACK_URL ?? undefined;
   const fileName = `contrato_${employee.rfc}_${attemptId.slice(0, 8)}`;
+  const validation = buildValidationConfig(companySettings);
 
   const client = new EasyLexClient();
   const easylexResult = await client.createDocument({
@@ -133,6 +134,7 @@ export async function createEasyLexAttempt(
     ],
     pdfBuffer,
     callbackUrl,
+    validation,
   });
 
   if (!easylexResult.ok) {
@@ -192,7 +194,24 @@ export async function createEasyLexAttempt(
     signerId: easylexResult.signerId,
     signingUrl: easylexResult.signingUrl,
     correlationId,
+    validation,
   });
 
   return data as ContractAttempt;
+}
+
+function readBooleanSetting(settings: Record<string, string>, key: string): boolean {
+  return settings[key]?.toLowerCase() === "true";
+}
+
+function buildValidationConfig(settings: Record<string, string>): EasyLexValidationConfig {
+  return {
+    validateId: readBooleanSetting(settings, "easylex_validate_id"),
+    validateSms: readBooleanSetting(settings, "easylex_validate_sms"),
+    validatePicture: readBooleanSetting(settings, "easylex_validate_picture"),
+    validateEmail: readBooleanSetting(settings, "easylex_validate_email"),
+    validateBiometric: readBooleanSetting(settings, "easylex_validate_biometric"),
+    validateLiveness: readBooleanSetting(settings, "easylex_validate_liveness"),
+    validateVoice: readBooleanSetting(settings, "easylex_validate_voice"),
+  };
 }

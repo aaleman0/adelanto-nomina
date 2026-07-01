@@ -10,12 +10,23 @@ export type EasyLexSignatory = {
   email: string;
 };
 
+export type EasyLexValidationConfig = {
+  validateId?: boolean;
+  validateSms?: boolean;
+  validatePicture?: boolean;
+  validateEmail?: boolean;
+  validateBiometric?: boolean;
+  validateLiveness?: boolean;
+  validateVoice?: boolean;
+};
+
 export type EasyLexCreateDocumentInput = {
   fileName: string;
   signatories: EasyLexSignatory[];
   pdfBuffer: Buffer;
   callbackUrl?: string;
   expirationDate?: string;
+  validation?: EasyLexValidationConfig;
 };
 
 export type EasyLexSignatoryResponse = {
@@ -96,18 +107,20 @@ export class EasyLexClient {
     const url = `${this.baseUrl}/api/public/v2/document`;
 
     const expirationDate = input.expirationDate ?? getDefaultExpiration();
+    const validation = input.validation ?? {};
 
     const formData = new FormData();
     formData.append("fileName", input.fileName);
     formData.append("type", "DISI");
     formData.append("sendEmail", "false");
     formData.append("expirationDate", expirationDate);
-    formData.append("validateId", "false");
-    formData.append("validateSms", "false");
-    formData.append("validatePicture", "false");
-    formData.append("validateEmail", "false");
-    formData.append("validateBiometric", "false");
-    formData.append("validateLiveness", "false");
+    formData.append("validateId", booleanToString(validation.validateId));
+    formData.append("validateSms", booleanToString(validation.validateSms));
+    formData.append("validatePicture", booleanToString(validation.validatePicture));
+    formData.append("validateEmail", booleanToString(validation.validateEmail));
+    formData.append("validateBiometric", booleanToString(validation.validateBiometric));
+    formData.append("validateLiveness", booleanToString(validation.validateLiveness));
+    formData.append("validateVoice", booleanToString(validation.validateVoice));
 
     for (let i = 0; i < input.signatories.length; i++) {
       const sig = input.signatories[i];
@@ -226,4 +239,8 @@ function getDefaultExpiration(): string {
   const date = new Date();
   date.setDate(date.getDate() + 30);
   return date.toISOString().split("T")[0];
+}
+
+function booleanToString(value: boolean | undefined): string {
+  return value === true ? "true" : "false";
 }
