@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useEffect, useSyncExternalStore } from "react";
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
 
 /* ─── Types ─── */
 
@@ -44,46 +44,30 @@ function getStoredNotifications(): Notification[] {
   }
 }
 
-function subscribeToStorage(callback: () => void) {
-  const handler = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY) callback();
-  };
-  window.addEventListener("storage", handler);
-  return () => window.removeEventListener("storage", handler);
-}
-
 /* ─── Provider ─── */
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
-  const storedNotifications = useSyncExternalStore(
-    subscribeToStorage,
-    getStoredNotifications,
-    () => [],
-  );
-  const [notifications, setNotifications] = useState<Notification[]>(storedNotifications);
-
-  // Keep local state in sync with external storage changes.
-  useSyncExternalStore(
-    subscribeToStorage,
-    () => {
-      const next = getStoredNotifications();
-      if (JSON.stringify(next) !== JSON.stringify(notifications)) {
-        setNotifications(next);
-      }
-      return null;
-    },
-    () => null,
-  );
+  const [notifications, setNotifications] = useState<Notification[]>(() => getStoredNotifications());
 
   // Persist to localStorage whenever local state changes.
-  const persistNotifications = useCallback((next: Notification[]) => {
-    setNotifications(next);
+  useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications));
     } catch {
       // Ignore localStorage errors
     }
+  }, [notifications]);
+
+  // Listen to storage changes from other tabs.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key !== STORAGE_KEY) return;
+      setNotifications(getStoredNotifications());
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   const addNotification = useCallback((notification: Omit<Notification, "id" | "timestamp" | "read">): string => {
@@ -95,30 +79,26 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       read: false,
     };
 
-    const updated = [newNotification, ...notifications].slice(0, MAX_NOTIFICATIONS);
-    persistNotifications(updated);
+    setNotifications((prev) => [newNotification, ...prev].slice(0, MAX_NOTIFICATIONS));
 
     return id;
-  }, [notifications, persistNotifications]);
+  }, []);
 
   const markAsRead = useCallback((id: string) => {
-    const updated = notifications.map((n) => (n.id === id ? { ...n, read: true } : n));
-    persistNotifications(updated);
-  }, [notifications, persistNotifications]);
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  }, []);
 
   const markAllAsRead = useCallback(() => {
-    const updated = notifications.map((n) => ({ ...n, read: true }));
-    persistNotifications(updated);
-  }, [notifications, persistNotifications]);
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  }, []);
 
   const dismissNotification = useCallback((id: string) => {
-    const updated = notifications.filter((n) => n.id !== id);
-    persistNotifications(updated);
-  }, [notifications, persistNotifications]);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
 
   const clearAll = useCallback(() => {
-    persistNotifications([]);
-  }, [persistNotifications]);
+    setNotifications([]);
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
