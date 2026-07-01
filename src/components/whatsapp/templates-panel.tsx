@@ -110,26 +110,35 @@ export function TemplatesPanel() {
   const [selected, setSelected] = useState<Template | null>(null);
   const toastify = useToast();
 
-  async function fetchTemplates() {
-    setLoadState("loading");
-    setLoadError(null);
-    try {
-      const res = await fetch("/api/whatsapp/templates");
-      const json = await res.json();
-      if (!json.ok) throw new Error(json.error ?? "Error al cargar templates.");
-      setTemplates(json.templates ?? []);
-      setLoadState("ok");
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Error de red.");
-      setLoadState("error");
-    }
+  function fetchTemplates() {
+    return fetch("/api/whatsapp/templates")
+      .then((res) => res.json())
+      .then((json: { ok: boolean; error?: string; templates?: Template[] }) => {
+        if (!json.ok) throw new Error(json.error ?? "Error al cargar templates.");
+        setTemplates(json.templates ?? []);
+        setLoadState("ok");
+      })
+      .catch((err: unknown) => {
+        setLoadError(err instanceof Error ? err.message : "Error de red.");
+        setLoadState("error");
+      });
   }
 
-  useEffect(() => { fetchTemplates(); }, []);
+  // loadState is initialised to "loading" and loadError to null — no
+  // synchronous setState needed. All setState calls inside fetchTemplates
+  // run inside .then()/.catch() callbacks (asynchronously), which the
+  // react-hooks/set-state-in-effect rule does not flag.
+  useEffect(() => {
+    fetchTemplates();
+    // fetchTemplates is defined in the component body; the effect
+    // intentionally runs only on mount.
+  }, []);
 
   async function handleSync() {
     setSyncing(true);
     setSyncMsg(null);
+    setLoadState("loading");
+    setLoadError(null);
     try {
       const res = await fetch("/api/whatsapp/templates/sync", { method: "POST" });
       const json = await res.json();
@@ -198,7 +207,11 @@ export function TemplatesPanel() {
         <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
           <p className="text-sm font-semibold text-red-800">{loadError}</p>
           <button
-            onClick={fetchTemplates}
+            onClick={() => {
+              setLoadState("loading");
+              setLoadError(null);
+              fetchTemplates();
+            }}
             className="mt-2 text-sm font-semibold text-red-600 underline hover:no-underline"
           >
             Reintentar

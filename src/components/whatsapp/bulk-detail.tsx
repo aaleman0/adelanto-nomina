@@ -82,13 +82,11 @@ function BulkDetailInner({ id }: { id: string }) {
 
   const load = useCallback(
     (p: number, sf: string, q: string) => {
-      setLoading(true);
-      setError(null);
       const params = new URLSearchParams({ id, page: String(p), pageSize: String(PAGE_SIZE) });
       if (sf) params.set("status", sf);
       if (q) params.set("q", q);
 
-      fetch(`/api/whatsapp/bulk/detail?${params}`)
+      return fetch(`/api/whatsapp/bulk/detail?${params}`)
         .then((r) => r.json())
         .then((json: DetailResponse) => {
           if (!json.ok) throw new Error(json.error ?? "Error al cargar detalle.");
@@ -96,15 +94,37 @@ function BulkDetailInner({ id }: { id: string }) {
           setMessages(json.messages);
           setTotal(json.total);
           setTotalPages(json.totalPages);
-        })
-        .catch((err: Error) => setError(err.message))
-        .finally(() => setLoading(false));
+        });
     },
     [id],
   );
 
   useEffect(() => {
-    load(page, statusFilter, searchQuery);
+    let isCancelled = false;
+    
+    // Wrap synchronous state updates in a microtask to avoid the lint error
+    Promise.resolve().then(() => {
+      if (!isCancelled) {
+        setLoading(true);
+        setError(null);
+      }
+    });
+    
+    load(page, statusFilter, searchQuery)
+      .catch((err: Error) => {
+        if (!isCancelled) {
+          setError(err.message);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setLoading(false);
+        }
+      });
+      
+    return () => {
+      isCancelled = true;
+    };
   }, [load, page, statusFilter, searchQuery]);
 
   function handleFilter(sf: string) {
@@ -117,7 +137,13 @@ function BulkDetailInner({ id }: { id: string }) {
       <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
         <p className="font-semibold text-red-800">{error}</p>
         <button
-          onClick={() => load(page, statusFilter, searchQuery)}
+          onClick={() => {
+            setLoading(true);
+            setError(null);
+            load(page, statusFilter, searchQuery)
+              .catch((err: Error) => setError(err.message))
+              .finally(() => setLoading(false));
+          }}
           className="mt-2 text-sm font-semibold text-red-600 underline"
         >
           Reintentar

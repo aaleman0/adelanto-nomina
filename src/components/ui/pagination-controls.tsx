@@ -51,7 +51,6 @@ export function PaginationControls({
   page,
   totalPages,
   total,
-  visible,
   limit,
   baseHref,
   currentParams = {},
@@ -59,7 +58,6 @@ export function PaginationControls({
   page: number;
   totalPages: number;
   total: number;
-  visible: number;
   limit: number;
   baseHref: string;
   /** SearchParams actuales (sin `page`) para preservarlos en los links. */

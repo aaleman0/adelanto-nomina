@@ -2,12 +2,12 @@
  * Utilidades de validación y corrección de teléfonos para WhatsApp Cloud API.
  *
  * Meta Graph API espera el número en formato E.164 SIN el + delante.
- * Para México: 52 + 10 dígitos = 12 dígitos en total (ej: 521234567890)
+ * Para México móvil en WhatsApp: 521 + 10 dígitos = 13 dígitos en total (ej: 5211234567890)
  *
  * Casos detectados:
- *   ok              → 52XXXXXXXXXX  (12 dígitos, formato correcto)
- *   long_distance   → 521XXXXXXXXXX (13 dígitos, incluye '1' de larga distancia viejo)
- *   missing_prefix  → XXXXXXXXXX    (10 dígitos, falta el prefijo 52)
+ *   ok              → 521XXXXXXXXXX u otro formato internacional válido
+ *   long_distance   → 52XXXXXXXXXX (12 dígitos, falta '1' móvil WhatsApp México)
+ *   missing_prefix  → XXXXXXXXXX    (10 dígitos, falta el prefijo 521)
  *   has_plus        → +52XXXXXXXXXX (tiene '+' — aunque Meta lo acepta, normalizamos)
  *   too_short       → menos de 10 dígitos
  *   too_long        → más de 13 dígitos
@@ -57,21 +57,16 @@ export function classifyPhone(raw: string | null | undefined): PhoneClassificati
     return { issue: "too_long", suggested_fix: null };
   }
 
-  // 10 dígitos exactos → falta prefijo 52 México
   if (digits.length === 10) {
-    return { issue: "missing_prefix", suggested_fix: `52${digits}` };
+    return { issue: "missing_prefix", suggested_fix: `521${digits}` };
   }
 
-  // 12 dígitos que empiezan con 52 → correcto
   if (digits.length === 12 && digits.startsWith("52")) {
-    return { issue: "ok", suggested_fix: null };
+    return { issue: "long_distance", suggested_fix: `521${digits.slice(2)}` };
   }
 
-  // 13 dígitos que empiezan con 521 → larga distancia vieja (ej: 5211XXXXXXXX)
   if (digits.length === 13 && digits.startsWith("521")) {
-    // Quitar el '1' de larga distancia: 521XXXXXXXXXX → 52XXXXXXXXXX
-    const fixed = `52${digits.slice(3)}`;
-    return { issue: "long_distance", suggested_fix: fixed };
+    return { issue: "ok", suggested_fix: null };
   }
 
   // Cualquier otra longitud entre 10–13 que no sea el formato esperado
@@ -104,14 +99,13 @@ export function normalizePhoneFromCsv(value: string | undefined): string | null 
 
   if (!digits) return null;
 
-  // 10 dígitos → agregar prefijo México
-  if (digits.length === 10) return `52${digits}`;
+  if (digits.length === 10) return `521${digits}`;
 
-  // 12 dígitos con prefijo 52 → correcto
-  if (digits.length === 12 && digits.startsWith("52")) return digits;
+  if (digits.length === 12 && digits.startsWith("521")) return digits;
 
-  // 13 dígitos con larga distancia 521 → quitar el 1
-  if (digits.length === 13 && digits.startsWith("521")) return `52${digits.slice(3)}`;
+  if (digits.length === 12 && digits.startsWith("52")) return `521${digits.slice(2)}`;
+
+  if (digits.length === 13 && digits.startsWith("521")) return digits;
 
   // Otros formatos entre 10 y 15 → pasar tal cual (otro país)
   if (digits.length >= 10 && digits.length <= 15) return digits;

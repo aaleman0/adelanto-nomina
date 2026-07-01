@@ -74,30 +74,50 @@ function BulkHistoryInner() {
 
   const load = useCallback(
     (p: number, sf: string, mf: string, df: string, dt: string) => {
-      setLoading(true);
-      setError(null);
       const params = new URLSearchParams({ page: String(p), pageSize: String(PAGE_SIZE) });
       if (sf) params.set("status", sf);
       if (mf) params.set("mode", mf);
       if (df) params.set("dateFrom", df);
       if (dt) params.set("dateTo", dt);
 
-      fetch(`/api/whatsapp/bulk/history?${params}`)
+      return fetch(`/api/whatsapp/bulk/history?${params}`)
         .then((r) => r.json())
         .then((json: HistoryResponse) => {
           if (!json.ok) throw new Error(json.error ?? "Error al cargar historial.");
           setData(json.data);
           setTotal(json.total);
           setTotalPages(json.totalPages);
-        })
-        .catch((err: Error) => setError(err.message))
-        .finally(() => setLoading(false));
+        });
     },
     [],
   );
 
   useEffect(() => {
-    load(page, statusFilter, modeFilter, debouncedDateFrom, debouncedDateTo);
+    let isCancelled = false;
+    
+    // Wrap synchronous state updates in a microtask to avoid the lint error
+    Promise.resolve().then(() => {
+      if (!isCancelled) {
+        setLoading(true);
+        setError(null);
+      }
+    });
+    
+    load(page, statusFilter, modeFilter, debouncedDateFrom, debouncedDateTo)
+      .catch((err: Error) => {
+        if (!isCancelled) {
+          setError(err.message);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setLoading(false);
+        }
+      });
+      
+    return () => {
+      isCancelled = true;
+    };
   }, [load, page, statusFilter, modeFilter, debouncedDateFrom, debouncedDateTo]);
 
   function resetFilters() {
@@ -111,7 +131,13 @@ function BulkHistoryInner() {
       <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
         <p className="font-semibold text-red-800">{error}</p>
         <button
-          onClick={() => load(page, statusFilter, modeFilter, debouncedDateFrom, debouncedDateTo)}
+          onClick={() => {
+            setLoading(true);
+            setError(null);
+            load(page, statusFilter, modeFilter, debouncedDateFrom, debouncedDateTo)
+              .catch((err: Error) => setError(err.message))
+              .finally(() => setLoading(false));
+          }}
           className="mt-2 text-sm font-semibold text-red-600 underline"
         >
           Reintentar

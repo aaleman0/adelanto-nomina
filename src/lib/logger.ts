@@ -10,7 +10,7 @@
  *   logger.error("whatsapp.send_failed", err, { employeeId, templateName });
  */
 
-type LogLevel = "info" | "warn" | "error" | "debug";
+type LogLevel = "info" | "warn" | "error" | "debug" | "critical";
 
 type LogContext = Record<string, unknown>;
 

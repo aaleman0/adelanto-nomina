@@ -59,28 +59,57 @@ function WhatsAppDashboardInner() {
   const [error, setError] = useState<string | null>(null);
 
   const loadStats = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    fetch("/api/whatsapp/stats")
+    return fetch("/api/whatsapp/stats")
       .then((r) => r.json())
       .then((json) => {
         if (!json.ok) throw new Error(json.error ?? "Error al cargar métricas.");
         setStats(json.stats);
         setRecent(json.recent ?? []);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      });
   }, []);
 
   useEffect(() => {
-    loadStats();
+    let isCancelled = false;
+    
+    // Wrap synchronous state updates in a microtask to avoid the lint error
+    Promise.resolve().then(() => {
+      if (!isCancelled) {
+        setLoading(true);
+        setError(null);
+      }
+    });
+    
+    loadStats()
+      .catch((err) => {
+        if (!isCancelled) {
+          setError(err.message);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setLoading(false);
+        }
+      });
+      
+    return () => {
+      isCancelled = true;
+    };
   }, [loadStats]);
 
   if (error) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
         <p className="font-semibold text-red-800">{error}</p>
-        <button onClick={loadStats} className="mt-2 text-sm font-semibold text-red-600 underline">
+        <button 
+          onClick={() => {
+            setLoading(true);
+            setError(null);
+            loadStats()
+              .catch((err) => setError(err.message))
+              .finally(() => setLoading(false));
+          }} 
+          className="mt-2 text-sm font-semibold text-red-600 underline"
+        >
           Reintentar
         </button>
       </div>

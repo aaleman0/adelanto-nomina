@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useSyncExternalStore } from "react";
 
 /* ─── Types ─── */
 
@@ -34,35 +34,57 @@ const NotificationsContext = createContext<NotificationsContextValue | null>(nul
 const STORAGE_KEY = "app-notifications-v1";
 const MAX_NOTIFICATIONS = 50;
 
+function getStoredNotifications(): Notification[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? (JSON.parse(stored) as Notification[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function subscribeToStorage(callback: () => void) {
+  const handler = (e: StorageEvent) => {
+    if (e.key === STORAGE_KEY) callback();
+  };
+  window.addEventListener("storage", handler);
+  return () => window.removeEventListener("storage", handler);
+}
+
 /* ─── Provider ─── */
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isHydrated, setIsHydrated] = useState(false);
+  const storedNotifications = useSyncExternalStore(
+    subscribeToStorage,
+    getStoredNotifications,
+    () => [],
+  );
+  const [notifications, setNotifications] = useState<Notification[]>(storedNotifications);
 
-  // Load from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setNotifications(parsed);
+  // Keep local state in sync with external storage changes.
+  useSyncExternalStore(
+    subscribeToStorage,
+    () => {
+      const next = getStoredNotifications();
+      if (JSON.stringify(next) !== JSON.stringify(notifications)) {
+        setNotifications(next);
       }
-    } catch {
-      // Ignore localStorage errors
-    }
-    setIsHydrated(true);
-  }, []);
+      return null;
+    },
+    () => null,
+  );
 
-  // Save to localStorage when notifications change
-  useEffect(() => {
-    if (!isHydrated) return;
+  // Persist to localStorage whenever local state changes.
+  const persistNotifications = useCallback((next: Notification[]) => {
+    setNotifications(next);
+    if (typeof window === "undefined") return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     } catch {
       // Ignore localStorage errors
     }
-  }, [notifications, isHydrated]);
+  }, []);
 
   const addNotification = useCallback((notification: Omit<Notification, "id" | "timestamp" | "read">): string => {
     const id = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -73,31 +95,30 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       read: false,
     };
 
-    setNotifications((prev) => {
-      const updated = [newNotification, ...prev].slice(0, MAX_NOTIFICATIONS);
-      return updated;
-    });
+    const updated = [newNotification, ...notifications].slice(0, MAX_NOTIFICATIONS);
+    persistNotifications(updated);
 
     return id;
-  }, []);
+  }, [notifications, persistNotifications]);
 
   const markAsRead = useCallback((id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-  }, []);
+    const updated = notifications.map((n) => (n.id === id ? { ...n, read: true } : n));
+    persistNotifications(updated);
+  }, [notifications, persistNotifications]);
 
   const markAllAsRead = useCallback(() => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  }, []);
+    const updated = notifications.map((n) => ({ ...n, read: true }));
+    persistNotifications(updated);
+  }, [notifications, persistNotifications]);
 
   const dismissNotification = useCallback((id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  }, []);
+    const updated = notifications.filter((n) => n.id !== id);
+    persistNotifications(updated);
+  }, [notifications, persistNotifications]);
 
   const clearAll = useCallback(() => {
-    setNotifications([]);
-  }, []);
+    persistNotifications([]);
+  }, [persistNotifications]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -129,7 +150,7 @@ export function useNotifications() {
 /* ─── Notification Bell Component ─── */
 
 export function NotificationBell() {
-  const { unreadCount, notifications, markAsRead, markAllAsRead, dismissNotification } = useNotifications();
+  const { unreadCount, notifications, markAsRead, markAllAsRead, dismissNotification, clearAll } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
 
   // Close dropdown when clicking outside
@@ -145,14 +166,14 @@ export function NotificationBell() {
     return () => document.removeEventListener("click", handleClick);
   }, [isOpen]);
 
-  const handleNotificationClick = (notification: Notification) => {
+  const handleNotificationClick = useCallback((notification: Notification) => {
     if (!notification.read) {
       markAsRead(notification.id);
     }
     if (notification.actionUrl) {
-      window.location.href = notification.actionUrl;
+      window.location.assign(notification.actionUrl);
     }
-  };
+  }, [markAsRead]);
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -167,13 +188,6 @@ export function NotificationBell() {
     if (hours < 24) return `Hace ${hours}h`;
     if (days < 7) return `Hace ${days}d`;
     return date.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
-  };
-
-  const typeStyles: Record<NotificationType, string> = {
-    success: "bg-emerald-50 border-emerald-200",
-    error: "bg-red-50 border-red-200",
-    warning: "bg-amber-50 border-amber-200",
-    info: "bg-blue-50 border-blue-200",
   };
 
   const typeDot: Record<NotificationType, string> = {
@@ -268,10 +282,7 @@ export function NotificationBell() {
           {notifications.length > 0 && (
             <div className="border-t border-border px-4 py-2 text-center">
               <button
-                onClick={() => {
-                  const { clearAll } = useNotifications();
-                  clearAll();
-                }}
+                onClick={() => clearAll()}
                 className="text-xs text-text-muted hover:text-text-primary"
               >
                 Limpiar todas

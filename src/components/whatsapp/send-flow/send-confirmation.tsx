@@ -24,13 +24,19 @@ function humanizeError(error: string): { title: string; detail: string } {
       detail: "Revisa la configuración de WhatsApp en la sección de ajustes y actualiza el token de acceso.",
     };
   }
-  if (lower.includes("template") || lower.includes("plantilla") || lower.includes("approved")) {
+  if (lower.includes("number of parameters") || lower.includes("132000")) {
+    return {
+      title: "Variables de plantilla incorrectas",
+      detail: "El número de variables enviadas no coincide con la plantilla. Verifica la plantilla seleccionada.",
+    };
+  }
+  if (lower.includes("not approved") || lower.includes("no aprobada") || lower.includes("template_paused") || lower.includes("template unavailable")) {
     return {
       title: "Plantilla no aprobada",
       detail: "Espera la aprobación de Meta o selecciona una plantilla aprobada.",
     };
   }
-  if (lower.includes("phone") || lower.includes("teléfono") || lower.includes("number")) {
+  if (lower.includes("phone") || lower.includes("teléfono") || lower.includes("phone_number") || lower.includes("recipient")) {
     return {
       title: "Número de teléfono inválido",
       detail: "Revisa el teléfono del empleado. Debe estar en formato internacional (+52...).",

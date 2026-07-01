@@ -32,7 +32,6 @@ export function ContractControlFilters({
   filters,
   empleadores,
   total,
-  visible,
   limit,
   page,
   totalPages,
@@ -40,7 +39,6 @@ export function ContractControlFilters({
   filters: ContractControlFilters;
   empleadores: string[];
   total: number;
-  visible: number;
   limit: number;
   page: number;
   totalPages: number;
@@ -119,7 +117,6 @@ export function ContractControlFilters({
           page={page}
           totalPages={totalPages}
           total={total}
-          visible={visible}
           limit={limit}
           baseHref="/contracts"
           currentParams={activeParams}

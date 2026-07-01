@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getWhatsAppClient } from "@/lib/whatsapp/client";
+import { logger } from "@/lib/logger";
 
 export function verifyWebhook(
   mode: string,
@@ -96,6 +97,13 @@ export async function handleWebhook(payload: {
       for (const status of value.statuses ?? []) {
         const deliveryStatus = status.status;
         const waMessageId = status.id;
+
+        logger.info("whatsapp.webhook.status", {
+          waMessageId,
+          recipientId: status.recipient_id,
+          status: deliveryStatus,
+          errors: status.errors ?? null,
+        });
 
         const updateFields: Record<string, unknown> = {
           delivery_status: deliveryStatus,

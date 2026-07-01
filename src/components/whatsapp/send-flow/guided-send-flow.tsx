@@ -173,7 +173,7 @@ export function GuidedSendFlow() {
     } finally {
       setSending(false);
     }
-  }, [mode, selectedImportId, selectedEmployeeIds, templateName, toastify, addNotification]);
+  }, [mode, selectedImportId, selectedEmployeeIds, templateName, buttonConfig, toastify, addNotification]);
 
   // Paso 5: resultado
   if (step === 5 && result) {

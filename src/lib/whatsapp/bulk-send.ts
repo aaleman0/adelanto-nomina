@@ -1,7 +1,8 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { getWhatsAppClient } from "@/lib/whatsapp/client";
+import { getWhatsAppClient, type TemplateComponent } from "@/lib/whatsapp/client";
 import { getEmployeesEligibility } from "@/lib/whatsapp/eligibility";
 import { getEmployeesFromImport } from "@/lib/whatsapp/imports";
+import { normalizePhoneForMeta } from "@/lib/whatsapp/phone-utils";
 import { logger } from "@/lib/logger";
 
 const BATCH_SIZE = 100;
@@ -32,8 +33,6 @@ export type BulkSendResult = BulkSendProgress & {
 };
 
 export async function validateBulkEligibility(params: { mode: "import" | "manual"; importId?: string; employeeIds?: string[] }) {
-  const supabase = getSupabaseAdmin();
-
   let ids: string[] = params.employeeIds ?? [];
 
   if (params.mode === "import" && params.importId) {
@@ -53,7 +52,7 @@ export async function validateBulkEligibility(params: { mode: "import" | "manual
 export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSendResult> {
   const supabase = getSupabaseAdmin();
   const client = getWhatsAppClient();
-  const templateName = params.templateName ?? "adelanto_nomina";
+  const templateName = params.templateName ?? "adelanto_nomina_v2";
 
   // 1. Obtener lista de employees
   let employeeIds: string[] = params.employeeIds ?? [];
@@ -107,7 +106,7 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
     const batch = eligible.slice(i, i + BATCH_SIZE);
 
     for (const emp of batch) {
-      const to = emp.telefono_normalizado;
+      const to = normalizePhoneForMeta(emp.telefono_normalizado);
 
       if (!to) {
         progress.failed++;
@@ -124,28 +123,36 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
         continue;
       }
 
-      const variables: Record<string, string> = {
-        "1": emp.nombre || "Empleado",
-        "2": emp.empleador || "Tu empresa",
-        "3": emp.monto_prestamo_autorizado
-          ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(emp.monto_prestamo_autorizado)
-          : "N/A",
-      };
+      const monto = emp.monto_prestamo_autorizado
+        ? new Intl.NumberFormat("es-MX", { maximumFractionDigits: 0 }).format(emp.monto_prestamo_autorizado)
+        : "N/A";
 
-      let result;
-      
-      // Usar plantilla con botón si está configurada
-      if (params.buttonConfig) {
-        result = await client.sendTemplateWithButton(
-          to, 
-          templateName, 
-          variables, 
-          params.buttonConfig.text, 
-          params.buttonConfig.url
-        );
-      } else {
-        result = await client.sendTemplateMessage(to, templateName, variables);
+      const variables: Record<string, string> =
+        templateName === "adelanto_nomina"
+          ? { "1": emp.nombre || "Empleado", "2": monto }
+          : { "1": emp.nombre || "Empleado", "2": emp.empleador || "Tu empresa", "3": monto };
+
+      // Para adelanto_nomina_v2: header de imagen + body con 3 variables.
+      // Meta renderiza el botón de URL fija automáticamente.
+      const headerImageUrl = process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE_URL;
+      const components: TemplateComponent[] = [
+        {
+          type: "body",
+          parameters: Object.entries(variables).map(([, value]) => ({
+            type: "text",
+            text: value,
+          })),
+        },
+      ];
+
+      if (headerImageUrl && templateName === "adelanto_nomina_v2") {
+        components.unshift({
+          type: "header",
+          parameters: [{ type: "image", image: { link: headerImageUrl } }],
+        });
       }
+
+      const result = await client.sendTemplateMessage(to, templateName, variables, components);
 
       if (result.ok) {
         progress.sent++;

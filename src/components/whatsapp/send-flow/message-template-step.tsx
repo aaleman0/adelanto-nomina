@@ -244,7 +244,7 @@ export function MessageTemplateStep({
                           className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
                         />
                         <span className="text-sm font-medium text-text-primary">
-                          Incluir botón "Ir al sitio web"
+                          Incluir botón &quot;Ir al sitio web&quot;
                         </span>
                       </label>
                     </div>

@@ -4,7 +4,12 @@ export type TemplateComponent = {
   type: "body" | "header" | "button";
   sub_type?: "url" | "quick_reply";
   index?: number | string;
-  parameters: Array<{ type: "text"; text: string } | { type: "payload"; payload: string } | { type: "action"; action: { type: string; url?: string } }>;
+  parameters: Array<
+    | { type: "text"; text: string }
+    | { type: "payload"; payload: string }
+    | { type: "action"; action: { type: string; url?: string } }
+    | { type: "image"; image: { link: string } }
+  >;
 };
 
 export type SendTemplateResult = {
@@ -74,10 +79,14 @@ export class WhatsAppClient {
 
       if (!res.ok) {
         const errMsg = json?.error?.message ?? `HTTP ${res.status}`;
+        console.error("[WhatsApp] send failed", JSON.stringify(json));
         return { ok: false, error: errMsg };
       }
 
       const messageId = json?.messages?.[0]?.id as string | undefined;
+      const waId = json?.contacts?.[0]?.wa_id as string | undefined;
+      const inputPhone = json?.contacts?.[0]?.input as string | undefined;
+      console.log("[WhatsApp] send ok", JSON.stringify({ messageId, waId, inputPhone, to }));
       return { ok: true, messageId };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : "Error de red." };

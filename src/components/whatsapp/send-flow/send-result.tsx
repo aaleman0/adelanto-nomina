@@ -15,10 +15,13 @@ function humanizeErrorMessage(error: string): string {
   if (lower.includes("token") || lower.includes("authorization") || lower.includes("oauth")) {
     return "Token de Meta expirado. Revisa la configuración de WhatsApp en ajustes.";
   }
-  if (lower.includes("template") || lower.includes("approved")) {
+  if (lower.includes("number of parameters") || lower.includes("132000")) {
+    return "Error de plantilla: el número de variables no coincide. Verifica la plantilla seleccionada.";
+  }
+  if (lower.includes("not approved") || lower.includes("no aprobada") || lower.includes("template_paused") || lower.includes("template unavailable")) {
     return "Plantilla no aprobada. Espera la aprobación de Meta o selecciona otra plantilla.";
   }
-  if (lower.includes("phone") || lower.includes("number")) {
+  if (lower.includes("phone") || lower.includes("phone_number") || lower.includes("recipient")) {
     return "Número de teléfono inválido. Revisa el teléfono del empleado.";
   }
   if (lower.includes("credencial") || lower.includes("configurad")) {

@@ -42,13 +42,16 @@ export function RecipientStep({
   onNext,
 }: Props) {
   const [imports, setImports] = useState<RecentImport[]>([]);
+  // Initialise to `true` so the mount effect below never needs to call
+  // setLoadingImports synchronously inside the effect body.
   const [loadingImports, setLoadingImports] = useState(true);
   const [importsError, setImportsError] = useState<string | null>(null);
   const [testPanelOpen, setTestPanelOpen] = useState(false);
   const [testEmployee, setTestEmployee] = useState<EmployeeResult | null>(null);
 
+  // All setState calls here happen inside .then/.catch/.finally callbacks
+  // (i.e., asynchronously), never synchronously in the effect body itself.
   useEffect(() => {
-    setLoadingImports(true);
     fetch("/api/whatsapp/imports")
       .then((r) => r.json())
       .then((json) => {
