@@ -115,7 +115,7 @@ export function WhatsAppReadinessCard({
 
       // Buscar la plantilla adelanto_nomina
       const templates: Array<{ name: string; status: string }> =
-        templatesRes?.templates ?? [];
+        Array.isArray(templatesRes?.templates) ? templatesRes.templates : [];
 
       let templateStatus: TemplateStatus = "not_synced";
       if (templates.length > 0) {
