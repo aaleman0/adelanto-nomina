@@ -253,7 +253,7 @@ function normalizeRecord(record: ParsedCsvRecord) {
     estado_civil: record["Estado Civil"]?.trim() || null,
     nacionalidad: record.Nacionalidad?.trim() || null,
     lugar_origen: record["Lugar de Origen"]?.trim() || null,
-    fecha_nacimiento: record["Fecha de Nacimiento"]?.trim() || null,
+    fecha_nacimiento: normalizeDate(record["Fecha de Nacimiento"]),
     domicilio: record.Domicilio?.trim() || null,
     estatus_p_esta_q: record["Estatus P/ esta Q"]?.trim() ?? "",
     estatus_conversion: estatusConversion,
@@ -298,6 +298,32 @@ function normalizeStatus(value: string | undefined) {
   }
 
   return normalized || "";
+}
+
+function normalizeDate(value: string | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+
+  // Already ISO-ish: YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  // Common Latin American formats: DD/MM/YYYY or DD-MM-YYYY
+  const match = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (!match) {
+    return raw || null;
+  }
+
+  const day = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return raw || null;
+  }
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function hashJson(value: unknown) {
