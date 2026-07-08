@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { EasyLexClient, type EasyLexValidationConfig } from "@/lib/easylex/client";
 import { generateContractPdf } from "@/lib/easylex/contract-pdf";
+import { easylexEnv } from "@/lib/env";
 import { getCompanySettings } from "@/lib/company-settings";
 import { logger } from "@/lib/logger";
 
@@ -117,7 +118,7 @@ export async function createEasyLexAttempt(
     companySettings,
   });
 
-  const callbackUrl = process.env.EASYLEX_CALLBACK_URL ?? undefined;
+  const callbackUrl = easylexEnv.callbackUrl || undefined;
   const fileName = `contrato_${employee.rfc}_${attemptId.slice(0, 8)}`;
   const validation = buildValidationConfig(companySettings);
 

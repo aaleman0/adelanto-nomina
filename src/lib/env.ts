@@ -36,6 +36,7 @@ const supabaseEnvSchema = z.object({
 const easylexEnvSchema = z.object({
   EASYLEX_ACCESS_KEY_ID: z.string().min(1, "EASYLEX_ACCESS_KEY_ID es requerido"),
   EASYLEX_SECRET_ACCESS_KEY: z.string().min(1, "EASYLEX_SECRET_ACCESS_KEY es requerido"),
+  EASYLEX_CALLBACK_URL: z.string().url("EASYLEX_CALLBACK_URL debe ser una URL válida").optional(),
 });
 
 /* ─── Types ─── */
@@ -128,6 +129,7 @@ export const easylexEnv = {
   get secretAccessKey() { return process.env.EASYLEX_SECRET_ACCESS_KEY ?? ""; },
   get baseUrl() { return process.env.EASYLEX_BASE_URL ?? "https://sandboxapi.easylex.com"; },
   get signingLinkBaseUrl() { return process.env.EASYLEX_SIGNING_LINK_BASE_URL ?? ""; },
+  get callbackUrl() { return process.env.EASYLEX_CALLBACK_URL ?? ""; },
   get webhookSecret() { return process.env.EASYLEX_WEBHOOK_SECRET ?? ""; },
   get isConfigured() {
     return Boolean(
