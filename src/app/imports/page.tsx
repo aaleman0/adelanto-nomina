@@ -1,9 +1,8 @@
 import { ApplyImportButton } from "@/components/imports/apply-import-button";
 import { ImportUploadForm } from "@/components/imports/import-upload-form";
 import { AppShell, PageHeader } from "@/components/layout/app-shell";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { DataTable, DataTableCell, DataTableHead, DataTableHeaderCell } from "@/components/ui/data-table";
-import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
@@ -30,19 +29,12 @@ export default async function ImportsPage() {
     <AppShell>
       <PageHeader title="Importaciones" />
       {importsResult.setupError ? (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
-          <div className="flex items-center gap-2">
-            <svg className="h-5 w-5 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <p className="font-bold">Falta configurar Supabase local</p>
-          </div>
-          <p className="mt-1.5 ml-7">Configura SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY para ver importaciones.</p>
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-medium">Falta configurar Supabase local</p>
+          <p className="mt-1 text-amber-700">Configura SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY para ver importaciones.</p>
         </section>
       ) : null}
-      <section className="grid gap-6 xl:grid-cols-1">
-        <ImportUploadForm />
-      </section>
+      <ImportUploadForm />
       <RecentImportsTable batches={importsResult.batches} />
     </AppShell>
   );
@@ -50,68 +42,39 @@ export default async function ImportsPage() {
 
 function RecentImportsTable({ batches }: { batches: ImportBatch[] }) {
   return (
-    <Card className="overflow-hidden">
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-surface-muted border border-border/60">
-            <svg className="h-4.5 w-4.5 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-          </div>
-          <div>
-            <h2 className="text-[16px] font-bold text-text-primary">Historial de importaciones</h2>
-            <p className="mt-0.5 text-[12px] text-text-muted">Fecha, archivo, estado y acciones operativas principales.</p>
-          </div>
-        </div>
-      </CardHeader>
+    <Card className="overflow-hidden p-4">
+      <h2 className="text-sm font-medium text-text-muted">Historial de importaciones</h2>
       {batches.length === 0 ? (
-        <CardBody>
-          <EmptyState title="Sin importaciones todavía" description="Cuando subas tu primer CSV, aparecerá aquí con su estado y resumen de filas." />
-        </CardBody>
+        <p className="mt-3 text-sm text-text-muted">Sin importaciones todavía.</p>
       ) : (
-        <DataTable className="min-w-[760px]">
+        <DataTable className="mt-3 min-w-[640px]">
           <DataTableHead>
             <tr>
               <DataTableHeaderCell>Archivo</DataTableHeaderCell>
               <DataTableHeaderCell>Estado</DataTableHeaderCell>
-              <DataTableHeaderCell>Resumen</DataTableHeaderCell>
+              <DataTableHeaderCell>Filas</DataTableHeaderCell>
               <DataTableHeaderCell>Acción</DataTableHeaderCell>
               <DataTableHeaderCell>Fecha</DataTableHeaderCell>
             </tr>
           </DataTableHead>
           <tbody>
-            {batches.map((batch, i) => (
-              <tr
-                className={[
-                  "border-t border-border/40 transition-colors hover:bg-primary-light/30",
-                  i % 2 === 1 ? "bg-surface-muted/25" : "",
-                ].join(" ")}
-                key={batch.id}
-              >
-                <DataTableCell className="font-bold text-text-primary">
-                  <div className="flex items-center gap-2">
-                    <svg className="h-3.5 w-3.5 text-text-muted shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                    </svg>
-                    {batch.filename}
-                  </div>
-                </DataTableCell>
+            {batches.map((batch) => (
+              <tr key={batch.id} className="border-t border-border hover:bg-surface-muted/50">
+                <DataTableCell className="font-medium text-text-primary">{batch.filename}</DataTableCell>
                 <DataTableCell>
                   <StatusBadge status={formatStatus(batch.status)} tone={getImportStatusTone(batch.status)} />
                 </DataTableCell>
-                <DataTableCell className="text-[12px] text-text-muted">
-                  <span className="font-semibold text-text-primary">{batch.total_rows}</span> filas ·{" "}
-                  <span className="text-emerald-600 font-semibold">{batch.valid_rows}</span> válidas ·{" "}
-                  <span className={batch.invalid_rows > 0 ? "text-amber-600 font-semibold" : ""}>{batch.invalid_rows}</span> inválidas ·{" "}
-                  {batch.duplicate_rows} dup.
+                <DataTableCell className="text-sm text-text-muted">
+                  {batch.total_rows} total · {batch.valid_rows} válidas · {batch.invalid_rows} inválidas
                 </DataTableCell>
                 <DataTableCell>
-                  {batch.status === "validando" && batch.valid_rows > 0
-                    ? <ApplyImportButton batchId={batch.id} />
-                    : <span className="text-[12px] text-text-disabled">Sin acción</span>
-                  }
+                  {batch.status === "validando" && batch.valid_rows > 0 ? (
+                    <ApplyImportButton batchId={batch.id} />
+                  ) : (
+                    <span className="text-sm text-text-disabled">-</span>
+                  )}
                 </DataTableCell>
-                <DataTableCell className="text-[12px] text-text-muted">{formatDate(batch.created_at)}</DataTableCell>
+                <DataTableCell className="text-sm text-text-muted">{formatDate(batch.created_at)}</DataTableCell>
               </tr>
             ))}
           </tbody>
@@ -150,5 +113,5 @@ function formatStatus(value: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("es-MX", { dateStyle: "short" }).format(new Date(value));
 }

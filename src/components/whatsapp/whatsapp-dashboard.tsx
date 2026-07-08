@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import { Metric } from "@/components/ui/metric";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { DeliveryBadge } from "@/components/whatsapp/status-badges";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 type Stats = {
   sentToday: number;
@@ -18,30 +19,23 @@ type RecentMessage = {
   employee_id: string;
   nombre: string | null;
   apellidos: string | null;
-  rfc: string | null;
   message_type: string;
   delivery_status: string | null;
   created_at: string | null;
-  error_message: string | null;
 };
 
 const fmtDate = (d: string | null) =>
-  d ? new Intl.DateTimeFormat("es-MX", { dateStyle: "short", timeStyle: "short" }).format(new Date(d)) : "-";
+  d ? new Intl.DateTimeFormat("es-MX", { dateStyle: "short" }).format(new Date(d)) : "-";
 
-function StatCard({
-  label, value, sub, color,
-}: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">{label}</p>
-      <p className={`mt-2 text-3xl font-bold ${color ?? "text-text-primary"}`}>{value}</p>
-      {sub && <p className="mt-1 text-xs text-text-muted">{sub}</p>}
-    </div>
-  );
+function getDeliveryTone(status: string | null) {
+  const s = status ?? "unknown";
+  if (s === "failed") return "danger";
+  if (["delivered", "read", "click"].includes(s)) return "success";
+  return "neutral";
 }
 
 function SkeletonCard() {
-  return <div className="h-24 animate-pulse rounded-2xl bg-surface-muted" />;
+  return <div className="h-20 animate-pulse rounded-xl bg-surface-muted" />;
 }
 
 export function WhatsAppDashboard() {
@@ -70,45 +64,29 @@ function WhatsAppDashboardInner() {
 
   useEffect(() => {
     let isCancelled = false;
-    
-    // Wrap synchronous state updates in a microtask to avoid the lint error
     Promise.resolve().then(() => {
       if (!isCancelled) {
         setLoading(true);
         setError(null);
       }
     });
-    
     loadStats()
-      .catch((err) => {
-        if (!isCancelled) {
-          setError(err.message);
-        }
-      })
-      .finally(() => {
-        if (!isCancelled) {
-          setLoading(false);
-        }
-      });
-      
-    return () => {
-      isCancelled = true;
-    };
+      .catch((err) => { if (!isCancelled) setError(err.message); })
+      .finally(() => { if (!isCancelled) setLoading(false); });
+    return () => { isCancelled = true; };
   }, [loadStats]);
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
-        <p className="font-semibold text-red-800">{error}</p>
-        <button 
+      <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <p>{error}</p>
+        <button
           onClick={() => {
             setLoading(true);
             setError(null);
-            loadStats()
-              .catch((err) => setError(err.message))
-              .finally(() => setLoading(false));
-          }} 
-          className="mt-2 text-sm font-semibold text-red-600 underline"
+            loadStats().catch((err) => setError(err.message)).finally(() => setLoading(false));
+          }}
+          className="mt-2 text-sm font-medium text-red-600 underline"
         >
           Reintentar
         </button>
@@ -118,140 +96,66 @@ function WhatsAppDashboardInner() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Métricas rápidas */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {loading ? (
-          <>
-            <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
-          </>
+          <><SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
         ) : (
           <>
-            <StatCard
-              label="Enviados hoy"
-              value={stats?.sentToday ?? 0}
-              sub="mensajes en el día"
-              color="text-primary"
-            />
-            <StatCard
-              label="Tasa de entrega"
-              value={`${stats?.deliveryRate ?? 0}%`}
-              sub="del total enviado"
-              color={
-                (stats?.deliveryRate ?? 0) >= 80
-                  ? "text-emerald-600"
-                  : (stats?.deliveryRate ?? 0) >= 50
-                    ? "text-amber-600"
-                    : "text-red-600"
-              }
-            />
-            <StatCard
-              label="Total entregados"
-              value={stats?.totalDelivered ?? 0}
-              sub="confirmados por Meta"
-              color="text-emerald-600"
-            />
-            <StatCard
-              label="Errores hoy"
-              value={stats?.errorsToday ?? 0}
-              sub="mensajes fallidos"
-              color={(stats?.errorsToday ?? 0) > 0 ? "text-red-600" : "text-text-muted"}
-            />
+            <Metric label="Enviados hoy" value={stats?.sentToday ?? 0} />
+            <Metric label="Tasa de entrega" value={`${stats?.deliveryRate ?? 0}%`} />
+            <Metric label="Entregados" value={stats?.totalDelivered ?? 0} />
+            <Metric label="Errores hoy" value={stats?.errorsToday ?? 0} tone={(stats?.errorsToday ?? 0) > 0 ? "danger" : "neutral"} />
           </>
         )}
       </div>
 
-      {/* Accesos rápidos */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {[
-          { href: "/whatsapp/send", icon: "send", label: "Envío masivo", desc: "Envía contratos a múltiples empleados" },
-          { href: "/whatsapp/history", icon: "history", label: "Historial de envíos", desc: "Revisa todos los envíos masivos" },
-          { href: "/settings/whatsapp/templates", icon: "template", label: "Templates", desc: "Sincroniza templates de Meta" },
+          { href: "/whatsapp/send", label: "Envío masivo" },
+          { href: "/whatsapp/history", label: "Historial" },
+          { href: "/settings/whatsapp/templates", label: "Templates" },
         ].map((item) => (
           <Link
             key={item.href}
             href={item.href}
-            className="group rounded-2xl border border-border bg-surface p-5 shadow-sm transition-all hover:border-primary hover:shadow-md hover:shadow-primary/10"
+            className="rounded-xl border border-border bg-surface p-4 text-sm font-medium text-text-primary transition hover:border-primary"
           >
-            <div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-primary-light">
-              <QuickIcon name={item.icon} />
-            </div>
-            <p className="font-semibold text-text-primary group-hover:text-primary">{item.label}</p>
-            <p className="mt-0.5 text-sm text-text-muted">{item.desc}</p>
+            {item.label}
           </Link>
         ))}
       </div>
 
-      {/* Actividad reciente */}
-      <Card>
-        <CardHeader className="flex items-center justify-between">
-          <div>
-            <h3 className="text-h2 font-semibold text-text-primary">Actividad reciente</h3>
-            <p className="text-sm text-text-muted">Últimos 20 mensajes enviados vía WhatsApp API</p>
-          </div>
-          <Link
-            href="/whatsapp/history"
-            className="text-sm font-semibold text-primary hover:underline"
-          >
-            Ver historial completo →
+      <Card className="p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-text-muted">Actividad reciente</h3>
+          <Link href="/whatsapp/history" className="text-sm font-medium text-primary hover:underline">
+            Ver historial
           </Link>
-        </CardHeader>
-        <CardBody className="p-0">
+        </div>
+        <div className="mt-3 divide-y divide-border">
           {loading ? (
-            <div className="divide-y divide-border">
+            <div className="space-y-2">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="flex items-center gap-4 px-6 py-4">
-                  <div className="h-4 w-1/3 animate-pulse rounded bg-surface-muted" />
-                  <div className="h-4 w-1/4 animate-pulse rounded bg-surface-muted" />
-                  <div className="ml-auto h-5 w-16 animate-pulse rounded-full bg-surface-muted" />
-                </div>
+                <div key={i} className="h-8 animate-pulse rounded bg-surface-muted" />
               ))}
             </div>
           ) : recent.length === 0 ? (
-            <div className="px-6 py-10 text-center text-sm text-text-muted">
-              No hay mensajes enviados todavía.
-            </div>
+            <p className="py-4 text-sm text-text-muted">No hay mensajes enviados todavía.</p>
           ) : (
-            <div className="divide-y divide-border">
-              {recent.map((msg) => (
-                <div key={msg.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 hover:bg-surface-muted/40">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-text-primary text-sm">
-                      {[msg.nombre, msg.apellidos].filter(Boolean).join(" ") || "—"}
-                    </p>
-                    <p className="text-xs text-text-muted font-mono">{msg.rfc ?? "—"}</p>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-text-muted">
-                    <span>{msg.message_type}</span>
-                    <span>{fmtDate(msg.created_at)}</span>
-                    <DeliveryBadge status={msg.delivery_status} />
-                  </div>
+            recent.map((msg) => (
+              <div key={msg.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
+                <span className="text-text-primary">
+                  {[msg.nombre, msg.apellidos].filter(Boolean).join(" ") || "—"}
+                </span>
+                <div className="flex items-center gap-3 text-text-muted">
+                  <span>{fmtDate(msg.created_at)}</span>
+                  <StatusBadge status={msg.delivery_status || "-"} tone={getDeliveryTone(msg.delivery_status)} />
                 </div>
-              ))}
-            </div>
+              </div>
+            ))
           )}
-        </CardBody>
+        </div>
       </Card>
     </div>
-  );
-}
-
-function QuickIcon({ name }: { name: string }) {
-  const cls = "h-5 w-5 text-primary";
-  if (name === "send")
-    return (
-      <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-      </svg>
-    );
-  if (name === "history")
-    return (
-      <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    );
-  return (
-    <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-    </svg>
   );
 }
