@@ -20,8 +20,11 @@ export const REQUIRED_COLUMNS = [
   "Lugar de Origen",
   "Fecha de Nacimiento",
   "Domicilio",
-  "Estatus P/ esta Q",
   "Estatus Conversión",
+] as const;
+
+export const OPTIONAL_COLUMNS = [
+  "Estatus P/ esta Q",
   "Estatus de Cleinte",
 ] as const;
 
@@ -57,7 +60,7 @@ export type PreparedImport = {
   };
 };
 
-const HEADER_ALIASES = new Map<string, RequiredColumn>([
+const HEADER_ALIASES = new Map<string, string>([
   ["nombre", "Nombre"],
   ["apellido paterno", "Apellido Paterno"],
   ["apellido materno", "Apellido Materno"],
@@ -255,9 +258,9 @@ function normalizeRecord(record: ParsedCsvRecord) {
     lugar_origen: record["Lugar de Origen"]?.trim() || null,
     fecha_nacimiento: normalizeDate(record["Fecha de Nacimiento"]),
     domicilio: record.Domicilio?.trim() || null,
-    estatus_p_esta_q: record["Estatus P/ esta Q"]?.trim() ?? "",
+    estatus_p_esta_q: readOptionalString(record, "Estatus P/ esta Q"),
     estatus_conversion: estatusConversion,
-    estatus_cliente: record["Estatus de Cleinte"]?.trim() ?? "",
+    estatus_cliente: readOptionalString(record, "Estatus de Cleinte"),
     is_eligible: ELIGIBLE_CONVERSION_STATUSES.has(estatusConversion),
   };
 }
@@ -271,6 +274,9 @@ function onlyDigits(value: string | undefined) {
   return digits || null;
 }
 
+function readOptionalString(record: Record<string, string>, key: string): string | null {
+  return record[key]?.trim() || null;
+}
 
 function normalizeMoney(value: string | undefined) {
   if (!value?.trim()) {

@@ -55,10 +55,11 @@
 - Si el mismo RFC llega con cambios relevantes, crear nueva version de oferta y conservar historial.
 - Filas sin RFC, telefono o CLABE no pasan a tablas operativas; quedan como invalidas para backoffice.
 
-## Columnas Del Archivo Fuente
+## Columnas Del Archivo Fuente (requeridas)
 
 - `Nombre`
-- `Apellidos`
+- `Apellido Paterno`
+- `Apellido Materno`
 - `Monto Prestamo Autorizado`
 - `Empleador`
 - `Clabe`
@@ -68,6 +69,14 @@
 - `CP según CSF`
 - `Teléfono`
 - `Email`
-- `Estatus P/ esta Q`
+- `Estado Civil`
+- `Nacionalidad`
+- `Lugar de Origen`
+- `Fecha de Nacimiento`
+- `Domicilio`
 - `Estatus Conversión`
-- `Estatus de Cleinte`
+
+## Columnas Del Archivo Fuente (opcionales)
+
+- `Estatus P/ esta Q` (se guarda como referencia/auditoria si viene)
+- `Estatus de Cleinte` (se guarda como referencia/auditoria si viene)

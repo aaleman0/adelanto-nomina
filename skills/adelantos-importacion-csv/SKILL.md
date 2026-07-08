@@ -31,10 +31,11 @@ Usar esta skill para convertir archivos CSV de Excel o Google Sheets en datos co
 - Convertir montos a decimal de BD, no a texto.
 - Guardar valores originales cuando haya normalizacion sensible.
 
-## Columnas Minimas
+## Columnas Minimas (requeridas)
 
 - `Nombre`
-- `Apellidos`
+- `Apellido Paterno`
+- `Apellido Materno`
 - `Monto Prestamo Autorizado`
 - `Empleador`
 - `Clabe`
@@ -44,9 +45,17 @@ Usar esta skill para convertir archivos CSV de Excel o Google Sheets en datos co
 - `CP según CSF`
 - `Teléfono`
 - `Email`
-- `Estatus P/ esta Q`
+- `Estado Civil`
+- `Nacionalidad`
+- `Lugar de Origen`
+- `Fecha de Nacimiento`
+- `Domicilio`
 - `Estatus Conversión`
-- `Estatus de Cleinte`
+
+## Columnas Opcionales
+
+- `Estatus P/ esta Q` (se guarda como referencia/auditoria si viene)
+- `Estatus de Cleinte` (se guarda como referencia/auditoria si viene)
 
 ## Elegibilidad Inicial
 
