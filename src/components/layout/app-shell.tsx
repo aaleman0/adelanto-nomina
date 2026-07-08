@@ -106,28 +106,17 @@ function UserMenu({
 
 export function PageHeader({
   title = "Panel Operativo",
-  eyebrow = "Backoffice Adelantos",
-  description = "Control interno para importaciones, contratos y seguimiento operativo.",
   action,
 }: {
   title?: string;
-  eyebrow?: string;
-  description?: string;
   action?: ReactNode;
 }) {
   return (
-    <header className="flex flex-col gap-4 rounded-2xl border border-primary-border bg-white px-6 py-6 shadow-sm md:flex-row md:items-center md:justify-between">
-      <div>
-        <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary-light px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-          {eyebrow}
-        </span>
-        <h1 className="mt-3 text-2xl font-bold tracking-tight text-text-primary">
-          {title}
-        </h1>
-        <p className="mt-1.5 max-w-2xl text-[13px] text-text-muted">{description}</p>
-      </div>
-      {action ? <div className="flex shrink-0 items-center gap-2 w-full md:w-auto">{action}</div> : null}
+    <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <h1 className="text-xl font-semibold tracking-tight text-text-primary">
+        {title}
+      </h1>
+      {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
     </header>
   );
 }
@@ -135,21 +124,16 @@ export function PageHeader({
 export function PlaceholderPage({ title }: { title: string }) {
   return (
     <AppShell>
-      <PageHeader title={title} description="Módulo reservado para una siguiente fase." />
-      <section className="rounded-2xl border border-dashed border-primary-border bg-surface p-10 text-sm text-text-muted text-center">
-        <div className="mx-auto max-w-sm">
-          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-primary-light">
-            <svg className="h-7 w-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <p className="font-semibold text-text-primary">Próximamente</p>
-          <p className="mt-1 text-text-muted">Esta sección queda como placeholder; no se implementan usuarios, permisos ni configuración todavía.</p>
-          <div className="mt-5">
-            <Link className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-white shadow-sm shadow-primary/25 transition hover:bg-primary-hover" href="/">
-              Volver al dashboard
-            </Link>
-          </div>
+      <PageHeader title={title} />
+      <section className="rounded-xl border border-dashed border-border bg-surface py-12 text-center">
+        <p className="text-text-muted">Módulo en desarrollo.</p>
+        <div className="mt-4">
+          <Link
+            className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-white transition hover:bg-primary-hover"
+            href="/"
+          >
+            Volver al dashboard
+          </Link>
         </div>
       </section>
     </AppShell>

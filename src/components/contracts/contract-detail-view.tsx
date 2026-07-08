@@ -3,7 +3,7 @@ import {
   regenerateContractLinkAction,
   retryContractFlowAction,
 } from "@/app/contracts/actions";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { CopyLinkButton } from "@/components/ui/copy-link-button";
 import { Metric } from "@/components/ui/metric";
@@ -14,8 +14,7 @@ import type { ContractTimelineRow } from "@/lib/backoffice/contract-detail";
 import { MessageHistory } from "@/components/contracts/message-history";
 
 const dateFormatter = new Intl.DateTimeFormat("es-MX", {
-  dateStyle: "medium",
-  timeStyle: "short",
+  dateStyle: "short",
 });
 
 export function ContractDetailView({

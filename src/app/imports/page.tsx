@@ -28,11 +28,7 @@ export default async function ImportsPage() {
 
   return (
     <AppShell>
-      <PageHeader
-        title="Importar empleados y ofertas"
-        eyebrow="Importaciones"
-        description="Flujo guiado para subir CSV, validar datos y aplicar filas válidas sin depender de personal técnico."
-      />
+      <PageHeader title="Importaciones" />
       {importsResult.setupError ? (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
           <div className="flex items-center gap-2">

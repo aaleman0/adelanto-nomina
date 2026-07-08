@@ -41,10 +41,10 @@ function buildPageWindows(page: number, totalPages: number): Array<number | "...
 }
 
 const baseBtnCls =
-  "inline-flex h-8 min-w-[2rem] items-center justify-center rounded-lg border px-2.5 text-[12px] font-semibold transition";
+  "inline-flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2.5 text-xs font-medium transition";
 
-const activeBtnCls = `${baseBtnCls} border-primary bg-primary text-white shadow-sm shadow-primary/20`;
-const defaultBtnCls = `${baseBtnCls} border-border bg-surface text-text-muted hover:border-primary/40 hover:text-text-primary`;
+const activeBtnCls = `${baseBtnCls} border-primary bg-primary text-white`;
+const defaultBtnCls = `${baseBtnCls} border-border bg-surface text-text-muted hover:border-primary hover:text-text-primary`;
 const disabledBtnCls = `${baseBtnCls} border-border bg-surface-muted text-text-disabled cursor-not-allowed pointer-events-none`;
 
 export function PaginationControls({

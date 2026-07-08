@@ -12,15 +12,16 @@ export default async function BulkDetailPage({
   return (
     <AppShell>
       <PageHeader
-        title="Detalle de envío masivo"
-        eyebrow="WhatsApp"
-        description="Estado de entrega por empleado en este envío masivo."
+        title="Detalle de envío"
         action={
           <Link
             href="/whatsapp/history"
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-5 text-sm font-semibold text-text-primary transition hover:bg-surface-muted"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-text-primary transition hover:bg-surface-muted"
           >
-            ← Volver al historial
+            <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            Volver
           </Link>
         }
       />

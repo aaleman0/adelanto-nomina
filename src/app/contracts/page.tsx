@@ -23,7 +23,7 @@ export default async function ContractsPage({ searchParams }: ContractsPageProps
 
   return (
     <AppShell>
-      <PageHeader title="Control de contratos" description="Vista operativa para identificar prioridades, revisar estados y entrar al detalle de cada empleado." />
+      <PageHeader title="Contratos" />
       {result.setupError ? (
         <section className="rounded-base border border-red-200 bg-red-50 p-5 text-sm text-red-800">
           <p className="font-semibold">No se pudo leer la vista de control de contratos</p>

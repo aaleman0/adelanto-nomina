@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Card, CardHeader } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   DataTable,
   DataTableCell,
@@ -12,103 +12,59 @@ import type { StatusTone } from "@/components/ui/status-badge";
 import type { ContractControlRow } from "@/lib/backoffice/contract-control";
 
 const dateFormatter = new Intl.DateTimeFormat("es-MX", {
-  dateStyle: "medium",
-  timeStyle: "short",
+  dateStyle: "short",
 });
 
 export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
   return (
     <Card className="overflow-hidden">
-      <CardHeader className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h2 className="text-[16px] font-bold text-text-primary">
-            Control de contratos
-          </h2>
-          <p className="text-[12px] text-text-muted mt-0.5">
-            Evidencia operativa de mensaje, solicitud, link, firma y tiempos.
-          </p>
-        </div>
-        <span className="inline-flex items-center rounded-lg bg-surface-muted px-3 py-1 text-[11px] font-bold text-text-muted border border-border/60">
-          {rows.length} registros visibles
-        </span>
-      </CardHeader>
-
       {/* Desktop table */}
       <div className="hidden lg:block">
         <DataTable className="w-full">
           <DataTableHead>
             <tr>
               <DataTableHeaderCell>Empleado</DataTableHeaderCell>
-              <DataTableHeaderCell>RFC</DataTableHeaderCell>
               <DataTableHeaderCell>Empleador</DataTableHeaderCell>
               <DataTableHeaderCell>Monto</DataTableHeaderCell>
-              <DataTableHeaderCell>Mensaje</DataTableHeaderCell>
-              <DataTableHeaderCell>Contrato</DataTableHeaderCell>
-              <DataTableHeaderCell>Vence link</DataTableHeaderCell>
-              <DataTableHeaderCell>Firmado</DataTableHeaderCell>
-              <DataTableHeaderCell>Detalle</DataTableHeaderCell>
+              <DataTableHeaderCell>Estado</DataTableHeaderCell>
+              <DataTableHeaderCell>Último movimiento</DataTableHeaderCell>
+              <DataTableHeaderCell />
             </tr>
           </DataTableHead>
           <tbody>
             {rows.length > 0 ? (
-              rows.map((row, i) => (
-                <tr
-                  className={[
-                    "border-t border-border/40 transition-colors hover:bg-primary-light/40",
-                    i % 2 === 1 ? "bg-surface-muted/30" : "",
-                  ].join(" ")}
-                  key={row.employee_id}
-                >
-                  <DataTableCell className="font-bold text-text-primary">
-                    {row.empleado || "-"}
+              rows.map((row) => (
+                <tr key={row.employee_id} className="border-t border-border hover:bg-surface-muted/50">
+                  <DataTableCell>
+                    <div>
+                      <p className="font-medium text-text-primary">{row.empleado || "-"}</p>
+                      <p className="text-xs text-text-muted">{row.rfc || "-"}</p>
+                    </div>
                   </DataTableCell>
-                  <DataTableCell className="text-text-muted">{row.rfc || "-"}</DataTableCell>
                   <DataTableCell className="text-text-muted">{row.empleador || "-"}</DataTableCell>
-                  <DataTableCell className="font-semibold text-text-primary">{formatMoney(row.monto_prestamo_autorizado)}</DataTableCell>
+                  <DataTableCell className="font-medium text-text-primary">{formatMoney(row.monto_prestamo_autorizado)}</DataTableCell>
                   <DataTableCell>
-                    <div className="flex flex-col gap-1">
-                      <StatusBadge
-                        status={formatStatus(row.message_status)}
-                        tone={getMessageStatusTone(row.message_status)}
-                      />
-                      <span className="text-[11px] text-text-muted">
-                        {formatDate(row.message_sent_at || row.message_clicked_at)}
-                      </span>
-                    </div>
+                    <StatusBadge
+                      status={formatStatus(row.operational_status)}
+                      tone={getOperationalStatusTone(row.operational_status)}
+                    />
                   </DataTableCell>
-                  <DataTableCell>
-                    <div className="flex flex-col gap-1">
-                      <StatusBadge
-                        status={formatStatus(row.operational_status)}
-                        tone={getOperationalStatusTone(row.operational_status)}
-                      />
-                      {row.easylex_contract_id ? (
-                        <span className="text-[11px] text-text-muted">
-                          {row.easylex_contract_id}
-                        </span>
-                      ) : null}
-                    </div>
-                  </DataTableCell>
-                  <DataTableCell className="text-[12px] text-text-muted">{formatDate(row.link_expires_at)}</DataTableCell>
-                  <DataTableCell className="text-[12px] text-text-muted">
-                    {formatDate(row.contract_signed_at || row.attempt_signed_at)}
+                  <DataTableCell className="text-sm text-text-muted">
+                    {formatDate(row.last_movement_at)}
                   </DataTableCell>
                   <DataTableCell>
                     <Link
-                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-primary-border bg-primary-light px-3 text-[11px] font-bold text-primary transition hover:bg-primary hover:text-white"
+                      className="text-sm font-medium text-primary hover:underline"
                       href={`/contracts/${row.employee_id}`}
                     >
                       Ver
-                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                      </svg>
                     </Link>
                   </DataTableCell>
                 </tr>
               ))
             ) : (
-              <DataTableEmpty colSpan={9}>
-                Todavía no hay empleados/ofertas para control de contratos.
+              <DataTableEmpty colSpan={6}>
+                Sin contratos para mostrar.
               </DataTableEmpty>
             )}
           </tbody>
@@ -119,31 +75,24 @@ export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
       <div className="grid gap-3 p-4 lg:hidden">
         {rows.length > 0 ? rows.map((row) => (
           <Link
-            className="group rounded-xl border border-border bg-surface p-4 transition-all hover:border-primary hover:shadow-md hover:-translate-y-0.5"
+            className="rounded-lg border border-border bg-surface p-4 text-sm hover:border-primary"
             href={`/contracts/${row.employee_id}`}
             key={row.employee_id}
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-bold text-text-primary group-hover:text-primary transition-colors">
-                  {row.empleado || "Empleado sin nombre"}
-                </p>
-                <p className="text-[12px] text-text-muted">{row.rfc || "Sin RFC"} · {formatMoney(row.monto_prestamo_autorizado)}</p>
+                <p className="font-medium text-text-primary">{row.empleado || "Empleado sin nombre"}</p>
+                <p className="text-text-muted">{row.empleador || "Sin empleador"} · {formatMoney(row.monto_prestamo_autorizado)}</p>
               </div>
-              <StatusBadge status={getPriorityLabel(row.operational_status)} tone={getPriorityTone(row.operational_status)} />
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <StatusBadge status={formatStatus(row.message_status)} tone={getMessageStatusTone(row.message_status)} />
               <StatusBadge status={formatStatus(row.operational_status)} tone={getOperationalStatusTone(row.operational_status)} />
             </div>
           </Link>
         )) : (
-          <div className="rounded-xl border border-dashed border-border p-8 text-center text-[13px] text-text-muted">
-            Todavía no hay empleados/ofertas para control de contratos.
-          </div>
+          <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-text-muted">
+            Sin contratos para mostrar.
+          </p>
         )}
       </div>
-
     </Card>
   );
 }
@@ -167,30 +116,9 @@ function formatStatus(value: string | null) {
   return value.replaceAll("_", " ");
 }
 
-function getMessageStatusTone(status: string | null): StatusTone {
-  if (status === "error") return "danger";
-  if (status === "click" || status === "enviado" || status === "entregado") return "success";
-  if (status === "pendiente_envio") return "warning";
-  return "neutral";
-}
-
 function getOperationalStatusTone(status: string): StatusTone {
   if (status === "error") return "danger";
   if (status === "firmado" || status === "contrato_generado") return "success";
   if (status === "link_expirado" || status === "pendiente_envio") return "warning";
-  return "neutral";
-}
-
-function getPriorityLabel(status: string) {
-  if (status === "error") return "Alta";
-  if (status === "link_expirado" || status === "contrato_en_proceso" || status === "pendiente_envio") return "Media";
-  if (status === "firmado" || status === "contrato_generado" || status === "mensaje_enviado") return "OK";
-  return "Neutra";
-}
-
-function getPriorityTone(status: string): StatusTone {
-  if (status === "error") return "danger";
-  if (status === "link_expirado" || status === "contrato_en_proceso" || status === "pendiente_envio") return "warning";
-  if (status === "firmado" || status === "contrato_generado" || status === "mensaje_enviado") return "success";
   return "neutral";
 }
