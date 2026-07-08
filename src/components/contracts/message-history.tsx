@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
-import { DataTable, DataTableCell, DataTableEmpty, DataTableHead, DataTableHeaderCell } from "@/components/ui/data-table";
+import { DataTable, DataTableCell, DataTableHead, DataTableHeaderCell } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 type WhatsAppMessage = {

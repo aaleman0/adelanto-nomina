@@ -132,7 +132,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
   const clearAll = useCallback(() => {
     writeStoredNotifications([]);
-  }, [notifications]);
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
