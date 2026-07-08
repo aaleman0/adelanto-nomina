@@ -6,11 +6,6 @@ import { join } from "node:path";
 const CREDENTIALS_PATH = join(process.cwd(), "google_oauth_client.json");
 const TOKEN_PATH = join(process.cwd(), "token.json");
 
-const SCOPES = [
-  "https://www.googleapis.com/auth/drive",
-  "https://www.googleapis.com/auth/documents",
-];
-
 export async function getGoogleAuthClient() {
   const credentialsRaw = await readFile(CREDENTIALS_PATH, "utf-8");
   const credentials = JSON.parse(credentialsRaw);
