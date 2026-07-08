@@ -87,8 +87,10 @@ function subscribeToStorage(callback: () => void) {
   };
 }
 
+const emptyServerSnapshot: Notification[] = [];
+
 function getServerSnapshot(): Notification[] {
-  return [];
+  return emptyServerSnapshot;
 }
 
 /* ─── Provider ─── */
