@@ -36,7 +36,6 @@ export default async function ContractsPage({ searchParams }: ContractsPageProps
         filters={filters}
         limit={result.limit}
         total={result.total}
-        visible={result.rows.length}
         page={result.page}
         totalPages={result.totalPages}
       />

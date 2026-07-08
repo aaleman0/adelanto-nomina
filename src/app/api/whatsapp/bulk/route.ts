@@ -11,11 +11,15 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { mode, importId, employeeIds, templateName } = body as {
+    const { mode, importId, employeeIds, templateName, buttonConfig } = body as {
       mode?: "import" | "manual";
       importId?: string;
       employeeIds?: string[];
       templateName?: string;
+      buttonConfig?: {
+        text: string;
+        url: string;
+      };
     };
 
     if (!mode || !["import", "manual"].includes(mode)) {
@@ -36,7 +40,7 @@ export async function POST(request: Request) {
     }
 
     // action === "send"
-    const result = await sendBulkMessages({ mode, importId, employeeIds, templateName });
+    const result = await sendBulkMessages({ mode, importId, employeeIds, templateName, buttonConfig });
     logger.info("whatsapp.bulk_send.completed", {
       bulkSendId: result.bulkSendId,
       mode,

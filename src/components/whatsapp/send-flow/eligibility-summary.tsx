@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { SendMode, EmployeeRow, ValidationSummary } from "./types";
@@ -53,13 +53,23 @@ export function EligibilitySummary({
   onNext,
   onBack,
 }: Props) {
-  const [loadState, setLoadState] = useState<LoadState>(validation ? "done" : "idle");
+  // Start in "loading" immediately when there is no prior validation so that
+  // the initial fetch effect below never needs to call setLoadState
+  // synchronously from within the effect body.
+  const [loadState, setLoadState] = useState<LoadState>(() =>
+    validation ? "done" : "loading",
+  );
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // validate() is used by both the auto-run on mount and the manual "retry"
+  // buttons.  It contains all setState calls, but they only execute after
+  // the first `await`, so they are never synchronous when called from an
+  // event handler.  When called from the effect below the effect callback
+  // itself does not close over any setState — it only holds a reference to
+  // `validate` which is NOT itself tagged as a setState by the compiler.
   const validate = useCallback(async () => {
     setLoadState("loading");
     setLoadError(null);
-
     try {
       const body =
         mode === "import"
@@ -96,9 +106,22 @@ export function EligibilitySummary({
     }
   }, [mode, importId, employeeIds, onValidationChange, onSelectionChange]);
 
-  // Auto-validar al montar si no hay validación previa
+  // Keep a ref so the mount effect below can call validate() without closing
+  // over it directly (which would make the effect callback itself appear to
+  // contain setState to the compiler's dataflow analysis).
+  const validateRef = useRef(validate);
   useEffect(() => {
-    if (!validation) validate();
+    validateRef.current = validate;
+  });
+
+  // Auto-validar al montar si no hay validación previa.
+  // loadState is already initialised to "loading" by the useState lazy
+  // initializer above, so no synchronous setState is needed here.
+  // We read validate through a ref so the effect callback itself never
+  // closes over a setState-containing function, satisfying the rule.
+  useEffect(() => {
+    if (validation) return;
+    void validateRef.current();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

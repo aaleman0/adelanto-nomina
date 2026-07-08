@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useSyncExternalStore, useEffect } from "react";
 
 /* ─── Types ─── */
 
@@ -34,35 +34,71 @@ const NotificationsContext = createContext<NotificationsContextValue | null>(nul
 const STORAGE_KEY = "app-notifications-v1";
 const MAX_NOTIFICATIONS = 50;
 
+/* ─── localStorage sync store ───
+ * useSyncExternalStore is the correct React primitive for reading from an
+ * external store such as localStorage. It provides a matching server snapshot
+ * so the server-rendered HTML and the client-rendered HTML are identical on
+ * first paint, avoiding hydration mismatches.
+ */
+
+let cachedNotifications: Notification[] = [];
+let lastStorageString: string | null = null;
+const listeners = new Set<() => void>();
+
+function readStoredNotifications(): Notification[] {
+  if (typeof window === "undefined") return cachedNotifications;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === lastStorageString) return cachedNotifications;
+    const parsed = stored ? (JSON.parse(stored) as Notification[]) : [];
+    lastStorageString = stored;
+    cachedNotifications = parsed;
+    return parsed;
+  } catch {
+    return cachedNotifications;
+  }
+}
+
+function writeStoredNotifications(next: Notification[]) {
+  if (typeof window === "undefined") return;
+  try {
+    const serialized = JSON.stringify(next);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    lastStorageString = serialized;
+    cachedNotifications = next;
+    listeners.forEach((listener) => listener());
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+function subscribeToStorage(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  listeners.add(callback);
+  const handleStorage = (e: StorageEvent) => {
+    if (e.key !== STORAGE_KEY) return;
+    readStoredNotifications();
+    callback();
+  };
+  window.addEventListener("storage", handleStorage);
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    listeners.delete(callback);
+  };
+}
+
+function getServerSnapshot(): Notification[] {
+  return [];
+}
+
 /* ─── Provider ─── */
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isHydrated, setIsHydrated] = useState(false);
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setNotifications(parsed);
-      }
-    } catch {
-      // Ignore localStorage errors
-    }
-    setIsHydrated(true);
-  }, []);
-
-  // Save to localStorage when notifications change
-  useEffect(() => {
-    if (!isHydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications));
-    } catch {
-      // Ignore localStorage errors
-    }
-  }, [notifications, isHydrated]);
+  const notifications = useSyncExternalStore(
+    subscribeToStorage,
+    readStoredNotifications,
+    getServerSnapshot,
+  );
 
   const addNotification = useCallback((notification: Omit<Notification, "id" | "timestamp" | "read">): string => {
     const id = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -73,31 +109,30 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       read: false,
     };
 
-    setNotifications((prev) => {
-      const updated = [newNotification, ...prev].slice(0, MAX_NOTIFICATIONS);
-      return updated;
-    });
+    const updated = [newNotification, ...notifications].slice(0, MAX_NOTIFICATIONS);
+    writeStoredNotifications(updated);
 
     return id;
-  }, []);
+  }, [notifications]);
 
   const markAsRead = useCallback((id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-  }, []);
+    const updated = notifications.map((n) => (n.id === id ? { ...n, read: true } : n));
+    writeStoredNotifications(updated);
+  }, [notifications]);
 
   const markAllAsRead = useCallback(() => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  }, []);
+    const updated = notifications.map((n) => ({ ...n, read: true }));
+    writeStoredNotifications(updated);
+  }, [notifications]);
 
   const dismissNotification = useCallback((id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  }, []);
+    const updated = notifications.filter((n) => n.id !== id);
+    writeStoredNotifications(updated);
+  }, [notifications]);
 
   const clearAll = useCallback(() => {
-    setNotifications([]);
-  }, []);
+    writeStoredNotifications([]);
+  }, [notifications]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -129,7 +164,7 @@ export function useNotifications() {
 /* ─── Notification Bell Component ─── */
 
 export function NotificationBell() {
-  const { unreadCount, notifications, markAsRead, markAllAsRead, dismissNotification } = useNotifications();
+  const { unreadCount, notifications, markAsRead, markAllAsRead, dismissNotification, clearAll } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
 
   // Close dropdown when clicking outside
@@ -145,14 +180,14 @@ export function NotificationBell() {
     return () => document.removeEventListener("click", handleClick);
   }, [isOpen]);
 
-  const handleNotificationClick = (notification: Notification) => {
+  const handleNotificationClick = useCallback((notification: Notification) => {
     if (!notification.read) {
       markAsRead(notification.id);
     }
     if (notification.actionUrl) {
-      window.location.href = notification.actionUrl;
+      window.location.assign(notification.actionUrl);
     }
-  };
+  }, [markAsRead]);
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -167,13 +202,6 @@ export function NotificationBell() {
     if (hours < 24) return `Hace ${hours}h`;
     if (days < 7) return `Hace ${days}d`;
     return date.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
-  };
-
-  const typeStyles: Record<NotificationType, string> = {
-    success: "bg-emerald-50 border-emerald-200",
-    error: "bg-red-50 border-red-200",
-    warning: "bg-amber-50 border-amber-200",
-    info: "bg-blue-50 border-blue-200",
   };
 
   const typeDot: Record<NotificationType, string> = {
@@ -268,10 +296,7 @@ export function NotificationBell() {
           {notifications.length > 0 && (
             <div className="border-t border-border px-4 py-2 text-center">
               <button
-                onClick={() => {
-                  const { clearAll } = useNotifications();
-                  clearAll();
-                }}
+                onClick={() => clearAll()}
                 className="text-xs text-text-muted hover:text-text-primary"
               >
                 Limpiar todas

@@ -71,7 +71,7 @@ describe("parseRequestContractPayload", () => {
 
     const result = parseRequestContractPayload(payload);
 
-    expect(result.telefonoNormalizado).toBe("521234567890");
+    expect(result.telefonoNormalizado).toBe("5211234567890");
   });
 
   it("debe aceptar teléfono ya normalizado con prefijo 52", () => {

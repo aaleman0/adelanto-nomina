@@ -4,7 +4,8 @@ import { normalizePhoneFromCsv } from "@/lib/whatsapp/phone-utils";
 
 export const REQUIRED_COLUMNS = [
   "Nombre",
-  "Apellidos",
+  "Apellido Paterno",
+  "Apellido Materno",
   "Monto Prestamo Autorizado",
   "Empleador",
   "Clabe",
@@ -14,8 +15,16 @@ export const REQUIRED_COLUMNS = [
   "CP según CSF",
   "Teléfono",
   "Email",
-  "Estatus P/ esta Q",
+  "Estado Civil",
+  "Nacionalidad",
+  "Lugar de Origen",
+  "Fecha de Nacimiento",
+  "Domicilio",
   "Estatus Conversión",
+] as const;
+
+export const OPTIONAL_COLUMNS = [
+  "Estatus P/ esta Q",
   "Estatus de Cleinte",
 ] as const;
 
@@ -51,9 +60,11 @@ export type PreparedImport = {
   };
 };
 
-const HEADER_ALIASES = new Map<string, RequiredColumn>([
+const HEADER_ALIASES = new Map<string, string>([
   ["nombre", "Nombre"],
-  ["apellidos", "Apellidos"],
+  ["apellido paterno", "Apellido Paterno"],
+  ["apellido materno", "Apellido Materno"],
+  ["apellidos", "Apellido Paterno"],
   ["monto prestamo autorizado", "Monto Prestamo Autorizado"],
   ["monto préstamo autorizado", "Monto Prestamo Autorizado"],
   ["empleador", "Empleador"],
@@ -66,6 +77,11 @@ const HEADER_ALIASES = new Map<string, RequiredColumn>([
   ["teléfono", "Teléfono"],
   ["telefono", "Teléfono"],
   ["email", "Email"],
+  ["estado civil", "Estado Civil"],
+  ["nacionalidad", "Nacionalidad"],
+  ["lugar de origen", "Lugar de Origen"],
+  ["fecha de nacimiento", "Fecha de Nacimiento"],
+  ["domicilio", "Domicilio"],
   ["estatus p/ esta q", "Estatus P/ esta Q"],
   ["estatus conversión", "Estatus Conversión"],
   ["estatus conversion", "Estatus Conversión"],
@@ -115,6 +131,34 @@ export function prepareCsvImport(csvText: string): PreparedImport {
 
     if (!normalized.empleador) {
       errors.push("Empleador requerido.");
+    }
+
+    if (!normalized.apellido_paterno) {
+      errors.push("Apellido Paterno requerido.");
+    }
+
+    if (!normalized.apellido_materno) {
+      errors.push("Apellido Materno requerido.");
+    }
+
+    if (!normalized.estado_civil) {
+      errors.push("Estado Civil requerido.");
+    }
+
+    if (!normalized.nacionalidad) {
+      errors.push("Nacionalidad requerido.");
+    }
+
+    if (!normalized.lugar_origen) {
+      errors.push("Lugar de Origen requerido.");
+    }
+
+    if (!normalized.fecha_nacimiento) {
+      errors.push("Fecha de Nacimiento requerido.");
+    }
+
+    if (!normalized.domicilio) {
+      errors.push("Domicilio requerido.");
     }
 
     if (!normalized.estatus_conversion) {
@@ -190,9 +234,15 @@ function normalizeRecord(record: ParsedCsvRecord) {
   const estatusConversion = normalizeStatus(record["Estatus Conversión"]);
   const monto = normalizeMoney(record["Monto Prestamo Autorizado"]);
 
+  const apellidoPaterno = record["Apellido Paterno"]?.trim() ?? "";
+  const apellidoMaterno = record["Apellido Materno"]?.trim() ?? "";
+  const apellidos = [apellidoPaterno, apellidoMaterno].filter(Boolean).join(" ") || null;
+
   return {
     nombre: record.Nombre?.trim() ?? "",
-    apellidos: record.Apellidos?.trim() ?? "",
+    apellido_paterno: apellidoPaterno || null,
+    apellido_materno: apellidoMaterno || null,
+    apellidos,
     monto_prestamo_autorizado: monto,
     empleador: record.Empleador?.trim() ?? "",
     clabe,
@@ -203,9 +253,14 @@ function normalizeRecord(record: ParsedCsvRecord) {
     telefono,
     telefono_normalizado: normalizePhoneFromCsv(telefono),
     email: record.Email?.trim().toLowerCase() || null,
-    estatus_p_esta_q: record["Estatus P/ esta Q"]?.trim() ?? "",
+    estado_civil: record["Estado Civil"]?.trim() || null,
+    nacionalidad: record.Nacionalidad?.trim() || null,
+    lugar_origen: record["Lugar de Origen"]?.trim() || null,
+    fecha_nacimiento: normalizeDate(record["Fecha de Nacimiento"]),
+    domicilio: record.Domicilio?.trim() || null,
+    estatus_p_esta_q: readOptionalString(record, "Estatus P/ esta Q"),
     estatus_conversion: estatusConversion,
-    estatus_cliente: record["Estatus de Cleinte"]?.trim() ?? "",
+    estatus_cliente: readOptionalString(record, "Estatus de Cleinte"),
     is_eligible: ELIGIBLE_CONVERSION_STATUSES.has(estatusConversion),
   };
 }
@@ -219,6 +274,9 @@ function onlyDigits(value: string | undefined) {
   return digits || null;
 }
 
+function readOptionalString(record: Record<string, string>, key: string): string | null {
+  return record[key]?.trim() || null;
+}
 
 function normalizeMoney(value: string | undefined) {
   if (!value?.trim()) {
@@ -246,6 +304,32 @@ function normalizeStatus(value: string | undefined) {
   }
 
   return normalized || "";
+}
+
+function normalizeDate(value: string | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+
+  // Already ISO-ish: YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  // Common Latin American formats: DD/MM/YYYY or DD-MM-YYYY
+  const match = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (!match) {
+    return raw || null;
+  }
+
+  const day = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return raw || null;
+  }
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function hashJson(value: unknown) {

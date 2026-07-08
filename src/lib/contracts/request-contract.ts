@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { normalizePhoneFromCsv } from "@/lib/whatsapp/phone-utils";
+import { createEasyLexAttempt } from "@/lib/contracts/create-easylex-attempt";
+import { easylexEnv } from "@/lib/env";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -22,12 +25,19 @@ type Employee = {
   rfc: string;
   curp: string | null;
   nombre: string;
+  apellido_paterno: string | null;
+  apellido_materno: string | null;
   apellidos: string | null;
   cp_csf: string | null;
   telefono: string;
   telefono_normalizado: string;
   email: string | null;
   empleador: string | null;
+  estado_civil: string | null;
+  nacionalidad: string | null;
+  lugar_origen: string | null;
+  fecha_nacimiento: string | null;
+  domicilio: string | null;
 };
 
 type AdvanceOffer = {
@@ -252,7 +262,17 @@ export async function requestContractFromWhatsApp(
 
   const latestAttempt = await getLatestAttempt(contractRequest.id);
   const reusableAttempt = getReusableAttempt(latestAttempt);
-  const attempt = reusableAttempt ?? (await regenerateMockAttempt(contractRequest, latestAttempt));
+
+  let attempt: ContractAttempt;
+  const isReused = Boolean(reusableAttempt);
+
+  if (reusableAttempt) {
+    attempt = reusableAttempt;
+  } else if (easylexEnv.isConfigured) {
+    attempt = await createEasyLexAttempt(contractRequest, employee, offer, bankAccount, latestAttempt, correlationId);
+  } else {
+    attempt = await regenerateMockAttempt(contractRequest, latestAttempt);
+  }
 
   await updateContractRequestLinkGenerated(contractRequest.id);
   await recordWhatsAppInteraction({
@@ -264,12 +284,14 @@ export async function requestContractFromWhatsApp(
     metadata: {
       result_status: "contract_ready",
       attempt_id: attempt.id,
-      reused_link: Boolean(reusableAttempt),
+      reused_link: isReused,
     },
   });
 
+  const isEasyLex = easylexEnv.isConfigured && !isReused;
+
   await createAuditEvent({
-    eventName: reusableAttempt
+    eventName: isReused
       ? "contract.link_reused"
       : latestAttempt
         ? "contract.link_regenerated"
@@ -278,14 +300,17 @@ export async function requestContractFromWhatsApp(
     entityId: attempt.id,
     employeeId: employee.id,
     source: "backend",
-    summary: reusableAttempt
-      ? "Link mock vigente reutilizado."
-      : "Link mock de firma generado por 2 horas.",
+    summary: isReused
+      ? "Link vigente reutilizado."
+      : isEasyLex
+        ? "Contrato creado en EasyLex y link de firma generado."
+        : "Link mock de firma generado por 2 horas.",
     metadata: {
       contract_request_id: contractRequest.id,
       offer_id: offer.id,
       expires_at: attempt.expires_at,
       correlation_id: correlationId,
+      provider: isEasyLex ? "easylex" : "mock",
     },
   });
 
@@ -312,7 +337,7 @@ async function getEmployeeByRfc(rfc: string) {
   const { data, error } = await supabase
     .from("employees")
     .select(
-      "id, rfc, curp, nombre, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador",
+      "id, rfc, curp, nombre, apellido_paterno, apellido_materno, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador, estado_civil, nacionalidad, lugar_origen, fecha_nacimiento, domicilio",
     )
     .eq("rfc", rfc)
     .maybeSingle();
@@ -690,21 +715,7 @@ function normalizeRfc(value: unknown) {
 }
 
 function normalizePhone(value: string | null) {
-  const digits = value?.replace(/\D/g, "") ?? "";
-
-  if (!digits) {
-    return null;
-  }
-
-  if (digits.length === 10) {
-    return `52${digits}`;
-  }
-
-  if (digits.length === 12 && digits.startsWith("52")) {
-    return digits;
-  }
-
-  return digits.length >= 10 && digits.length <= 15 ? digits : null;
+  return normalizePhoneFromCsv(value ?? undefined);
 }
 
 function sanitizePayload(payload: JsonRecord) {

@@ -39,9 +39,18 @@ export type SyncResult = {
 export async function syncTemplatesFromMeta(): Promise<SyncResult> {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const businessAccountId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
 
   if (!accessToken || !phoneNumberId) {
     return { ok: false, synced: 0, error: "Credenciales de WhatsApp no configuradas." };
+  }
+
+  if (!businessAccountId) {
+    return {
+      ok: false,
+      synced: 0,
+      error: "Falta WHATSAPP_BUSINESS_ACCOUNT_ID para sincronizar plantillas de WhatsApp.",
+    };
   }
 
   try {
@@ -56,9 +65,9 @@ export async function syncTemplatesFromMeta(): Promise<SyncResult> {
       return { ok: false, synced: 0, error: phoneJson?.error?.message ?? `HTTP ${phoneRes.status}` };
     }
 
-    // Obtener templates directamente del phone number id (el endpoint correcto de Cloud API)
+    // Obtener templates desde el WhatsApp Business Account ID.
     const tmplRes = await fetch(
-      `${BASE_URL}/${phoneNumberId}/message_templates?fields=id,name,status,category,language,components&limit=100`,
+      `${BASE_URL}/${businessAccountId}/message_templates?fields=id,name,status,category,language,components&limit=100`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
     const tmplJson = await tmplRes.json();

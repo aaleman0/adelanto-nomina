@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     let msgQuery = supabase
       .from("whatsapp_contract_messages")
       .select(
-        "id, employee_id, delivery_status, status, error_message, created_at, wa_message_id, employees!inner(nombre, apellidos, rfc, telefono)",
+        "id, employee_id, delivery_status, status, error_message, created_at, wa_message_id, employees!inner(nombre, apellidos, rfc, telefono_normalizado)",
         { count: "exact" },
       )
       .eq("bulk_send_id", id)
@@ -60,6 +60,31 @@ export async function GET(request: Request) {
 
     if (msgError) throw msgError;
 
+    // Log para diagnóstico: verificar consistencia entre bulk_send y messages
+    if (bulkSend.sent_count > 0 && (!messages || messages.length === 0)) {
+      logger.error("whatsapp.bulk_detail.inconsistent_data", {
+        bulkSendId: id,
+        sent_count: bulkSend.sent_count,
+        failed_count: bulkSend.failed_count,
+        messages_count: messages?.length ?? 0,
+        statusFilter,
+        searchQuery,
+      });
+    }
+
+    // Log informativo con datos de la consulta
+    logger.info("whatsapp.bulk_detail.query", {
+      bulkSendId: id,
+      sent_count: bulkSend.sent_count,
+      failed_count: bulkSend.failed_count,
+      messages_returned: messages?.length ?? 0,
+      total_count: count,
+      page,
+      pageSize,
+      statusFilter,
+      searchQuery,
+    });
+
     return NextResponse.json({
       ok: true,
       bulkSend,
@@ -68,7 +93,7 @@ export async function GET(request: Request) {
           nombre: string | null;
           apellidos: string | null;
           rfc: string | null;
-          telefono: string | null;
+          telefono_normalizado: string | null;
         };
         return {
           id: m.id,
@@ -76,7 +101,7 @@ export async function GET(request: Request) {
           nombre: emp?.nombre ?? null,
           apellidos: emp?.apellidos ?? null,
           rfc: emp?.rfc ?? null,
-          telefono: emp?.telefono ?? null,
+          telefono: emp?.telefono_normalizado ?? null, // Devolver telefono_normalizado como telefono
           delivery_status: m.delivery_status,
           status: m.status,
           error_message: m.error_message,

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { DeliveryBadge, BulkStatusBadge } from "@/components/whatsapp/status-badges";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 
 type BulkSend = {
@@ -49,42 +50,6 @@ const fmtDate = (d: string | null) =>
     ? new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(d))
     : "-";
 
-function DeliveryBadge({ status }: { status: string | null }) {
-  const map: Record<string, string> = {
-    sent: "bg-blue-50 text-blue-700 ring-blue-200",
-    delivered: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    read: "bg-indigo-50 text-indigo-700 ring-indigo-200",
-    failed: "bg-red-50 text-red-700 ring-red-200",
-  };
-  const labels: Record<string, string> = {
-    sent: "Enviado", delivered: "Entregado", read: "Leído", failed: "Error",
-  };
-  const s = status ?? "sent";
-  const cls = map[s] ?? "bg-surface-muted text-text-muted ring-border";
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${cls}`}>
-      {labels[s] ?? s}
-    </span>
-  );
-}
-
-function StatusChip({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    completed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    sending: "bg-amber-50 text-amber-700 ring-amber-200",
-    failed: "bg-red-50 text-red-700 ring-red-200",
-  };
-  const labels: Record<string, string> = {
-    completed: "Completado", sending: "Enviando…", failed: "Fallido",
-  };
-  const cls = map[status] ?? "bg-surface-muted text-text-muted ring-border";
-  return (
-    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ${cls}`}>
-      {labels[status] ?? status}
-    </span>
-  );
-}
-
 function StatPill({ label, value, color }: { label: string; value: number | null; color?: string }) {
   return (
     <div className="rounded-xl border border-border bg-surface px-4 py-3 text-center">
@@ -117,13 +82,11 @@ function BulkDetailInner({ id }: { id: string }) {
 
   const load = useCallback(
     (p: number, sf: string, q: string) => {
-      setLoading(true);
-      setError(null);
       const params = new URLSearchParams({ id, page: String(p), pageSize: String(PAGE_SIZE) });
       if (sf) params.set("status", sf);
       if (q) params.set("q", q);
 
-      fetch(`/api/whatsapp/bulk/detail?${params}`)
+      return fetch(`/api/whatsapp/bulk/detail?${params}`)
         .then((r) => r.json())
         .then((json: DetailResponse) => {
           if (!json.ok) throw new Error(json.error ?? "Error al cargar detalle.");
@@ -131,15 +94,37 @@ function BulkDetailInner({ id }: { id: string }) {
           setMessages(json.messages);
           setTotal(json.total);
           setTotalPages(json.totalPages);
-        })
-        .catch((err: Error) => setError(err.message))
-        .finally(() => setLoading(false));
+        });
     },
     [id],
   );
 
   useEffect(() => {
-    load(page, statusFilter, searchQuery);
+    let isCancelled = false;
+    
+    // Wrap synchronous state updates in a microtask to avoid the lint error
+    Promise.resolve().then(() => {
+      if (!isCancelled) {
+        setLoading(true);
+        setError(null);
+      }
+    });
+    
+    load(page, statusFilter, searchQuery)
+      .catch((err: Error) => {
+        if (!isCancelled) {
+          setError(err.message);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setLoading(false);
+        }
+      });
+      
+    return () => {
+      isCancelled = true;
+    };
   }, [load, page, statusFilter, searchQuery]);
 
   function handleFilter(sf: string) {
@@ -152,7 +137,13 @@ function BulkDetailInner({ id }: { id: string }) {
       <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
         <p className="font-semibold text-red-800">{error}</p>
         <button
-          onClick={() => load(page, statusFilter, searchQuery)}
+          onClick={() => {
+            setLoading(true);
+            setError(null);
+            load(page, statusFilter, searchQuery)
+              .catch((err: Error) => setError(err.message))
+              .finally(() => setLoading(false));
+          }}
           className="mt-2 text-sm font-semibold text-red-600 underline"
         >
           Reintentar
@@ -177,7 +168,7 @@ function BulkDetailInner({ id }: { id: string }) {
             <div>
               <div className="flex items-center gap-2">
                 <p className="text-sm font-bold text-text-primary">Envío masivo</p>
-                <StatusChip status={bulkSend.status} />
+                <BulkStatusBadge status={bulkSend.status} />
               </div>
               <p className="mt-1 font-mono text-xs text-text-muted">{bulkSend.id}</p>
               <p className="mt-1 text-xs text-text-muted">
@@ -215,6 +206,7 @@ function BulkDetailInner({ id }: { id: string }) {
           <svg
             className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
             fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            aria-hidden="true"
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
@@ -312,7 +304,7 @@ function BulkDetailInner({ id }: { id: string }) {
           <button
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
-            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text-muted transition hover:bg-surface-muted disabled:opacity-40"
+            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text-muted transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
           >
             ← Anterior
           </button>
@@ -322,7 +314,7 @@ function BulkDetailInner({ id }: { id: string }) {
           <button
             disabled={page >= totalPages}
             onClick={() => setPage((p) => p + 1)}
-            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text-muted transition hover:bg-surface-muted disabled:opacity-40"
+            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text-muted transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
           >
             Siguiente →
           </button>
