@@ -72,7 +72,21 @@ Del acreedor: las claves `acreedor_*` de `company_settings`. Cuatro vienen sembr
 
 `class EasyLexClient` en `src/lib/easylex/client.ts`.
 
-### Crear documento
+### Autenticación
+
+Dos cabeceras: `access-key-id` (llave pública) y `secret-access-key` (llave privada), de `Credenciales API` en el panel de EasyLex.
+
+> **Bloqueo conocido (verificado 2026-07-20): las credenciales del panel son rechazadas por la propia API.**
+>
+> Con la llave pública copiada **exactamente** del panel y la privada recién reseteada, la API responde `code 106: "Public or Secret key doesn't match"` — tanto en `sandboxapi.easylex.com` como en `api.easylex.com`.
+>
+> Se descartó todo lo del lado del código y la configuración:
+> - La pública en `.env.local` coincide carácter a carácter con la del panel; la privada se reseteó y actualizó; sin espacios ni caracteres ocultos.
+> - Falla igual en sandbox y en producción → no es cruce de entornos.
+> - El esquema de cabeceras es el correcto: `access-key-id`/`secret-access-key` produce un error *específico de llave* (106), mientras que cualquier otro nombre de cabecera produce un genérico `501 InvalidRequest`. Es decir, la API reconoce el esquema y evalúa las llaves; simplemente no las valida.
+> - Orden normal e invertido de las llaves: ambos rechazados.
+>
+> **Conclusión: es un problema de la cuenta EasyLex** (acceso a la API no habilitado, suscripción, o un fallo de su lado), no del código —que está correcto y no necesita cambios—. La remediación es de EasyLex: soporte debe confirmar que el acceso a la API está activo para la cuenta. En cuanto las credenciales autentiquen, el flujo funciona sin tocar nada.
 
 `POST {EASYLEX_BASE_URL}/api/public/v2/document`, como `multipart/form-data`:
 

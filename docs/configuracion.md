@@ -171,6 +171,7 @@ Configuración:
 
 - [ ] `EASYLEX_BASE_URL` y `EASYLEX_SIGNING_LINK_BASE_URL` apuntando a producción, no a sandbox
 - [ ] `EASYLEX_WEBHOOK_SECRET` definido (si está vacío no hay autenticación de webhook)
+- [ ] **Credenciales de EasyLex que autentiquen.** Bloqueo verificado (2026-07-20): las llaves del panel de EasyLex son rechazadas por su propia API (`code 106`), en sandbox y producción. No es del código —está correcto—; es de la cuenta EasyLex. Soporte debe habilitar el acceso a la API. Detalle en [EasyLex y contratos](easylex-contratos.md#autenticación)
 - [ ] `EASYLEX_CALLBACK_URL` terminando en `/api/webhooks/easylex/sign`
 - [ ] Las cinco claves `(LLENAR)` de `company_settings` completadas
 - [ ] Secretos en un gestor de secretos, no en la tabla `settings`
