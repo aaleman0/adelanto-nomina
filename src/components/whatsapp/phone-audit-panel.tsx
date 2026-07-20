@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useHasRole } from "@/components/auth/role-context";
 import type { PhoneAuditRow } from "@/app/api/whatsapp/phone-audit/route";
 import type { PhoneIssue } from "@/lib/whatsapp/phone-utils";
 
@@ -42,6 +43,7 @@ export function PhoneAuditPanel() {
   const [filterIssue, setFilterIssue] = useState<PhoneIssue | "all">("all");
   const [fixing, setFixing] = useState(false);
   const [fixResult, setFixResult] = useState<{ fixed: number; errors: number } | null>(null);
+  const canFix = useHasRole("admin");
 
   async function runAudit() {
     setLoading(true);
@@ -151,7 +153,7 @@ export function PhoneAuditPanel() {
               <p className="text-sm text-amber-900">
                 {fixableCount} teléfono{fixableCount !== 1 ? "s" : ""} se pueden corregir automáticamente.
               </p>
-              <Button variant="secondary" disabled={fixing} onClick={applyFixes}>
+              <Button variant="secondary" disabled={fixing || !canFix} onClick={applyFixes} title={canFix ? undefined : "Requiere rol administrador."}>
                 {fixing ? "Corrigiendo..." : `Corregir ${fixableCount}`}
               </Button>
             </div>

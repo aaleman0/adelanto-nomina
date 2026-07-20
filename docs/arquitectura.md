@@ -107,7 +107,7 @@ La vista `backoffice_contract_control_v1` excluye deliberadamente la CLABE. Se l
 Ninguno de estos es un bug aislado; son propiedades del diseño actual que conviene tener presentes.
 
 1. **La cola existe pero no está activada.** El envío masivo soporta Cloud Tasks (una tarea por mensaje, con reintentos e idempotencia), pero por defecto sigue en modo inline dentro del request HTTP. Mientras no se configure GCP, un lote grande depende del timeout del entorno. Ver [WhatsApp](whatsapp.md#cola).
-2. **RBAC arranca en modo `warn`.** Los roles se comprueban y se registran, pero no bloquean hasta poner `RBAC_ENFORCEMENT=enforce`. Es deliberado —todos los perfiles nacen como `solo_lectura`— pero mientras siga en `warn` la autorización sigue siendo efectivamente binaria.
+2. **RBAC arranca en modo `warn`.** Los roles se comprueban y se registran, pero no bloquean hasta poner `RBAC_ENFORCEMENT=enforce`. Es deliberado —todos los perfiles nacen como `solo_lectura`— pero mientras siga en `warn` la autorización sigue siendo efectivamente binaria. La UI sí refleja el rol siempre (oculta Ajustes, deshabilita botones), con independencia del flag.
 3. **RLS sigue en fase A.** Deny-all activo, pero la app consulta con service role, así que las políticas por rol aún no son el punto de aplicación.
 4. **No hay tipos generados de la base.** Los tipos son manuales; un cambio de esquema no rompe la compilación.
 5. **El esquema difiere entre instalación nueva y migrada** en `whatsapp_contract_messages`.

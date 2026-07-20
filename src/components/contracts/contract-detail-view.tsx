@@ -5,6 +5,7 @@ import {
 } from "@/app/contracts/actions";
 import { Card } from "@/components/ui/card";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import { RoleGate } from "@/components/auth/role-gate";
 import { CopyLinkButton } from "@/components/ui/copy-link-button";
 import { Metric } from "@/components/ui/metric";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -163,24 +164,28 @@ function ActionsCard({ control }: { control: ContractControlRow }) {
         <form action={regenerateContractLinkAction}>
           <input name="contract_request_id" type="hidden" value={control.contract_request_id ?? ""} />
           <input name="employee_id" type="hidden" value={control.employee_id} />
-          <ConfirmSubmitButton
-            confirmMessage="Se generará o reutilizará un link vigente para este contrato. ¿Continuar?"
-            disabled={actionsDisabled}
-          >
-            Regenerar link
-          </ConfirmSubmitButton>
+          <RoleGate minimum="operaciones" mode="disable">
+            <ConfirmSubmitButton
+              confirmMessage="Se generará o reutilizará un link vigente para este contrato. ¿Continuar?"
+              disabled={actionsDisabled}
+            >
+              Regenerar link
+            </ConfirmSubmitButton>
+          </RoleGate>
         </form>
 
         <form action={retryContractFlowAction}>
           <input name="contract_request_id" type="hidden" value={control.contract_request_id ?? ""} />
           <input name="employee_id" type="hidden" value={control.employee_id} />
-          <ConfirmSubmitButton
-            confirmMessage="Se reintentará el flujo operativo y quedará evidencia en el timeline. ¿Continuar?"
-            disabled={actionsDisabled}
-            variant="secondary"
-          >
-            Reintentar flujo
-          </ConfirmSubmitButton>
+          <RoleGate minimum="operaciones" mode="disable">
+            <ConfirmSubmitButton
+              confirmMessage="Se reintentará el flujo operativo y quedará evidencia en el timeline. ¿Continuar?"
+              disabled={actionsDisabled}
+              variant="secondary"
+            >
+              Reintentar flujo
+            </ConfirmSubmitButton>
+          </RoleGate>
         </form>
 
         {control.signing_url ? (

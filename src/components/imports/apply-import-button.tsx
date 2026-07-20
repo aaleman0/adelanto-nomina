@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useHasRole } from "@/components/auth/role-context";
 
 type ApplyResult = {
   status?: string;
@@ -16,6 +17,7 @@ export function ApplyImportButton({ batchId }: { batchId: string }) {
   const router = useRouter();
   const [isApplying, setIsApplying] = useState(false);
   const [result, setResult] = useState<ApplyResult | null>(null);
+  const canApply = useHasRole("operaciones");
 
   async function applyImport() {
     if (!window.confirm("Aplicar las filas válidas a empleados y ofertas.")) return;
@@ -41,9 +43,10 @@ export function ApplyImportButton({ batchId }: { batchId: string }) {
     <div className="flex flex-col gap-1">
       <Button
         className="h-8 px-2.5 text-xs"
-        disabled={isApplying}
+        disabled={isApplying || !canApply}
         onClick={applyImport}
         type="button"
+        title={canApply ? undefined : "Requiere rol operaciones."}
       >
         {isApplying ? "Aplicando..." : "Aplicar"}
       </Button>

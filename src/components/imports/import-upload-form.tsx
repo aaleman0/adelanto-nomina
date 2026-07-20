@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Metric } from "@/components/ui/metric";
+import { useHasRole } from "@/components/auth/role-context";
 
 type ImportResult = {
   batch?: {
@@ -31,6 +32,7 @@ export function ImportUploadForm() {
   const [isUploading, setIsUploading] = useState(false);
   const [fileName, setFileName] = useState("");
   const [result, setResult] = useState<ImportResult | null>(null);
+  const canImport = useHasRole("operaciones");
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -81,9 +83,9 @@ export function ImportUploadForm() {
           />
         </label>
 
-        <div className="border-t border-border pt-4"><p className="mb-3 text-xs text-text-muted">Validaremos estructura, filas y duplicados antes de aplicar cualquier dato.</p><Button wave={!isUploading} className="w-full sm:w-fit" disabled={isUploading} type="submit">
+        <div className="border-t border-border pt-4"><p className="mb-3 text-xs text-text-muted">Validaremos estructura, filas y duplicados antes de aplicar cualquier dato.</p><Button wave={!isUploading && canImport} className="w-full sm:w-fit" disabled={isUploading || !canImport} type="submit" title={canImport ? undefined : "Requiere rol operaciones."}>
           {isUploading ? "Validando..." : "Subir y validar"}
-        </Button></div>
+        </Button>{!canImport && <p className="mt-2 text-xs text-amber-700">Tu rol no permite importar. Necesitas el rol de operaciones.</p>}</div>
       </form>
 
       {result ? <ImportResultPanel result={result} /> : null}

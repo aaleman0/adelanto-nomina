@@ -6,8 +6,10 @@ import { useState, useSyncExternalStore } from "react";
 import { NotificationBell } from "@/components/ui/notifications";
 import { UserControls } from "./user-controls";
 
-export type NavItem = { href: string; label: string; icon: string };
-export type NavGroup = { label: string; icon: string; prefix: string; items: NavItem[] };
+import type { UserRole } from "@/lib/auth/roles-shared";
+
+export type NavItem = { href: string; label: string; icon: string; minimumRole?: UserRole };
+export type NavGroup = { label: string; icon: string; prefix: string; items: NavItem[]; minimumRole?: UserRole };
 export type NavEntry = NavItem | NavGroup;
 const isGroup = (entry: NavEntry): entry is NavGroup => "items" in entry;
 const SIDEBAR_STORAGE_KEY = "backoffice-sidebar-collapsed";
@@ -35,7 +37,7 @@ function setSidebarCollapsed(collapsed: boolean) {
   sidebarListeners.forEach((listener) => listener());
 }
 
-type SidebarUser = { displayName?: string; email: string; avatarUrl?: string };
+type SidebarUser = { displayName?: string; email: string; avatarUrl?: string; role?: UserRole };
 
 export function SidebarFrame({ children, navigation, user }: { children: React.ReactNode; navigation: NavEntry[]; user: SidebarUser }) {
   const collapsed = useSyncExternalStore(subscribeToSidebar, getSidebarSnapshot, getSidebarServerSnapshot);
@@ -71,7 +73,7 @@ export function SidebarFrame({ children, navigation, user }: { children: React.R
 }
 
 function SidebarFooter({ collapsed, user }: { collapsed: boolean; user: SidebarUser }) {
-  return <div className={`flex items-center ${collapsed ? "flex-col gap-2" : "gap-2"}`}><NotificationBell placement="sidebar" /><UserControls collapsed={collapsed} displayName={user.displayName} email={user.email} avatarUrl={user.avatarUrl} /></div>;
+  return <div className={`flex items-center ${collapsed ? "flex-col gap-2" : "gap-2"}`}><NotificationBell placement="sidebar" /><UserControls collapsed={collapsed} displayName={user.displayName} email={user.email} avatarUrl={user.avatarUrl} role={user.role} /></div>;
 }
 
 function Item({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boolean; onNavigate?: () => void }) {

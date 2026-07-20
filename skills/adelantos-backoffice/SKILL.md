@@ -43,6 +43,14 @@ Hay inconsistencias conocidas —`useDebounce` implementado tres veces, dos sist
 
 ## Roles
 
-`profiles.role` ya se aplica en el backend con `requireRole()`: `solo_lectura` < `operaciones` < `admin`.
+`profiles.role` se aplica en el backend con `requireRole()` y en la UI: `solo_lectura` < `operaciones` < `admin`.
 
-**La UI todavía no los refleja.** Un usuario `solo_lectura` sigue viendo los botones de acción; con `RBAC_ENFORCEMENT=enforce` recibirá un `403` al pulsarlos. Ocultar o deshabilitar esos controles según el rol es trabajo pendiente de esta área — el actor está disponible vía `getCurrentActor()`.
+**Cómo gatear en la UI:**
+- El shell siembra el rol en un contexto de cliente (`RoleProvider`). Los componentes de cliente lo leen con `useHasRole("operaciones")` de `@/components/auth/role-context`.
+- Para deshabilitar un control: `disabled={!canX}` + `title` con el motivo, o envolver en `<RoleGate minimum="..." mode="disable">`.
+- Para ocultar navegación: añade `minimumRole` a la entrada en `app-shell.tsx`; se filtra en el servidor.
+- **Toda ruta admin-only necesita además un guard de servidor** (`layout.tsx` con `getCurrentActor` + `redirect`). Ocultar el enlace no protege la URL directa. Ver `src/app/settings/layout.tsx`.
+
+**Importante:** las piezas puras de rol (`UserRole`, `hasRole`) están en `@/lib/auth/roles-shared` (sin imports de servidor). Los componentes de cliente importan de ahí, nunca de `@/lib/auth/roles`, que arrastra `next/headers` al bundle.
+
+Esto es UX: refleja el rol siempre, con independencia de `RBAC_ENFORCEMENT`. La barrera real es el backend.

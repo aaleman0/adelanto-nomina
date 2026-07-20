@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { SidebarFrame, type NavEntry } from "./sidebar-frame";
 import { NotificationsProvider } from "@/components/ui/notifications";
+import { RoleProvider } from "@/components/auth/role-context";
+import { getCurrentActor, hasRole, type UserRole } from "@/lib/auth/roles";
 import { getUser } from "@/lib/supabase/session";
 
 const navigation: NavEntry[] = [
@@ -12,27 +14,54 @@ const navigation: NavEntry[] = [
     { href: "/whatsapp", label: "Resumen", icon: "W" },
     { href: "/whatsapp/send", label: "Nuevo envío", icon: "W" },
     { href: "/whatsapp/history", label: "Historial", icon: "W" },
-    { href: "/settings/whatsapp/templates", label: "Plantillas", icon: "W" },
-    { href: "/settings/whatsapp", label: "Conexión", icon: "W" },
+    // Plantillas y Conexión viven bajo /settings, que es admin-only: se
+    // filtran para no dejar enlaces que redirigen a la portada.
+    { href: "/settings/whatsapp/templates", label: "Plantillas", icon: "W", minimumRole: "admin" },
+    { href: "/settings/whatsapp", label: "Conexión", icon: "W", minimumRole: "admin" },
   ] },
-  { href: "/settings", label: "Ajustes", icon: "S" },
+  // Ajustes concentra la configuración sensible (credenciales, plantillas), que
+  // solo un admin puede tocar. El enlace se filtra en el servidor.
+  { href: "/settings", label: "Ajustes", icon: "S", minimumRole: "admin" },
 ];
 
 export async function AppShell({ children }: { children: ReactNode }) {
-  const user = await getUser().catch(() => null);
+  // El actor aporta el rol; getUser aporta los metadatos de perfil (nombre y
+  // avatar) que el actor no incluye.
+  const [actor, user] = await Promise.all([
+    getCurrentActor().catch(() => null),
+    getUser().catch(() => null),
+  ]);
+  const role = actor?.role ?? "solo_lectura";
   const displayName = user?.user_metadata?.full_name as string | undefined;
   const avatarUrl = user?.user_metadata?.avatar_url as string | undefined;
+
+  // La barra lateral se filtra en el servidor: los enlaces admin-only no llegan
+  // al cliente si el rol no alcanza, así que no hay nada que ocultar por CSS.
+  // Se filtra en dos niveles (entradas de primer nivel y sub-ítems de grupo) y
+  // se descarta un grupo que se queda sin ítems visibles.
+  const allows = (minimumRole?: UserRole) => !minimumRole || hasRole(role, minimumRole);
+  const visibleNavigation = navigation
+    .filter((entry) => allows(entry.minimumRole))
+    .map((entry) =>
+      "items" in entry
+        ? { ...entry, items: entry.items.filter((item) => allows(item.minimumRole)) }
+        : entry,
+    )
+    .filter((entry) => !("items" in entry) || entry.items.length > 0);
+
   return (
-    <NotificationsProvider>
-      <SidebarFrame
-        navigation={navigation}
-        user={{ displayName, email: user?.email ?? "", avatarUrl }}
-      >
-        <main className="flex min-h-0 flex-1 flex-col bg-transparent text-text-primary">
-          <div className="panel-scroll flex min-h-0 w-full flex-1 flex-col gap-5 px-4 py-4 sm:px-6 lg:px-7">{children}</div>
-        </main>
-      </SidebarFrame>
-    </NotificationsProvider>
+    <RoleProvider role={role}>
+      <NotificationsProvider>
+        <SidebarFrame
+          navigation={visibleNavigation}
+          user={{ displayName, email: user?.email ?? "", avatarUrl, role }}
+        >
+          <main className="flex min-h-0 flex-1 flex-col bg-transparent text-text-primary">
+            <div className="panel-scroll flex min-h-0 w-full flex-1 flex-col gap-5 px-4 py-4 sm:px-6 lg:px-7">{children}</div>
+          </main>
+        </SidebarFrame>
+      </NotificationsProvider>
+    </RoleProvider>
   );
 }
 

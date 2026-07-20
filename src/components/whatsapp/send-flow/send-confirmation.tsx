@@ -2,6 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useHasRole } from "@/components/auth/role-context";
 import type { SendMode } from "./types";
 
 type Props = {
@@ -25,6 +26,11 @@ export function SendConfirmation({
   onConfirm,
   onBack,
 }: Props) {
+  // El envío masivo exige rol operaciones. El backend lo bloquea igual; aquí se
+  // deshabilita para no llevar al usuario hasta el final de un flujo de cuatro
+  // pasos y estrellarlo contra un 403.
+  const canSend = useHasRole("operaciones");
+
   return (
     <div className="flex flex-col gap-4">
       <Card className="p-4">
@@ -42,9 +48,19 @@ export function SendConfirmation({
           </div>
         )}
 
+        {!canSend && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            Tu rol no permite enviar mensajes. Necesitas el rol de operaciones.
+          </div>
+        )}
+
         <div className="mt-4 flex items-center justify-between gap-3">
           <Button variant="ghost" disabled={sending} onClick={onBack}>Volver</Button>
-          <Button disabled={sending || selectedCount === 0} onClick={onConfirm}>
+          <Button
+            disabled={sending || selectedCount === 0 || !canSend}
+            onClick={onConfirm}
+            title={canSend ? undefined : "Requiere rol operaciones."}
+          >
             {sending ? "Enviando..." : "Enviar mensajes"}
           </Button>
         </div>

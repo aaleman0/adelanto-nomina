@@ -2,8 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import type { UserRole } from "@/lib/auth/roles-shared";
 
-export function UserControls({ displayName, email, avatarUrl, collapsed = false }: { displayName?: string; email: string; avatarUrl?: string; collapsed?: boolean }) {
+const ROLE_LABEL: Record<UserRole, string> = {
+  admin: "Admin",
+  operaciones: "Operación",
+  solo_lectura: "Lectura",
+};
+
+export function UserControls({ displayName, email, avatarUrl, role, collapsed = false }: { displayName?: string; email: string; avatarUrl?: string; role?: UserRole; collapsed?: boolean }) {
   const [open, setOpen] = useState(false);
   const initials = displayName ? displayName.split(" ").slice(0, 2).map((part) => part[0]).join("").toUpperCase() : email.slice(0, 2).toUpperCase() || "OP";
 
@@ -34,7 +41,7 @@ export function UserControls({ displayName, email, avatarUrl, collapsed = false 
             <p id="profile-card-title" className="font-display text-base font-semibold text-text-primary">{displayName ?? "Operador"}</p>
             <p className="mt-0.5 truncate text-xs text-text-muted">{email || "Sesión operativa"}</p>
             <div className="my-4 grid grid-cols-3 divide-x divide-border border-y border-border py-3">
-              <ProfileStat value="Activa" label="sesión" /><ProfileStat value="Operación" label="rol" /><ProfileStat value="Seguro" label="acceso" />
+              <ProfileStat value="Activa" label="sesión" /><ProfileStat value={role ? ROLE_LABEL[role] : "—"} label="rol" /><ProfileStat value="Seguro" label="acceso" />
             </div>
             <form action="/auth/logout" method="POST"><button type="submit" className="flex h-9 w-full items-center justify-center rounded-lg bg-[var(--color-5)] text-sm font-semibold text-white transition hover:bg-[var(--color-4)]">Cerrar sesión</button></form>
           </div>

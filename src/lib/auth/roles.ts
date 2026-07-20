@@ -2,29 +2,19 @@ import { NextResponse } from "next/server";
 import { getUser } from "@/lib/supabase/session";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
+import { hasRole, isValidRole, type UserRole } from "./roles-shared";
 
 /**
- * Control de acceso basado en roles.
+ * Control de acceso basado en roles (lado servidor).
  *
- * Hasta ahora el único control era binario: había sesión o no. `profiles.role`
- * existía en el esquema pero no se consultaba en ninguna decisión.
+ * Las piezas puras (tipo `UserRole`, `hasRole`) viven en `roles-shared.ts`, que
+ * no depende de código de servidor y por eso puede importarse desde el cliente.
+ * Aquí queda todo lo que toca sesión, base de datos o respuestas HTTP.
  *
- * Los roles son acumulativos:
- *
- *   solo_lectura  <  operaciones  <  admin
- *
- * - `solo_lectura` consulta evidencia.
- * - `operaciones`  además importa CSV, envía mensajes y opera contratos.
- * - `admin`        además cambia configuración y credenciales.
+ * Roles acumulativos: solo_lectura < operaciones < admin.
  */
 
-export type UserRole = "admin" | "operaciones" | "solo_lectura";
-
-const ROLE_RANK: Record<UserRole, number> = {
-  solo_lectura: 0,
-  operaciones: 1,
-  admin: 2,
-};
+export { hasRole, type UserRole };
 
 export type Actor = {
   userId: string;
@@ -53,10 +43,6 @@ function bootstrapAdminEmails(): string[] {
     .split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
-}
-
-function isValidRole(value: unknown): value is UserRole {
-  return value === "admin" || value === "operaciones" || value === "solo_lectura";
 }
 
 /**
@@ -110,10 +96,6 @@ export async function getCurrentActor(): Promise<Actor | null> {
   }
 
   return { userId: user.id, email, role: storedRole };
-}
-
-export function hasRole(actual: UserRole, minimum: UserRole): boolean {
-  return ROLE_RANK[actual] >= ROLE_RANK[minimum];
 }
 
 export type RequireRoleResult =
