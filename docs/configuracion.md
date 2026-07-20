@@ -177,7 +177,10 @@ Configuración:
 - [ ] `NEXT_PUBLIC_APP_URL` con el dominio real (rompe el OAuth si no)
 - [ ] Webhook de Meta apuntando al dominio público y verificado
 
-- [ ] Aplicar las migraciones `20260720_enable_rls_deny_all.sql` y `20260721_profiles_provisioning_and_roles.sql`
+- [ ] **URGENTE — RLS no está aplicada.** Se verificó (2026-07-20) que la anon key **pública** lee directamente las tablas: 504 empleados, 48 cuentas bancarias, 310 solicitudes de contrato, 347 logs de integración. La migración `20260720_enable_rls_deny_all.sql` existe en el repo pero **nunca se aplicó a la base**. Aplicarla es prioritario sobre cualquier otra cosa de esta lista.
+- [ ] Aplicar, en orden: `20260720_enable_rls_deny_all.sql` (deny-all), `20260721_profiles_provisioning_and_roles.sql` (perfiles), `20260722_rls_policies_phase_b.sql` (políticas por rol)
+- [ ] Verificar el cierre: con la anon key sin sesión, `select count(*) from employees` debe devolver **0**
+- [ ] Solo tras verificar, poner `RLS_SESSION_READS=on` para que las lecturas del backoffice usen el cliente de sesión
 - [ ] Definir `BOOTSTRAP_ADMIN_EMAILS` **antes** de poner `RBAC_ENFORCEMENT=enforce`
 - [ ] Borrar de `settings` las filas antiguas con secretos en texto plano
 - [ ] **Montar `google_oauth_client.json` y `token.json` en el contenedor** — sin ellos no se genera ningún contrato
@@ -188,7 +191,7 @@ Ya resuelto en código (fase 1 de endurecimiento):
 - [x] Verificación HMAC de `X-Hub-Signature-256` en el webhook de Meta
 - [x] Webhook de EasyLex con comparación en tiempo constante y *fail closed*
 - [x] `mock-sign` deshabilitado en producción
-- [x] RLS deny-all en las 18 tablas + `security_invoker` en las vistas
+- [x] RLS deny-all en las 18 tablas + `security_invoker` en las vistas — **escrito, pero la migración no está aplicada en la base** (ver checklist urgente arriba)
 - [x] Cabeceras de seguridad HTTP y `poweredByHeader: false`
 
 Ya resuelto (fase 4):

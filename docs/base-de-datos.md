@@ -384,11 +384,26 @@ Que no haya políticas significa deny-all: **cero filas para cualquier rol que n
 
 Lo que aporta es defensa en profundidad: la `anon key` es pública por diseño y viaja al navegador; antes de esta migración habría devuelto datos si alguien la hubiera apuntado a estas tablas, y ahora no devuelve nada.
 
-### Lo que sigue pendiente (fase B)
+### Fase B: políticas por rol y lecturas de sesión
 
-1. Todas las consultas siguen usando la service-role key, que hace bypass de RLS.
-2. El gate de aplicación es `src/proxy.ts`, que exige sesión salvo en `/login`, `/auth/callback`, `/api/webhooks/*`, `/api/health*` y `/api/tasks/*`.
-3. `profiles.role` **sí** se consulta ahora, pero en la capa de aplicación (`requireRole()`), no en políticas RLS. La función `current_user_role()` está lista para cuando se muevan las lecturas al cliente de sesión.
+`20260722_rls_policies_phase_b.sql` añade las políticas de **SELECT** por rol para el cliente de sesión (`authenticated`):
+
+- Datos operativos (empleados, ofertas, contratos, whatsapp, importación, `audit_events`) → cualquier usuario aprovisionado (`solo_lectura`+).
+- `profiles` → la propia fila; todas para `admin`.
+- `settings`, `company_settings`, `integration_logs` → solo `admin`.
+
+No hay políticas de escritura: las escrituras siguen por service role (webhooks, acciones, jobs), y el cliente de sesión no debe escribir. Sin política de INSERT/UPDATE/DELETE, `authenticated` no puede modificar nada.
+
+Las lecturas se mueven al cliente de sesión mediante `getReadClient()` (`src/lib/supabase/read-client.ts`), controlado por el flag `RLS_SESSION_READS`:
+
+- `off` (por defecto) → service role, bypass de RLS, comportamiento histórico.
+- `on` → cliente de sesión, sujeto a las políticas.
+
+**Primer camino migrado:** el modelo de control de contratos (`src/lib/backoffice/contract-control.ts`), que alimenta el dashboard y la lista de contratos. El resto de lecturas sigue en service role, pendiente de migrar una a una con el mismo patrón.
+
+> **Requisito previo no cumplido en la base actual.** Se verificó que RLS **no está activa**: la anon key pública lee todas las tablas. Las migraciones `20260720` y `20260722` deben aplicarse antes de encender el flag. Ver [Configuración](configuracion.md#seguridad-y-checklist-de-produccion).
+
+`current_user_role()` (SECURITY DEFINER) lee el rol aunque `profiles` tenga RLS, y devuelve null sin sesión, de modo que las políticas basadas en ella excluyen al acceso anónimo.
 
 La fase B consiste en mover las lecturas del backoffice al cliente de sesión con políticas basadas en `auth.uid()` y el rol, dejando la service role solo para webhooks y procesos de sistema. Hasta entonces, **un cliente de service-role expuesto al navegador seguiría exponiendo la base completa**.
 
