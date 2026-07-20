@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyWebhook, handleWebhook } from "@/lib/whatsapp/webhooks";
+import { verifyMetaSignature, isProduction } from "@/lib/security/webhook-signatures";
+import { whatsAppEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
@@ -21,9 +23,38 @@ export async function GET(request: Request) {
 
 // POST - Recibir eventos de Meta
 export async function POST(request: Request) {
+  // El cuerpo se lee como texto crudo: la firma HMAC de Meta se calcula sobre
+  // los bytes exactos. Parsear antes rompería la verificación.
+  const rawBody = await request.text();
+  const signature = request.headers.get("x-hub-signature-256");
+  const appSecret = whatsAppEnv.appSecret;
+
+  if (!appSecret) {
+    // Sin secreto no hay forma de verificar el origen. En producción se
+    // rechaza (fail closed); en desarrollo se permite para poder usar túneles
+    // y payloads simulados, pero se deja constancia.
+    if (isProduction()) {
+      logger.error("whatsapp.webhook.app_secret_missing", null, {
+        detail: "WHATSAPP_APP_SECRET no configurado: se rechaza el webhook.",
+      });
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    logger.warn("whatsapp.webhook.signature_check_skipped", {
+      detail: "WHATSAPP_APP_SECRET no configurado (solo permitido fuera de producción).",
+    });
+  } else if (!verifyMetaSignature(rawBody, signature, appSecret)) {
+    logger.warn("whatsapp.webhook.invalid_signature", {
+      hasSignature: Boolean(signature),
+    });
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const payload = await request.json();
-    logger.debug("whatsapp.webhook.received", { object: (payload as Record<string, unknown>)?.object });
+    const payload = JSON.parse(rawBody);
+    logger.debug("whatsapp.webhook.received", {
+      object: (payload as Record<string, unknown>)?.object,
+    });
     await handleWebhook(payload);
     return NextResponse.json({ ok: true });
   } catch (err) {

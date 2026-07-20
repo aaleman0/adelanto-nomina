@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { easylexEnv } from "@/lib/env";
+import { verifySharedSecret, isProduction } from "@/lib/security/webhook-signatures";
 import { randomUUID } from "node:crypto";
 
 export const runtime = "nodejs";
@@ -38,7 +39,23 @@ export async function POST(request: Request) {
     const signature = request.headers.get("x-easylex-signature");
     const webhookSecret = easylexEnv.webhookSecret;
 
-    if (webhookSecret && signature !== webhookSecret) {
+    if (!webhookSecret) {
+      // Antes, un secreto vacío omitía la validación por completo (fail open).
+      // Ahora en producción se rechaza; en desarrollo se permite para poder
+      // probar el flujo sin credenciales, dejando constancia en el log.
+      if (isProduction()) {
+        logger.error("easylex.webhook.secret_missing", null, {
+          correlationId,
+          detail: "EASYLEX_WEBHOOK_SECRET no configurado: se rechaza el webhook.",
+        });
+        return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+      }
+
+      logger.warn("easylex.webhook.signature_check_skipped", {
+        correlationId,
+        detail: "EASYLEX_WEBHOOK_SECRET no configurado (solo permitido fuera de producción).",
+      });
+    } else if (!verifySharedSecret(signature, webhookSecret)) {
       logger.warn("easylex.webhook.unauthorized", {
         correlationId,
         hasSignature: Boolean(signature),
