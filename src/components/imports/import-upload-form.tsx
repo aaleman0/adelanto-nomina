@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Metric } from "@/components/ui/metric";
 
 type ImportResult = {
@@ -55,12 +54,12 @@ export function ImportUploadForm() {
   }
 
   return (
-    <Card className="p-5">
-      <h2 className="text-sm font-medium text-text-muted">Subir CSV</h2>
-      <p className="text-sm text-text-muted">Exportado desde Sheets o Excel.</p>
+    <section className="surface-panel rounded-xl">
+      <div className="p-5 sm:p-6">
+      <div className="flex items-center gap-3"><span className="font-data grid h-7 w-7 place-items-center rounded-full bg-[var(--color-5)] text-xs text-white">01</span><h2 className="font-display text-lg font-semibold text-text-primary">Selecciona el archivo</h2></div>
 
       <form className="mt-4 flex flex-col gap-4" onSubmit={handleSubmit}>
-        <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border px-6 py-8 text-center transition hover:border-primary hover:bg-surface-muted">
+        <label className="group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-white/40 px-6 py-10 text-center transition hover:-translate-y-0.5 hover:border-primary hover:bg-white hover:shadow-sm">
           {fileName ? (
             <>
               <p className="font-medium text-text-primary">{fileName}</p>
@@ -82,13 +81,14 @@ export function ImportUploadForm() {
           />
         </label>
 
-        <Button className="w-full sm:w-fit" disabled={isUploading} type="submit">
+        <div className="border-t border-border pt-4"><p className="mb-3 text-xs text-text-muted">Validaremos estructura, filas y duplicados antes de aplicar cualquier dato.</p><Button wave={!isUploading} className="w-full sm:w-fit" disabled={isUploading} type="submit">
           {isUploading ? "Validando..." : "Subir y validar"}
-        </Button>
+        </Button></div>
       </form>
 
       {result ? <ImportResultPanel result={result} /> : null}
-    </Card>
+      </div>
+    </section>
   );
 }
 

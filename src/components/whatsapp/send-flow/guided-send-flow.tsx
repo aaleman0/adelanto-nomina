@@ -15,6 +15,7 @@ import type {
   SendResult as SendResultType,
   RecentImport,
 } from "./types";
+import { ScrollProgressPanel } from "@/components/ui/scroll-progress-panel";
 
 const STEP_LABELS: Record<FlowStep, string> = {
   1: "Destinatarios",
@@ -123,14 +124,16 @@ export function GuidedSendFlow() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="surface-panel flex shrink-0 items-center justify-between rounded-xl px-4 py-3">
         <StepIndicator current={step} />
         <p className="text-xs text-text-muted">
           Paso {step} de 4: <span className="font-medium text-text-primary">{STEP_LABELS[step]}</span>
         </p>
       </div>
 
+      <ScrollProgressPanel className="max-h-[calc(100dvh-13rem)] min-h-[420px]">
+      <div className="p-5 sm:p-6">
       {step === 1 && (
         <section>
           <SectionHeader step={1} title="Destinatarios" />
@@ -206,6 +209,8 @@ export function GuidedSendFlow() {
           />
         </section>
       )}
+      </div>
+      </ScrollProgressPanel>
     </div>
   );
 }

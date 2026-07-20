@@ -42,7 +42,7 @@ export default async function ImportsPage() {
 
 function RecentImportsTable({ batches }: { batches: ImportBatch[] }) {
   return (
-    <Card className="overflow-hidden p-4">
+    <Card className="surface-panel max-h-[420px] overflow-auto p-4">
       <h2 className="text-sm font-medium text-text-muted">Historial de importaciones</h2>
       {batches.length === 0 ? (
         <p className="mt-3 text-sm text-text-muted">Sin importaciones todavía.</p>

@@ -25,7 +25,7 @@ const statusOptions: Array<{
 ];
 
 const selectCls =
-  "h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text-primary outline-none focus:border-primary";
+  "h-10 w-full rounded-lg border border-border bg-white/70 px-3 text-sm text-text-primary outline-none transition focus:border-primary focus:bg-white";
 
 export function ContractControlFilters({
   filters,
@@ -48,7 +48,8 @@ export function ContractControlFilters({
   if (filters.empleador) activeParams.empleador = filters.empleador;
 
   return (
-    <div className="space-y-4">
+    <div className="surface-panel shrink-0 rounded-xl p-4 sm:p-5">
+      <div className="mb-4 flex items-center justify-between gap-3"><div><h2 className="font-display text-base font-semibold text-text-primary">Buscar contratos</h2><p className="text-xs text-text-muted">Encuentra por nombre, teléfono o RFC.</p></div>{Object.keys(activeParams).length > 0 ? <Link className="text-xs font-semibold text-primary hover:text-primary-hover" href="/contracts">Quitar filtros</Link> : null}</div>
       <Form action="/contracts" className="flex flex-col gap-3 lg:flex-row lg:items-end">
         <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium text-text-muted">
           Buscar
@@ -79,24 +80,24 @@ export function ContractControlFilters({
         </label>
 
         <div className="flex gap-2">
-          <Button type="submit">Filtrar</Button>
+          <Button type="submit">Aplicar filtros</Button>
           <Link
             className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-text-muted transition hover:bg-surface-muted hover:text-text-primary"
             href="/contracts"
           >
-            Limpiar
+            Restablecer
           </Link>
         </div>
       </Form>
 
-      <PaginationControls
+      <div className="mt-4 border-t border-border pt-4"><PaginationControls
         page={page}
         totalPages={totalPages}
         total={total}
         limit={limit}
         baseHref="/contracts"
         currentParams={activeParams}
-      />
+      /></div>
     </div>
   );
 }

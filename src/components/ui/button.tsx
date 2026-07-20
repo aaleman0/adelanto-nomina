@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes } from "react";
+import { LetterWave } from "./letter-wave";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
@@ -12,19 +13,24 @@ const variantClasses: Record<ButtonVariant, string> = {
 export function Button({
   className = "",
   variant = "primary",
+  wave = false,
+  children,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
+  wave?: boolean;
 }) {
   return (
     <button
       className={[
-        "inline-flex h-9 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition",
+        "inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:shadow-none",
         "disabled:cursor-not-allowed disabled:opacity-50",
         variantClasses[variant],
         className,
       ].join(" ")}
       {...props}
-    />
+    >
+      {wave && typeof children === "string" ? <LetterWave>{children}</LetterWave> : children}
+    </button>
   );
 }

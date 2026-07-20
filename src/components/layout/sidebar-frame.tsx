@@ -2,326 +2,103 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { NotificationBell } from "@/components/ui/notifications";
+import { UserControls } from "./user-controls";
 
 export type NavItem = { href: string; label: string; icon: string };
 export type NavGroup = { label: string; icon: string; prefix: string; items: NavItem[] };
 export type NavEntry = NavItem | NavGroup;
+const isGroup = (entry: NavEntry): entry is NavGroup => "items" in entry;
+const SIDEBAR_STORAGE_KEY = "backoffice-sidebar-collapsed";
+const sidebarListeners = new Set<() => void>();
 
-function isGroup(entry: NavEntry): entry is NavGroup {
-  return "items" in entry;
+function subscribeToSidebar(callback: () => void) {
+  sidebarListeners.add(callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    sidebarListeners.delete(callback);
+    window.removeEventListener("storage", callback);
+  };
 }
 
-/* ─── SVG icons ─── */
-const NavIcon = ({ icon, active }: { icon: string; active: boolean }) => {
-  const cls = `h-5 w-5 shrink-0 transition-all duration-200 ${active ? "text-white" : "text-slate-400 group-hover:text-white"}`;
-
-  if (icon === "D")
-    return (
-      <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-      </svg>
-    );
-  if (icon === "I")
-    return (
-      <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-      </svg>
-    );
-  if (icon === "C")
-    return (
-      <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-    );
-  if (icon === "S")
-    return (
-      <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    );
-  if (icon === "W")
-    return (
-      <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
-      </svg>
-    );
-  return <span className={cls + " text-xs font-bold"}>{icon}</span>;
-};
-
-/* ─── Single nav link ─── */
-function NavLink({
-  item,
-  collapsed,
-  onClick,
-}: {
-  item: NavItem;
-  collapsed: boolean;
-  onClick?: () => void;
-}) {
-  const pathname = usePathname();
-  const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-
-  return (
-    <Link
-      href={item.href}
-      onClick={onClick}
-      title={collapsed ? item.label : undefined}
-      className={[
-        "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
-        collapsed ? "h-11 w-11 justify-center" : "h-11 px-3",
-        active
-          ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-900/30"
-          : "text-slate-300 hover:bg-white/[0.07] hover:text-white",
-      ].join(" ")}
-    >
-      {active && (
-        <span className="absolute -left-px top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-white/60" />
-      )}
-      <NavIcon icon={item.icon} active={active} />
-      {!collapsed && (
-        <span className="text-[13px] font-semibold truncate" style={{ color: '#ffffff' }}>
-          {item.label}
-        </span>
-      )}
-    </Link>
-  );
+function getSidebarSnapshot() {
+  return localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true";
 }
 
-/* ─── Group with sub-items ─── */
-function NavGroupItem({
-  group,
-  collapsed,
-  onClick,
-}: {
-  group: NavGroup;
-  collapsed: boolean;
-  onClick?: () => void;
-}) {
-  const pathname = usePathname();
-  const groupActive = group.items.some(item => pathname === item.href || pathname.startsWith(item.href));
-
-  const [open, setOpen] = useState(groupActive);
-
-  if (collapsed) {
-    // En sidebar colapsado: solo el icono del grupo, sin sub-items
-    return (
-      <div
-        className={[
-          "group relative flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl transition-all duration-200",
-          groupActive
-            ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-900/30"
-            : "text-slate-300 hover:bg-white/[0.07] hover:text-white",
-        ].join(" ")}
-        title={group.label}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <NavIcon icon={group.icon} active={groupActive} />
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      {/* Group header button */}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={[
-          "group relative flex w-full items-center gap-3 rounded-xl px-3 h-11 transition-all duration-200",
-          groupActive
-            ? "text-white bg-white/[0.08]"
-            : "text-slate-300 hover:bg-white/[0.07] hover:text-white",
-        ].join(" ")}
-      >
-        {groupActive && (
-          <span className="absolute -left-px top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-indigo-400" />
-        )}
-        <NavIcon icon={group.icon} active={groupActive} />
-        <span className="flex-1 truncate text-left text-[13px] font-semibold" style={{ color: '#ffffff' }}>{group.label}</span>
-        <svg
-          className={[
-            "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
-            open ? "rotate-180" : "",
-          ].join(" ")}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="#ffffff"
-          strokeWidth={2.5}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-
-      {/* Sub-items */}
-      {open && (
-        <div className="mt-0.5 ml-4 flex flex-col gap-0.5 border-l border-white/[0.07] pl-3">
-          {group.items.map((item) => {
-            const active = item.href === "/" ? pathname === "/" : pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onClick}
-                className={[
-                  "flex h-9 items-center rounded-lg px-3 text-[12.5px] font-semibold transition-colors",
-                  active
-                    ? "bg-indigo-600/80 text-white"
-                    : "hover:bg-white/[0.06]",
-                ].join(" ")}
-                style={{ color: '#ffffff' }}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+function getSidebarServerSnapshot() {
+  return false;
 }
 
-/* ─── Main SidebarFrame ─── */
-export function SidebarFrame({
-  children,
-  navigation,
-}: {
-  children: React.ReactNode;
-  navigation: NavEntry[];
-}) {
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("backoffice-sidebar") === "compact";
-  });
+function setSidebarCollapsed(collapsed: boolean) {
+  localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
+  sidebarListeners.forEach((listener) => listener());
+}
+
+type SidebarUser = { displayName?: string; email: string; avatarUrl?: string };
+
+export function SidebarFrame({ children, navigation, user }: { children: React.ReactNode; navigation: NavEntry[]; user: SidebarUser }) {
+  const collapsed = useSyncExternalStore(subscribeToSidebar, getSidebarSnapshot, getSidebarServerSnapshot);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  function toggleSidebar() {
-    setCollapsed((current) => {
-      const next = !current;
-      if (typeof window !== "undefined") {
-        localStorage.setItem("backoffice-sidebar", next ? "compact" : "open");
-      }
-      return next;
-    });
-  }
-
-  const renderNavEntries = (closeMobile?: () => void) =>
-    navigation.map((entry, i) =>
-      isGroup(entry) ? (
-        <NavGroupItem key={`g-${i}`} group={entry} collapsed={collapsed} onClick={closeMobile} />
-      ) : (
-        <NavLink key={entry.href} item={entry} collapsed={collapsed} onClick={closeMobile} />
-      ),
-    );
-
+  const toggle = () => setSidebarCollapsed(!collapsed);
   return (
-    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[auto_1fr]">
-      {/* ── Desktop sidebar ── */}
-      <aside
-        className={[
-          "sticky top-0 z-20 hidden h-screen flex-col lg:flex",
-          "bg-sidebar shadow-[4px_0_24px_rgba(15,23,42,0.18)]",
-          "transition-[width] duration-300 ease-in-out",
-          collapsed ? "w-[72px]" : "w-[260px]",
-        ].join(" ")}
-        style={{ background: "linear-gradient(180deg, #0f172a 0%, #1a2744 100%)" }}
-      >
-        {/* Logo */}
-        <div className={[
-          "flex h-[68px] items-center border-b border-white/[0.08]",
-          collapsed ? "justify-center px-4" : "gap-3 px-5",
-        ].join(" ")}>
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 font-bold text-white text-sm shadow-lg shadow-indigo-900/40">
-            BA
-          </div>
-          {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-bold leading-tight" style={{ color: '#ffffff' }}>Backoffice Adelantos</p>
-              <p className="truncate text-[11px] leading-tight mt-0.5" style={{ color: '#ffffff' }}>Panel Operativo</p>
-            </div>
-          )}
-          {!collapsed && (
-            <button
-              className="ml-auto grid h-7 w-7 place-items-center rounded-lg transition-all hover:bg-white/10"
-              onClick={toggleSidebar}
-              type="button"
-              aria-label="Colapsar sidebar"
-              style={{ color: '#ffffff' }}
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="#ffffff" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-              </svg>
-            </button>
-          )}
+    <div className="app-viewport flex bg-background">
+      <aside className={`hidden h-full shrink-0 flex-col border-r border-[var(--sidebar-border)] bg-sidebar text-sidebar-text transition-[width] duration-300 lg:flex ${collapsed ? "w-[72px]" : "w-[224px]"}`}>
+        <div className={`flex h-16 shrink-0 items-center border-b border-[var(--sidebar-border)] ${collapsed ? "justify-center" : "justify-end px-4"}`}>
+          <MenuButton open={!collapsed} onClick={toggle} label={collapsed ? "Expandir menú" : "Colapsar menú"} />
         </div>
-
-        {collapsed && (
-          <button
-            className="mx-auto mt-2 grid h-7 w-7 place-items-center rounded-lg transition-all hover:bg-white/10"
-            onClick={toggleSidebar}
-            type="button"
-            aria-label="Expandir sidebar"
-            style={{ color: '#ffffff' }}
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="#ffffff" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-            </svg>
-          </button>
-        )}
-
-        {/* Nav */}
-        <nav className={["flex flex-1 flex-col gap-1 overflow-y-auto py-4", collapsed ? "px-2" : "px-3"].join(" ")}>
-          {!collapsed && (
-            <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.15em]" style={{ color: '#ffffff' }}>Menú principal</p>
-          )}
-          {renderNavEntries()}
+        <nav className={`panel-scroll flex flex-1 flex-col gap-1 py-4 ${collapsed ? "px-3" : "px-3"}`} aria-label="Navegación principal">
+          {navigation.map((entry) => isGroup(entry) ? <Group key={entry.prefix} group={entry} collapsed={collapsed} /> : <Item key={entry.href} item={entry} collapsed={collapsed} />)}
         </nav>
-
-        <div className={["border-t border-white/[0.08] py-4", collapsed ? "px-2" : "px-4"].join(" ")}>
-          {!collapsed && <p className="text-[11px] text-center" style={{ color: '#ffffff' }}>v0.2 · backoffice</p>}
-        </div>
+        <div className={`shrink-0 border-t border-[var(--sidebar-border)] p-3 ${collapsed ? "flex justify-center" : ""}`}><SidebarFooter collapsed={collapsed} user={user} /></div>
       </aside>
 
-      <div className="flex min-w-0 flex-col">
-        {/* ── Mobile top-bar ── */}
-        <div className="sticky top-0 z-10 border-b border-border bg-white/95 backdrop-blur-md lg:hidden shadow-sm">
-          <div className="flex h-14 items-center justify-between px-4">
-            <div className="flex items-center gap-3">
-              <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 font-bold text-white text-xs">
-                BA
-              </div>
-              <p className="font-bold text-text-primary text-sm">Backoffice Adelantos</p>
-            </div>
-            <button
-              aria-label={mobileOpen ? "Cerrar menú" : "Abrir menú"}
-              className="grid h-9 w-9 place-items-center rounded-xl border border-border text-text-muted transition hover:bg-surface-muted hover:text-text-primary"
-              onClick={() => setMobileOpen((v) => !v)}
-              type="button"
-            >
-              {mobileOpen ? (
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              ) : (
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              )}
-            </button>
-          </div>
-          {mobileOpen && (
-            <nav
-              className="flex flex-col gap-1 border-t border-white/10 px-3 py-3"
-              style={{ background: "linear-gradient(180deg, #0f172a 0%, #1a2744 100%)" }}
-            >
-              {renderNavEntries(() => setMobileOpen(false))}
-            </nav>
-          )}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex h-14 shrink-0 items-center border-b border-border bg-surface px-4 lg:hidden">
+          <MenuButton open={mobileOpen} onClick={() => setMobileOpen((current) => !current)} label={mobileOpen ? "Cerrar menú" : "Abrir menú"} dark />
+          <span className="ml-3 font-display text-sm font-semibold text-text-primary">Centro de operación</span>
         </div>
-
+        {mobileOpen ? (
+          <nav className="absolute inset-x-0 top-14 z-40 max-h-[calc(100dvh-3.5rem)] overflow-auto border-b border-[var(--sidebar-border)] bg-sidebar p-3 shadow-xl lg:hidden">
+            {navigation.map((entry) => isGroup(entry) ? <Group key={entry.prefix} group={entry} collapsed={false} onNavigate={() => setMobileOpen(false)} /> : <Item key={entry.href} item={entry} collapsed={false} onNavigate={() => setMobileOpen(false)} />)}
+            <div className="mt-3 border-t border-[var(--sidebar-border)] pt-3"><SidebarFooter collapsed={false} user={user} /></div>
+          </nav>
+        ) : null}
         {children}
       </div>
     </div>
   );
+}
+
+function SidebarFooter({ collapsed, user }: { collapsed: boolean; user: SidebarUser }) {
+  return <div className={`flex items-center ${collapsed ? "flex-col gap-2" : "gap-2"}`}><NotificationBell placement="sidebar" /><UserControls collapsed={collapsed} displayName={user.displayName} email={user.email} avatarUrl={user.avatarUrl} /></div>;
+}
+
+function Item({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boolean; onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const active = isItemActive(pathname, item.href);
+  return <Link href={item.href} onClick={onNavigate} title={collapsed ? item.label : undefined} className={`group relative flex h-11 items-center rounded-lg transition ${collapsed ? "justify-center" : "gap-3 px-3"} ${active ? "bg-sidebar-active text-sidebar-text-active" : "text-sidebar-text-muted hover:bg-sidebar-hover hover:text-white"}`}><Icon name={item.icon} />{collapsed ? null : <span className="truncate text-[13px] font-semibold">{item.label}</span>}{active ? <span className="absolute -left-3 h-5 w-0.5 bg-[var(--color-2)]" /> : null}</Link>;
+}
+
+function isItemActive(pathname: string, href: string) {
+  if (["/", "/whatsapp", "/settings", "/settings/whatsapp"].includes(href)) return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function Group({ group, collapsed, onNavigate }: { group: NavGroup; collapsed: boolean; onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const active = group.items.some((item) => isItemActive(pathname, item.href));
+  const [open, setOpen] = useState(active);
+  const expanded = active || open;
+  if (collapsed) return <Link href={group.items[0].href} title={group.label} className={`flex h-11 items-center justify-center rounded-lg ${active ? "bg-sidebar-active text-sidebar-text-active" : "text-sidebar-text-muted hover:bg-sidebar-hover hover:text-white"}`}><Icon name={group.icon} /></Link>;
+  return <div><button type="button" onClick={() => setOpen((current) => !current)} className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left transition ${active ? "bg-white/10 text-white" : "text-sidebar-text-muted hover:bg-sidebar-hover hover:text-white"}`}><Icon name={group.icon} /><span className="flex-1 text-[13px] font-semibold">{group.label}</span><svg className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg></button>{expanded ? <div className="ml-5 border-l border-white/10 py-1 pl-3">{group.items.map((item) => <Item key={item.href} item={item} collapsed={false} onNavigate={onNavigate} />)}</div> : null}</div>;
+}
+
+function MenuButton({ open, onClick, label, dark = false }: { open: boolean; onClick: () => void; label: string; dark?: boolean }) {
+  return <button type="button" onClick={onClick} aria-label={label} aria-expanded={open} className={`relative grid h-10 w-10 place-items-center rounded-lg transition ${dark ? "text-text-primary hover:bg-surface-muted" : "text-sidebar-text-muted hover:bg-white/10 hover:text-white"}`}><span className="relative h-4 w-5"><span className={`absolute left-0 top-0 h-0.5 w-5 rounded bg-current transition-all duration-300 ${open ? "top-[7px] rotate-45" : ""}`} /><span className={`absolute left-0 top-[7px] h-0.5 w-5 rounded bg-current transition-all duration-300 ${open ? "scale-x-0 opacity-0" : ""}`} /><span className={`absolute left-0 top-[14px] h-0.5 w-5 rounded bg-current transition-all duration-300 ${open ? "top-[7px] -rotate-45" : ""}`} /></span></button>;
+}
+
+function Icon({ name }: { name: string }) {
+  const paths: Record<string, string> = { D: "M4 5h6v6H4V5Zm10 0h6v4h-6V5ZM4 15h6v4H4v-4Zm10-2h6v6h-6v-6Z", I: "M12 3v12m0 0 4-4m-4 4-4-4M5 19h14", C: "M6 3h8l4 4v14H6V3Zm8 0v5h4M9 12h6M9 16h6", W: "M5 18l-1 3 3-1a9 9 0 1 0-2-2Zm4-7h.01M12 11h.01M15 11h.01", S: "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm0-12v2m0 13v2m8.5-8.5h-2m-13 0h-2m14.5-6-1.5 1.5m-9 9L6 18m12 0-1.5-1.5m-9-9L6 6" };
+  return <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name] ?? paths.D} /></svg>;
 }

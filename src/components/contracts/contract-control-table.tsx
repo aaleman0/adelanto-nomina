@@ -17,14 +17,15 @@ const dateFormatter = new Intl.DateTimeFormat("es-MX", {
 
 export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
   return (
-    <Card className="overflow-hidden">
+    <Card className="surface-panel flex min-h-[360px] flex-1 flex-col overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h2 className="font-display text-base font-semibold text-text-primary">Expedientes</h2><p className="text-xs text-text-muted">Abre un registro para revisar contrato, mensajes y evidencia.</p></div><span className="font-data text-xs text-text-muted">{rows.length} visibles</span></div>
       {/* Desktop table */}
-      <div className="hidden lg:block">
+      <div className="panel-scroll hidden min-h-0 flex-1 lg:block">
         <DataTable className="w-full">
           <DataTableHead>
             <tr>
               <DataTableHeaderCell>Empleado</DataTableHeaderCell>
-              <DataTableHeaderCell>Empleador</DataTableHeaderCell>
+              <DataTableHeaderCell>Contacto</DataTableHeaderCell>
               <DataTableHeaderCell>Monto</DataTableHeaderCell>
               <DataTableHeaderCell>Estado</DataTableHeaderCell>
               <DataTableHeaderCell>Último movimiento</DataTableHeaderCell>
@@ -34,14 +35,14 @@ export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
           <tbody>
             {rows.length > 0 ? (
               rows.map((row) => (
-                <tr key={row.employee_id} className="border-t border-border hover:bg-surface-muted/50">
+                <tr key={row.employee_id} className={`border-l-2 border-t border-border transition hover:bg-surface-muted/70 ${getPriorityBorder(row.operational_status)}`}>
                   <DataTableCell>
                     <div>
-                      <p className="font-medium text-text-primary">{row.empleado || "-"}</p>
-                      <p className="text-xs text-text-muted">{row.rfc || "-"}</p>
+                      <p className="font-semibold text-text-primary">{row.empleado || "Empleado sin nombre"}</p>
+                      <p className="text-xs text-text-muted">{row.empleador || "Sin empleador"}</p>
                     </div>
                   </DataTableCell>
-                  <DataTableCell className="text-text-muted">{row.empleador || "-"}</DataTableCell>
+                  <DataTableCell><p className="text-sm text-text-secondary">{row.telefono_normalizado || "Sin teléfono"}</p><p className="font-data text-xs text-text-muted">{row.rfc || "Sin RFC"}</p></DataTableCell>
                   <DataTableCell className="font-medium text-text-primary">{formatMoney(row.monto_prestamo_autorizado)}</DataTableCell>
                   <DataTableCell>
                     <StatusBadge
@@ -54,10 +55,10 @@ export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
                   </DataTableCell>
                   <DataTableCell>
                     <Link
-                      className="text-sm font-medium text-primary hover:underline"
+                      className="inline-flex h-8 items-center rounded-lg border border-primary-border bg-primary-light px-3 text-xs font-semibold text-primary transition hover:border-primary hover:bg-white hover:text-primary-hover"
                       href={`/contracts/${row.employee_id}`}
                     >
-                      Ver
+                      Abrir expediente
                     </Link>
                   </DataTableCell>
                 </tr>
@@ -75,14 +76,14 @@ export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
       <div className="grid gap-3 p-4 lg:hidden">
         {rows.length > 0 ? rows.map((row) => (
           <Link
-            className="rounded-lg border border-border bg-surface p-4 text-sm hover:border-primary"
+            className={`rounded-lg border border-border border-l-4 bg-surface p-4 text-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-sm ${getPriorityBorder(row.operational_status)}`}
             href={`/contracts/${row.employee_id}`}
             key={row.employee_id}
           >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-medium text-text-primary">{row.empleado || "Empleado sin nombre"}</p>
-                <p className="text-text-muted">{row.empleador || "Sin empleador"} · {formatMoney(row.monto_prestamo_autorizado)}</p>
+                <p className="text-text-muted">{row.empleador || "Sin empleador"}</p><p className="font-data mt-2 font-medium text-text-primary">{formatMoney(row.monto_prestamo_autorizado)}</p>
               </div>
               <StatusBadge status={formatStatus(row.operational_status)} tone={getOperationalStatusTone(row.operational_status)} />
             </div>
@@ -121,4 +122,11 @@ function getOperationalStatusTone(status: string): StatusTone {
   if (status === "firmado" || status === "contrato_generado") return "success";
   if (status === "link_expirado" || status === "pendiente_envio") return "warning";
   return "neutral";
+}
+
+function getPriorityBorder(status: string) {
+  if (status === "error") return "border-l-danger";
+  if (status === "link_expirado" || status === "pendiente_envio") return "border-l-warning";
+  if (status === "firmado" || status === "contrato_generado") return "border-l-success";
+  return "border-l-[var(--color-3)]";
 }

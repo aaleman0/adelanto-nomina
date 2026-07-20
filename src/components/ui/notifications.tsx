@@ -165,7 +165,7 @@ export function useNotifications() {
 
 /* ─── Notification Bell Component ─── */
 
-export function NotificationBell() {
+export function NotificationBell({ placement = "default" }: { placement?: "default" | "sidebar" }) {
   const { unreadCount, notifications, markAsRead, markAllAsRead, dismissNotification, clearAll } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -217,10 +217,10 @@ export function NotificationBell() {
     <div data-notification-bell className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative flex h-10 w-10 items-center justify-center rounded-full hover:bg-surface-muted transition"
+        className={`relative flex h-10 w-10 items-center justify-center rounded-lg transition ${placement === "sidebar" ? "text-sidebar-text-muted hover:bg-white/10 hover:text-white" : "hover:bg-surface-muted"}`}
         aria-label={`${unreadCount} notificaciones sin leer`}
       >
-        <svg className="h-5 w-5 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className={`h-5 w-5 ${placement === "sidebar" ? "text-current" : "text-text-muted"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
         </svg>
         {unreadCount > 0 && (
@@ -231,7 +231,7 @@ export function NotificationBell() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-96 rounded-xl border border-border bg-white shadow-lg z-50">
+        <div className={`absolute z-50 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-border bg-white shadow-lg ${placement === "sidebar" ? "bottom-full left-0 mb-2" : "right-0 top-full mt-2"}`}>
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <h3 className="font-semibold text-text-primary">Notificaciones</h3>
             <div className="flex gap-2">
@@ -248,12 +248,7 @@ export function NotificationBell() {
 
           <div className="max-h-[400px] overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-text-muted">
-                <svg className="mx-auto mb-2 h-8 w-8 text-text-muted/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-                </svg>
-                No hay notificaciones
-              </div>
+              <div className="px-4 py-4"><p className="mb-3 text-xs font-medium text-text-muted">Sin notificaciones pendientes</p>{[0, 1, 2].map((row) => <div className="flex gap-3 border-t border-border-subtle py-3 first:border-0" key={row}><span className="skeleton-bone h-9 w-9 shrink-0 rounded-lg" /><div className="min-w-0 flex-1 space-y-2"><span className="skeleton-bone block h-2.5 w-2/3 rounded" /><span className="skeleton-bone block h-2 w-full rounded" /><span className="skeleton-bone block h-1.5 w-12 rounded" /></div></div>)}</div>
             ) : (
               <div className="divide-y divide-border">
                 {notifications.map((notification) => (

@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
-import { Comfortaa } from "next/font/google";
+import { Manrope, Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/toast";
 
-const comfortaa = Comfortaa({
+const manrope = Manrope({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-comfortaa",
+  variable: "--font-manrope",
   display: "swap",
 });
+
+const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk", display: "swap" });
+const plexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Backoffice Adelantos",
@@ -21,8 +23,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" data-scroll-behavior="smooth" className={`h-full antialiased ${comfortaa.variable}`}>
-      <body className="min-h-full flex flex-col">
+    <html lang="es" className={`h-full antialiased ${manrope.variable} ${spaceGrotesk.variable} ${plexMono.variable}`}>
+      <body className="min-h-full">
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
