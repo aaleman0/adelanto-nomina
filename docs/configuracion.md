@@ -1,0 +1,193 @@
+# Configuración
+
+Hay tres lugares donde vive la configuración, con precedencias distintas. Confundirlos es la causa habitual de "cambié el valor y no pasó nada".
+
+| Origen | Para qué | Precedencia |
+|---|---|---|
+| Variables de entorno | Credenciales e infraestructura | **Gana siempre** |
+| Tabla `settings` | Credenciales de WhatsApp escritas desde la UI | Solo si no hay env var |
+| Tabla `company_settings` | Datos de negocio del contrato y validaciones de EasyLex | Única fuente (no hay env var equivalente) |
+
+## Variables de entorno
+
+Plantilla completa en `.env.example`. Copiar a `.env.local` para desarrollo:
+
+```bash
+cp .env.example .env.local
+```
+
+`.env*` está en `.gitignore`; ningún archivo de entorno está versionado.
+
+### Supabase
+
+| Variable | Requerida | Notas |
+|---|---|---|
+| `SUPABASE_URL` | sí | **Incluye el sufijo `/rest/v1/`**. El código lo normaliza con `new URL(url).origin` |
+| `SUPABASE_SERVICE_ROLE_KEY` | sí | Acceso total. Solo servidor, nunca al cliente |
+| `SUPABASE_ANON_KEY` | sí | Para el cliente de sesión (SSR) |
+| `SUPABASE_SECRET_KEY` | no | Fallback de `SUPABASE_SERVICE_ROLE_KEY` |
+
+`validateSupabaseEnv()` **lanza excepción** si falta algo, a diferencia de las validaciones de WhatsApp y EasyLex, que devuelven un resultado.
+
+> `src/lib/supabase/server.ts` lee `.env.local` **desde disco en tiempo de ejecución**, no solo a través de la carga de entorno de Next. En un contenedor donde ese archivo no existe la lectura simplemente no hace nada y se usan las variables del proceso — que es el comportamiento deseado, pero conviene saberlo al depurar diferencias entre local y producción.
+
+### WhatsApp Cloud API
+
+| Variable | Requerida | Notas |
+|---|---|---|
+| `WHATSAPP_ACCESS_TOKEN` | sí | Token de la app de Meta |
+| `WHATSAPP_PHONE_NUMBER_ID` | sí | Id del número en Meta |
+| `WHATSAPP_BUSINESS_ACCOUNT_ID` | sí | Necesario para sincronizar plantillas |
+| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | sí | Valor inventado, debe coincidir con el de Meta |
+| `WHATSAPP_APP_SECRET` | sí | Verifica la firma HMAC del webhook. **Sin él, en producción el webhook rechaza todo** |
+| `WHATSAPP_BUSINESS_NUMBER` | no | Formato `^\+?\d{10,15}$` |
+| `WHATSAPP_TEMPLATE_HEADER_IMAGE_URL` | no | Añade cabecera de imagen a `adelanto_nomina_v2` |
+| `WHATSAPP_DEBUG_AUTO_REPLY` | no | `"true"` para responder mensajes entrantes. Solo desarrollo |
+
+Las dos últimas **no están en el esquema de `src/lib/env.ts`**: se leen directamente de `process.env`, así que no aparecen en los health checks ni en los errores de validación.
+
+> `WHATSAPP_APP_SECRET` es obligatorio en producción: el webhook verifica `X-Hub-Signature-256` con él y, si no está definido, rechaza todos los eventos con `401`. Ver [WhatsApp](whatsapp.md#webhook-de-meta).
+
+### EasyLex
+
+| Variable | Requerida | Notas |
+|---|---|---|
+| `EASYLEX_ACCESS_KEY_ID` | sí | |
+| `EASYLEX_SECRET_ACCESS_KEY` | sí | |
+| `EASYLEX_BASE_URL` | no | **Default: `https://sandboxapi.easylex.com`** |
+| `EASYLEX_SIGNING_LINK_BASE_URL` | no | Default: `https://widgetsandbox.easylex.com/firmar` |
+| `EASYLEX_CALLBACK_URL` | sí | **Debe terminar en `/api/webhooks/easylex/sign`** |
+| `EASYLEX_WEBHOOK_SECRET` | sí en producción | Si está vacío, en producción **el webhook rechaza todo** con `401` |
+
+Los dos defaults apuntan a sandbox. Sin definirlos explícitamente, producción firma contra el entorno de pruebas de EasyLex.
+
+### Aplicación
+
+| Variable | Requerida | Notas |
+|---|---|---|
+| `NEXT_PUBLIC_APP_URL` | sí | Base del `redirectTo` de Google OAuth. Única variable expuesta al cliente |
+
+### Cola de envío masivo (opcional)
+
+Sin estas variables el envío masivo corre dentro del request (modo inline). Definiéndolas **todas**, pasa a ser asíncrono vía Google Cloud Tasks.
+
+| Variable | Requerida | Notas |
+|---|---|---|
+| `GCP_PROJECT_ID` | para la cola | |
+| `CLOUD_TASKS_LOCATION` | no | Default `us-central1` |
+| `CLOUD_TASKS_QUEUE` | para la cola | Default `whatsapp-bulk` |
+| `TASKS_WORKER_BASE_URL` | para la cola | URL pública del propio servicio |
+| `TASKS_INVOKER_SERVICE_ACCOUNT` | para la cola | Service account que firma el token OIDC |
+| `TASKS_WORKER_SECRET` | no | Solo desarrollo; en producción se ignora |
+| `QUEUE_DRIVER` | no | `inline` o `cloud-tasks`. Vacío = automático |
+
+Si falta una sola de las cuatro obligatorias, el sistema **degrada a inline y lo registra** en vez de fallar: la cola es una mejora opt-in.
+
+`QUEUE_DRIVER=inline` desactiva la cola sin desmontar el resto de la configuración — útil para volver atrás rápido.
+
+La autenticación usa ADC (Application Default Credentials), que en Cloud Run funciona sin configuración adicional. Ver [WhatsApp](whatsapp.md#cola).
+
+### Google Docs (obligatorio para generar contratos)
+
+**No usa variables de entorno.** `src/lib/google/auth.ts` lee `google_oauth_client.json` y `token.json` desde `process.cwd()`.
+
+> No es opcional: la generación de contratos pasa por Google Docs. Sin esos dos archivos, `POST /api/whatsapp/request-contract` falla con `ENOENT` y devuelve `400`. En un contenedor hay que montarlos explícitamente (por ejemplo, como volumen desde Secret Manager). Ver [EasyLex y contratos](easylex-contratos.md#generación-del-pdf).
+
+## Roles y permisos (RBAC)
+
+| Variable | Notas |
+|---|---|
+| `BOOTSTRAP_ADMIN_EMAILS` | Lista separada por comas. Esos correos se promueven a `admin` al iniciar sesión |
+| `RBAC_ENFORCEMENT` | `warn` (por defecto) o `enforce` |
+
+Los roles son acumulativos: `solo_lectura` < `operaciones` < `admin`. El reparto por endpoint está en [API](api.md#autorización-por-rol).
+
+**Todos los perfiles nacen como `solo_lectura`.** Sin `BOOTSTRAP_ADMIN_EMAILS`, tras aplicar la migración nadie puede ejecutar acciones de escritura y habría que promover al primer administrador editando la base a mano:
+
+```sql
+update public.profiles set role = 'admin' where email = 'tu@correo.com';
+```
+
+**Despliega primero en `warn`.** En ese modo, un rol insuficiente no bloquea: deja pasar la petición y registra `auth.insufficient_role`. Revisa esos logs, confirma que los roles asignados son los correctos, y solo entonces pon `enforce`. Es el mismo despliegue por fases que la CSP, y evita quedarte fuera de tu propia aplicación.
+
+Ver quién tiene qué rol:
+
+```sql
+select email, role from public.profiles order by role, email;
+```
+
+## Tabla `settings`
+
+La escribe el formulario `Ajustes → Conexión` (`/settings/whatsapp`) vía `POST /api/whatsapp/config`, que exige rol `admin`.
+
+Claves: `whatsapp_phone_number_id`, `whatsapp_business_number`, `whatsapp_webhook_verify_token`.
+
+> **Los secretos ya no se guardan aquí.** `whatsapp_access_token` y `whatsapp_app_secret` se rechazan: quedaban sin cifrar y accesibles a cualquier sesión autenticada. Van en variables de entorno. Si tu base tiene filas antiguas con esas claves, bórralas — no se leen, pero siguen expuestas:
+>
+> ```sql
+> delete from public.settings where key in ('whatsapp_access_token', 'whatsapp_app_secret');
+> ```
+
+## Tabla `company_settings`
+
+Configuración de negocio, editable en base sin redeploy. Se lee con `getCompanySettings()` / `getCompanySetting(key)`.
+
+### Datos del acreedor (contrato)
+
+| Clave | Estado |
+|---|---|
+| `acreedor_razon_social` | sembrada — `LOZAV CONSTRUCTORES, SOCIEDAD ANÓNIMA DE CAPITAL VARIABLE` |
+| `acreedor_representante` | sembrada — `DARA JAHDAI LOPEZ DE LOS ANGELES` |
+| `acreedor_rfc` | sembrada — `LCO2105032T5` |
+| `acreedor_domicilio` | sembrada |
+| `acreedor_banco` | **vacía — (LLENAR)** |
+| `acreedor_cuenta` | **vacía — (LLENAR)** |
+| `acreedor_clabe` | **vacía — (LLENAR)** |
+| `testigo_1_nombre` | **vacía — (LLENAR)** |
+| `testigo_2_nombre` | **vacía — (LLENAR)** |
+
+Las cinco vacías deben llenarse antes de emitir contratos reales.
+
+### Validaciones de EasyLex
+
+Booleanos en texto: `easylex_validate_biometric` y `easylex_validate_liveness` en `true`; `easylex_validate_id`, `easylex_validate_sms`, `easylex_validate_picture`, `easylex_validate_email`, `easylex_validate_voice` en `false`.
+
+## Checklist antes de producción
+
+Configuración:
+
+- [ ] `EASYLEX_BASE_URL` y `EASYLEX_SIGNING_LINK_BASE_URL` apuntando a producción, no a sandbox
+- [ ] `EASYLEX_WEBHOOK_SECRET` definido (si está vacío no hay autenticación de webhook)
+- [ ] `EASYLEX_CALLBACK_URL` terminando en `/api/webhooks/easylex/sign`
+- [ ] Las cinco claves `(LLENAR)` de `company_settings` completadas
+- [ ] Secretos en un gestor de secretos, no en la tabla `settings`
+- [ ] `NEXT_PUBLIC_APP_URL` con el dominio real (rompe el OAuth si no)
+- [ ] Webhook de Meta apuntando al dominio público y verificado
+
+- [ ] Aplicar las migraciones `20260720_enable_rls_deny_all.sql` y `20260721_profiles_provisioning_and_roles.sql`
+- [ ] Definir `BOOTSTRAP_ADMIN_EMAILS` **antes** de poner `RBAC_ENFORCEMENT=enforce`
+- [ ] Borrar de `settings` las filas antiguas con secretos en texto plano
+- [ ] **Montar `google_oauth_client.json` y `token.json` en el contenedor** — sin ellos no se genera ningún contrato
+- [ ] Verificar que la consola no reporta violaciones de CSP, y entonces cambiar `Content-Security-Policy-Report-Only` a `Content-Security-Policy` en `next.config.ts`
+
+Ya resuelto en código (fase 1 de endurecimiento):
+
+- [x] Verificación HMAC de `X-Hub-Signature-256` en el webhook de Meta
+- [x] Webhook de EasyLex con comparación en tiempo constante y *fail closed*
+- [x] `mock-sign` deshabilitado en producción
+- [x] RLS deny-all en las 18 tablas + `security_invoker` en las vistas
+- [x] Cabeceras de seguridad HTTP y `poweredByHeader: false`
+
+Ya resuelto (fase 4):
+
+- [x] RBAC aplicado con `requireRole()` en todas las rutas de escritura
+- [x] Aprovisionamiento automático de `profiles` y función `current_user_role()`
+- [x] Secretos fuera de la tabla `settings`
+- [x] Módulo de auditoría compartido, con el operador registrado
+
+Seguridad pendiente en el código:
+
+- [ ] Rate limiting en los endpoints públicos
+- [ ] Fase B de RLS: políticas por rol y lecturas con el cliente de sesión
+
+Ver también: [WhatsApp](whatsapp.md) · [EasyLex y contratos](easylex-contratos.md) · [Infraestructura](infraestructura.md)

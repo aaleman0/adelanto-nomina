@@ -1,64 +1,52 @@
-ve todo ---
+---
 name: adelantos-arquitectura
-description: Disenar, revisar o modificar la arquitectura del sistema masivo de adelantos por WhatsApp usando ManyChat, EasyLex, backend propio, base de datos, importacion CSV y backoffice operativo. Use cuando Codex necesite razonar sobre flujos completos, responsabilidades entre componentes, estados, volumen, idempotencia, auditoria, riesgos operativos o decisiones de arquitectura.
+description: Diseñar, revisar o modificar la arquitectura del sistema masivo de adelantos por WhatsApp (WhatsApp Cloud API, EasyLex, backend Next.js, Supabase, importación CSV y backoffice). Use cuando haya que razonar sobre flujos completos, responsabilidades entre componentes, estados, volumen, idempotencia, auditoría, riesgos operativos o decisiones de arquitectura.
 ---
 
 # Adelantos Arquitectura
 
-## Proposito
+Mapa principal del sistema. Úsala antes de tomar decisiones que crucen componentes.
 
-Usar esta skill como mapa principal del sistema. Mantener separadas las responsabilidades: ManyChat conversa con el empleado, EasyLex muestra la firma al empleado, el backend decide, Supabase Postgres conserva la verdad operativa y el backoffice interno muestra evidencia.
+## Lee primero
 
-## Principios
+- `docs/arquitectura.md` — componentes, flujo completo, decisiones y riesgos.
+- `docs/base-de-datos.md` — el modelo de datos es la referencia real, no la memoria.
 
-- Tratar Supabase Postgres como fuente de verdad. ManyChat solo refleja campos utiles para conversar.
-- Evitar depender de Google Sheets en vivo. Importar CSV a staging y normalizar hacia tablas operativas.
-- Disenar para uso masivo: colas, jobs, paginacion, idempotencia, reintentos y logs desde el inicio.
-- Registrar eventos importantes antes y despues de llamar integraciones externas.
-- Mantener trazabilidad por empleado, solicitud, contrato, pago, importacion y webhook.
-- Separar decisiones legales de decisiones tecnicas cuando haya firma, consentimiento o evidencia probatoria.
+No repitas aquí lo que está en `docs/`. Si un dato falta, agrégalo al documento correspondiente.
 
-## Flujo Base
+## Separación de responsabilidades
 
-1. Importar CSV exportado desde Excel o Google Sheets.
-2. Guardar lote y filas crudas.
-3. Validar y normalizar telefono, RFC, monto, empresa y estatus.
-4. Hacer upsert a empleados, ofertas y datos operativos.
-5. Enviar broadcast desde ManyChat a empleados activos.
-6. Recibir clic en `Solicitalo aqui` mediante External Request al backend.
-7. Validar elegibilidad e idempotencia.
-8. Crear contrato o solicitud de firma en EasyLex.
-9. Guardar `contract_id`, `signing_url` y estado.
-10. Responder o actualizar ManyChat con el link.
-11. Recibir webhook de firma desde EasyLex.
-12. Actualizar contrato, empleado, ManyChat y timeline.
-13. Cargar o actualizar pagos y CEP.
-14. Responder `AYUDA` desde la base de datos.
-15. Mostrar evidencia en backoffice.
+Mantenerla es la regla que más protege este sistema:
 
-## Componentes
+- **WhatsApp Cloud API** conversa con el empleado. No decide nada.
+- **EasyLex** muestra la firma y emite evidencia. No valida elegibilidad.
+- **El backend** decide: elegibilidad, idempotencia, generación, orquestación.
+- **Supabase Postgres** conserva la verdad operativa.
+- **El backoffice** muestra evidencia. El empleado nunca lo usa.
 
-- `ManyChat`: broadcasts, botones, palabra clave `AYUDA`, campos custom y External Requests.
-- `Backend`: endpoints, reglas, workers, colas, integraciones, idempotencia y logs.
-- `EasyLex`: contrato, firma, evidencia contractual, link y webhooks.
-- `Supabase Postgres`: empleados, ofertas, solicitudes, contratos, imports, eventos y errores.
-- `Supabase Auth`: acceso al backoffice y roles iniciales.
-- `Supabase Storage`: CSVs importados y evidencia/documentos auxiliares cuando aplique.
-- `Backoffice interno`: dashboard, busqueda, detalle por empleado, timeline, errores y acciones operativas. El empleado nunca usa esta pagina.
+## Principios al diseñar
 
-## Coordinacion Con Otras Skills
+- Supabase es la fuente de verdad; los servicios externos reflejan estado, no lo definen.
+- Nunca depender de Google Sheets en vivo: importar CSV a staging y normalizar hacia tablas operativas.
+- Registrar eventos **antes y después** de llamar a una integración externa.
+- Mantener trazabilidad por empleado, solicitud, contrato, importación y webhook.
+- Separar decisiones legales de decisiones técnicas cuando haya firma, consentimiento o evidencia probatoria.
+- Diseñar para volumen: paginación, idempotencia, reintentos y logs desde el inicio.
 
-- Usar `$adelantos-importacion-csv` para disenar carga masiva y normalizacion.
-- Usar `$adelantos-manychat` para payloads, campos y conversaciones.
-- Usar `$adelantos-easylex` para contratos y firma.
-- Usar `$adelantos-backend` para endpoints, jobs y reglas.
-- Usar `$adelantos-pagos-cep` para dispersion, pagos y consultas `AYUDA`.
-- Usar `$adelantos-backoffice` para pantallas internas.
-- Usar `$adelantos-auditoria` para evidencia, logs y trazabilidad.
+## Al proponer un cambio, verifica
 
-## Referencias
+1. **¿Rompe la idempotencia?** Las garantías viven en índices únicos parciales, no en el código. Revísalos en `docs/base-de-datos.md` antes de tocar el flujo de contratos.
+2. **¿Altera un snapshot?** `contract_requests.contract_snapshot` congela lo firmado. No debe recalcularse.
+3. **¿Necesita cola?** Hoy no hay ninguna: el envío masivo corre dentro del request HTTP. Si el trabajo puede tardar, dilo explícitamente en lugar de asumir que hay worker.
+4. **¿Toca el esquema?** No hay tipos generados; los tipos de `src/lib/backoffice/contract-control.ts` se actualizan a mano y el compilador no avisa.
+5. **¿Añade una ruta?** Todo lo que no esté en la lista pública de `src/proxy.ts` queda protegido por sesión. Es el comportamiento deseado — no lo eludas.
 
-Leer `references/overview.md` cuando se necesite el mapa de entidades, estados y eventos base.
-Leer `references/fases-v1.md` antes de implementar para seguir el orden de construccion por fases.
-Leer `references/modelo-supabase-v1.md` para el modelo de datos acordado.
-Leer `references/enums-v1.md` para estados iniciales.
+## Riesgos vigentes
+
+Enumerados en `docs/arquitectura.md`. Los dos que más condicionan un diseño nuevo: **no existe capa de colas** (el envío masivo corre dentro del request HTTP) y **la autorización es binaria** (sesión sí/no, sin roles aplicados).
+
+## Coordinación con otras skills
+
+`$adelantos-backend` (endpoints y reglas) · `$adelantos-importacion-csv` (carga masiva) · `$adelantos-easylex` (contratos y firma) · `$adelantos-backoffice` (pantallas internas) · `$adelantos-auditoria` (evidencia) · `$adelantos-design-system` (UI) · `$adelantos-testing` (validación)
+
+> ManyChat se retiró del sistema. Si encuentras referencias, son legado del esquema y están documentadas como deuda en `docs/base-de-datos.md`.

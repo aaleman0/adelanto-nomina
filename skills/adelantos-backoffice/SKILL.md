@@ -1,76 +1,48 @@
 ---
 name: adelantos-backoffice
-description: Disenar o implementar el front interno del sistema de adelantos para visualizar evidencia operativa, importaciones, empleados, contratos, pagos, errores, logs y timelines por empleado. Use cuando Codex construya dashboards, tablas, filtros, detalle de empleado, vistas de auditoria, permisos basicos o pantallas administrativas simples para operacion masiva.
+description: Diseñar o implementar el front interno del sistema de adelantos para visualizar evidencia operativa, importaciones, empleados, contratos, errores, logs y timelines por empleado. Use cuando se construyan dashboards, tablas, filtros, detalle de empleado, vistas de auditoría o pantallas administrativas para operación masiva.
 ---
 
 # Adelantos Backoffice
 
-## Proposito
+## Lee primero
 
-Usar esta skill para construir un panel interno simple, funcional y orientado a operacion sobre Supabase. El empleado nunca ve ni usa esta pagina; solo recibe mensajes por ManyChat y firma en EasyLex. En v1 puede operar sin login, dejando la estructura preparada para agregar Supabase Auth despues. Priorizar busqueda, filtros, evidencia y acciones claras sobre estetica decorativa.
+- `docs/frontend.md` — rutas existentes, componentes y sistema de diseño.
+- `docs/base-de-datos.md` — las vistas `backoffice_contract_control_v1` y `backoffice_contract_timeline_v1` alimentan casi todo.
 
-## Alcance V1 Ajustado
+## Qué es esta aplicación
 
-La pagina interna no administra cuentas bancarias, pagos ni datos financieros operativos. Su funcion principal es controlar evidencia del flujo de contrato:
+Una consola administrativa interna. **El empleado nunca la ve ni inicia sesión en ella**; solo recibe mensajes de WhatsApp y firma en EasyLex.
 
-- A quien ya se le envio mensaje por ManyChat.
-- Quien hizo clic o solicito.
-- A quien se le genero contrato/link de firma.
-- Que link sigue vigente o expiro.
-- Quien firmo.
-- Cuando paso cada movimiento.
-- Que errores existen por empleado, mensaje, contrato o EasyLex.
+Su función es controlar evidencia del flujo: a quién se le envió mensaje, quién solicitó, a quién se le generó link, cuál sigue vigente, quién firmó, cuándo ocurrió cada movimiento y qué errores existen.
 
-## Vistas Minimas
+No administra pagos ni datos financieros: no existe código de pagos ni CEP en el proyecto.
 
-- Dashboard: totales de mensajes enviados, solicitudes, contratos generados, links expirados, firmas y errores.
-- Importaciones: subir CSV, ver lotes, errores por fila y resumen aplicado.
-- Control de contratos: buscar por nombre, telefono, RFC, empresa, estado de mensaje y estado de firma.
-- Contratos: filtrar por estado, ver link, contract_id, vigencia, timestamps y error.
-- Logs: integraciones ManyChat, EasyLex, jobs y webhooks relacionados con contrato.
-- Detalle de empleado: identidad minima, oferta, mensaje, contrato y timeline.
+## Reglas de UX operativa
 
-## Detalle De Empleado
+- Diseñar como consola interna, no como portal de usuario final.
+- No crear páginas públicas para empleados. La única excepción es `/firmar/[signerId]`, que solo redirige.
+- Tablas con filtros y paginación **server-side**. No cargar miles de filas en el cliente.
+- Hacer buscables teléfono, RFC y nombre.
+- Estados con etiquetas consistentes.
+- **No mostrar CLABE ni datos bancarios.** La vista de control los excluye deliberadamente; no los reintroduzcas por conveniencia.
+- Payloads completos solo bajo expansión o vista técnica.
+- Acciones con confirmación cuando regeneren links o reintenten integraciones.
 
-Mostrar en una sola vista:
+## Estados operativos
 
-- Datos del empleado y contacto ManyChat.
-- Oferta vigente y monto aprobado.
-- Solicitud de contrato y link EasyLex.
-- Estado de firma.
-- Timeline de eventos importantes.
-- Errores relacionados y acciones de reintento permitidas.
+`operational_status` es un `CASE` en la vista donde **gana la primera coincidencia**. La lista y su orden exacto están en `docs/base-de-datos.md`.
 
-## Reglas De UX Operativa
+El orden importa: al añadir un filtro o badge, respétalo. Está replicado a mano en `ContractOperationalStatus` (`src/lib/backoffice/contract-control.ts`), así que un cambio en la vista obliga a actualizar el tipo — nada lo verifica automáticamente.
 
-- Disenar como consola administrativa interna, no como portal de usuario final.
-- No crear paginas publicas para empleados.
-- No mostrar instrucciones para empleados dentro del backoffice salvo plantillas/mensajes editables si se agregan despues.
-- Usar tablas con filtros y paginacion server-side.
-- Hacer que telefono, RFC y subscriber_id sean buscables.
-- Mostrar estados con etiquetas consistentes.
-- No mostrar CLABE, banco ni datos bancarios en las vistas principales.
-- Mostrar payloads completos solo bajo expansion o vista tecnica.
-- Evitar cargar miles de filas en el cliente.
-- Incluir acciones con confirmacion cuando reintenten integraciones o regeneren links.
+## Antes de escribir UI
 
-## Roles Iniciales
+Revisa `docs/frontend.md` para no duplicar lo que ya existe. En particular ya hay: `DataTable`, `StatusBadge`, `Metric`, `EmptyState`, `PaginationControls`, `ConfirmDialog`, `CopyLinkButton` y `Toast`.
 
-En v1, sin login ni roles activos. Mantener esta seccion como preparacion para una fase posterior.
+Hay inconsistencias conocidas —`useDebounce` implementado tres veces, dos sistemas de badges conviviendo— listadas al final de `docs/frontend.md`. No las repliques.
 
-- `admin`: ve todo y puede reintentar procesos.
-- `operaciones`: ve empleados, contratos, mensajes e importaciones.
-- `solo_lectura`: consulta evidencia.
+## Roles
 
-## Supabase
+`profiles.role` ya se aplica en el backend con `requireRole()`: `solo_lectura` < `operaciones` < `admin`.
 
-- Usar Supabase Auth para usuarios del backoffice.
-- Guardar roles en tabla de perfiles o claims controlados por backend.
-- Usar Supabase Storage para CSVs importados y archivos auxiliares.
-- No exponer service role key en el front.
-
-## Referencias
-
-Leer `references/vistas-backoffice.md` para estructura de pantallas y columnas.
-Leer `../adelantos-arquitectura/references/fases-v1.md` para construir el backoffice en el orden acordado: primero lectura, despues contratos y acciones.
-Leer `../adelantos-design-system/references/tokens.md` y `../adelantos-design-system/references/componentes.md` antes de implementar o refactorizar UI.
+**La UI todavía no los refleja.** Un usuario `solo_lectura` sigue viendo los botones de acción; con `RBAC_ENFORCEMENT=enforce` recibirá un `403` al pulsarlos. Ocultar o deshabilitar esos controles según el rol es trabajo pendiente de esta área — el actor está disponible vía `getCurrentActor()`.
