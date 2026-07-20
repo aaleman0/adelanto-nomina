@@ -6,6 +6,9 @@ import {
 import { isProduction } from "@/lib/security/webhook-signatures";
 import { logger } from "@/lib/logger";
 
+import { enforceRateLimit } from "@/lib/security/rate-limit";
+import { RATE_LIMITS } from "@/lib/security/rate-limit-config";
+
 export const runtime = "nodejs";
 
 /**
@@ -19,6 +22,9 @@ export async function POST(request: Request) {
   if (isProduction()) {
     return new Response(null, { status: 404 });
   }
+
+  const limited = enforceRateLimit(request, RATE_LIMITS.webhookEasylex);
+  if (limited) return limited;
 
   try {
     const payload = await request.json();

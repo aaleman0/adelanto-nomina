@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { sendBulkMessages, enqueueBulkSend, validateBulkEligibility } from "@/lib/whatsapp/bulk-send";
 import { getQueueDriver } from "@/lib/queue";
 import { requireRole } from "@/lib/auth/roles";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
+import { RATE_LIMITS } from "@/lib/security/rate-limit-config";
 import { BulkSendBodySchema, BulkSendActionSchema } from "@/lib/whatsapp/schemas";
 import { parseJsonBody, parseQuery } from "@/lib/api/validation";
 import { logger } from "@/lib/logger";
@@ -13,6 +15,13 @@ export async function POST(request: Request) {
   const query = parseQuery(request, BulkSendActionSchema);
   if (!query.success) return query.response;
   const { action } = query.data;
+
+  // Solo el envío se limita: validar es una consulta barata sin efectos hacia
+  // Meta, y un operador la ejecuta a menudo mientras ajusta la selección.
+  if (action === "send") {
+    const limited = enforceRateLimit(request, RATE_LIMITS.whatsappBulkSend);
+    if (limited) return limited;
+  }
 
   // Validar elegibilidad es una consulta sin efectos; enviar no lo es.
   const auth = await requireRole(action === "validate" ? "solo_lectura" : "operaciones");

@@ -185,9 +185,13 @@ Ya resuelto (fase 4):
 - [x] Secretos fuera de la tabla `settings`
 - [x] Módulo de auditoría compartido, con el operador registrado
 
+Ya resuelto (fase 5):
+
+- [x] Rate limiting en webhooks y endpoints de escritura caros
+
 Seguridad pendiente en el código:
 
-- [ ] Rate limiting en los endpoints públicos
 - [ ] Fase B de RLS: políticas por rol y lecturas con el cliente de sesión
+- [ ] Observabilidad de errores (Sentry)
 
 Ver también: [WhatsApp](whatsapp.md) · [EasyLex y contratos](easylex-contratos.md) · [Infraestructura](infraestructura.md)

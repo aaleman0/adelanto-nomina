@@ -5,6 +5,9 @@ import { easylexEnv } from "@/lib/env";
 import { verifySharedSecret, isProduction } from "@/lib/security/webhook-signatures";
 import { randomUUID } from "node:crypto";
 
+import { enforceRateLimit } from "@/lib/security/rate-limit";
+import { RATE_LIMITS } from "@/lib/security/rate-limit-config";
+
 export const runtime = "nodejs";
 
 type EasyLexWebhookPayload = {
@@ -33,6 +36,9 @@ type EasyLexWebhookPayload = {
 };
 
 export async function POST(request: Request) {
+  const limited = enforceRateLimit(request, RATE_LIMITS.webhookEasylex);
+  if (limited) return limited;
+
   const correlationId = randomUUID();
 
   try {

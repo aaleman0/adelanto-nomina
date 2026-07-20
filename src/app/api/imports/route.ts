@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/roles";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
+import { RATE_LIMITS } from "@/lib/security/rate-limit-config";
 import { prepareCsvImport } from "@/lib/imports/csv";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const limited = enforceRateLimit(request, RATE_LIMITS.importUpload);
+  if (limited) return limited;
+
   const auth = await requireRole("operaciones");
   if (!auth.ok) return auth.response;
 

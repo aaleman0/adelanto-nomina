@@ -76,7 +76,7 @@ Quedan 3 helpers duplicados por migrar (`request-contract.ts`, `mock-sign.ts`, `
 
 ## Seguridad — pendientes reales
 
-- **Sin rate limiting** en ningún endpoint.
+- **Rate limiting** con `enforceRateLimit(request, RATE_LIMITS.x)` al inicio del handler (`src/lib/security/`). Límites en `rate-limit-config.ts`. Es en memoria y por instancia: frena abuso trivial, no vale como límite global exacto (haría falta Redis). Ponlo **antes** de la verificación de firma en webhooks, para que el martilleo no llegue ni a verificarse.
 - **Fase B de RLS** pendiente: políticas por rol y lecturas con el cliente de sesión.
 - Los secretos ya no se guardan en `settings`, pero **pueden quedar filas antiguas**: conviene borrarlas.
 

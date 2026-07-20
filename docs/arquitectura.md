@@ -111,7 +111,7 @@ Ninguno de estos es un bug aislado; son propiedades del diseño actual que convi
 3. **RLS sigue en fase A.** Deny-all activo, pero la app consulta con service role, así que las políticas por rol aún no son el punto de aplicación.
 4. **No hay tipos generados de la base.** Los tipos son manuales; un cambio de esquema no rompe la compilación.
 5. **El esquema difiere entre instalación nueva y migrada** en `whatsapp_contract_messages`.
-6. **No hay rate limiting** en ningún endpoint.
+6. **Rate limiting en memoria, por instancia.** Webhooks y escrituras caras están limitados (`src/lib/security/rate-limit.ts`), pero el estado no se comparte entre instancias: con N réplicas el límite efectivo es N× el configurado. Frena el abuso trivial, no un atacante distribuido. Sustituir el store por Redis cuando haga falta un límite global exacto.
 7. **Quedan 3 helpers de auditoría duplicados** en `request-contract.ts`, `mock-sign.ts` e `imports/apply.ts`, pendientes de migrar al módulo compartido.
 
 Los detalles de cada uno están en [Base de datos](base-de-datos.md#seguridad-y-control-de-acceso) y [API](api.md).

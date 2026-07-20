@@ -4,6 +4,9 @@ import { verifyMetaSignature, isProduction } from "@/lib/security/webhook-signat
 import { whatsAppEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
 
+import { enforceRateLimit } from "@/lib/security/rate-limit";
+import { RATE_LIMITS } from "@/lib/security/rate-limit-config";
+
 export const runtime = "nodejs";
 
 // GET - Verificación de webhook por Meta
@@ -23,6 +26,9 @@ export async function GET(request: Request) {
 
 // POST - Recibir eventos de Meta
 export async function POST(request: Request) {
+  const limited = enforceRateLimit(request, RATE_LIMITS.webhookWhatsapp);
+  if (limited) return limited;
+
   // El cuerpo se lee como texto crudo: la firma HMAC de Meta se calcula sobre
   // los bytes exactos. Parsear antes rompería la verificación.
   const rawBody = await request.text();
