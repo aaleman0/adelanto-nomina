@@ -6,6 +6,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { RoleGate } from "@/components/auth/role-gate";
+import { SendWhatsAppButton } from "@/components/whatsapp/send-whatsapp-button";
 import { CopyLinkButton } from "@/components/ui/copy-link-button";
 import { Metric } from "@/components/ui/metric";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -160,7 +161,17 @@ function ActionsCard({ control }: { control: ContractControlRow }) {
   return (
     <Card className="p-5">
       <h3 className="text-sm font-medium text-text-muted">Acciones</h3>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-wrap items-start gap-2">
+        {/* Enviar el mensaje inicial: es el paso que ARRANCA el flujo, así que
+            se ofrece mientras el contrato no esté firmado, sin depender de que
+            el empleado ya haya solicitado. */}
+        {!isSigned && (
+          <SendWhatsAppButton
+            employeeId={control.employee_id}
+            employeeName={control.empleado ?? control.nombre}
+          />
+        )}
+
         <form action={regenerateContractLinkAction}>
           <input name="contract_request_id" type="hidden" value={control.contract_request_id ?? ""} />
           <input name="employee_id" type="hidden" value={control.employee_id} />
