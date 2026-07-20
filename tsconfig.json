@@ -24,11 +24,16 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "*.ts",
+    "*.mts",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  // tests/ y scripts/ quedan fuera del build de Next a propósito: incluirlos
+  // arrastraba los tipos de Playwright y de los scripts al chequeo de
+  // `next build`, que llegaba a agotar el heap de 2 GB de Node.
+  // Se siguen comprobando con `pnpm typecheck` vía tsconfig.check.json.
+  "exclude": ["node_modules", "tests", "scripts", ".next"]
 }
