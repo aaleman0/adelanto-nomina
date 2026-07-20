@@ -1,22 +1,18 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { BulkDetailQuerySchema } from "@/lib/whatsapp/schemas";
+import { parseQuery } from "@/lib/api/validation";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
 // GET /api/whatsapp/bulk/detail?id=<bulkSendId>&page=1&pageSize=50
 export async function GET(request: Request) {
+  const parsed = parseQuery(request, BulkDetailQuerySchema);
+  if (!parsed.success) return parsed.response;
+  const { id, page, pageSize, status: statusFilter, q: searchQuery } = parsed.data;
+
   try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-    if (!id) {
-      return NextResponse.json({ ok: false, error: "id es requerido." }, { status: 400 });
-    }
-
-    const page = Math.max(1, Number(searchParams.get("page") ?? "1"));
-    const pageSize = Math.min(200, Math.max(1, Number(searchParams.get("pageSize") ?? "50")));
-    const statusFilter = searchParams.get("status"); // sent | failed | null
-
     const supabase = getSupabaseAdmin();
 
     // Bulk send header
@@ -34,8 +30,6 @@ export async function GET(request: Request) {
     // Messages for this bulk send
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
-
-    const searchQuery = searchParams.get("q")?.trim(); // Búsqueda por RFC o nombre
 
     let msgQuery = supabase
       .from("whatsapp_contract_messages")

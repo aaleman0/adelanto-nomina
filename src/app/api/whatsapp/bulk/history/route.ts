@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { BulkHistoryQuerySchema } from "@/lib/whatsapp/schemas";
+import { parseQuery } from "@/lib/api/validation";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
 // GET /api/whatsapp/bulk/history?page=1&pageSize=20&status=completed&mode=import&dateFrom=2024-01-01&dateTo=2024-12-31
 export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const page = Math.max(1, Number(searchParams.get("page") ?? "1"));
-    const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize") ?? "20")));
-    const status = searchParams.get("status");   // completed | sending | failed | null (todos)
-    const mode = searchParams.get("mode");        // import | manual | null (todos)
-    const dateFrom = searchParams.get("dateFrom"); // ISO date string
-    const dateTo = searchParams.get("dateTo");     // ISO date string
+  const parsed = parseQuery(request, BulkHistoryQuerySchema);
+  if (!parsed.success) return parsed.response;
+  const { page, pageSize, status, mode, dateFrom, dateTo } = parsed.data;
 
+  try {
     const supabase = getSupabaseAdmin();
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -27,7 +25,7 @@ export async function GET(request: Request) {
 
     if (status) query = query.eq("status", status);
     if (mode) query = query.eq("mode", mode);
-    if (dateFrom) query = query.gte("created_at", new Date(dateFrom).toISOString());
+    if (dateFrom) query = query.gte("created_at", dateFrom.toISOString());
     if (dateTo) {
       // dateTo inclusivo: agregar 1 día
       const end = new Date(dateTo);

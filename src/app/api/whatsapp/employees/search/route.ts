@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { EmployeeSearchQuerySchema } from "@/lib/whatsapp/schemas";
+import { parseQuery, escapePostgrestValue } from "@/lib/api/validation";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
@@ -9,12 +11,11 @@ export const runtime = "nodejs";
  *
  * Busca empleados por nombre, apellidos, RFC o teléfono.
  * Devuelve datos básicos + oferta vigente para poder evaluar elegibilidad.
- * Usado en el flujo de prueba de envío individual.
  */
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const q = searchParams.get("q")?.trim() ?? "";
-  const limit = Math.min(parseInt(searchParams.get("limit") ?? "10", 10), 25);
+  const parsed = parseQuery(request, EmployeeSearchQuerySchema);
+  if (!parsed.success) return parsed.response;
+  const { q, limit } = parsed.data;
 
   if (q.length < 2) {
     return NextResponse.json({ ok: true, employees: [] });
@@ -23,16 +24,19 @@ export async function GET(request: Request) {
   try {
     const supabase = getSupabaseAdmin();
 
-    // Buscar empleados por nombre, apellidos, RFC o teléfono
+    // El término se entrecomilla: sin esto, un `,` o un `.` en la búsqueda
+    // (p. ej. "Pérez, Juan") altera la estructura del filtro de PostgREST.
+    const term = escapePostgrestValue(`%${q}%`);
+
     const { data: employees, error } = await supabase
       .from("employees")
       .select("id, nombre, apellidos, rfc, telefono_normalizado, empleador")
       .or(
         [
-          `nombre.ilike.%${q}%`,
-          `apellidos.ilike.%${q}%`,
-          `rfc.ilike.%${q}%`,
-          `telefono_normalizado.ilike.%${q}%`,
+          `nombre.ilike.${term}`,
+          `apellidos.ilike.${term}`,
+          `rfc.ilike.${term}`,
+          `telefono_normalizado.ilike.${term}`,
         ].join(","),
       )
       .order("apellidos", { ascending: true })
@@ -46,7 +50,6 @@ export async function GET(request: Request) {
 
     const ids = employees.map((e) => e.id);
 
-    // Obtener oferta vigente para cada empleado encontrado
     const { data: offers } = await supabase
       .from("advance_offers")
       .select("employee_id, monto_prestamo_autorizado, is_eligible, status")
