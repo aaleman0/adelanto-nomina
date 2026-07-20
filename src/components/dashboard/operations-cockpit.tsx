@@ -19,7 +19,7 @@ export function OperationsCockpit({ rows, recent, metrics, signed, total }: { ro
   const pending = metrics.find((metric) => metric.key === "pendingSend")?.value ?? 0;
 
   return (
-    <section className="grid min-h-[620px] flex-1 gap-3 xl:min-h-0 xl:grid-cols-[200px_minmax(420px,1fr)_320px]">
+    <section className="grid flex-1 gap-3 xl:min-h-0 xl:grid-cols-[200px_minmax(420px,1fr)_320px]">
       <aside className="surface-panel flex min-h-0 flex-col rounded-xl p-4">
         <p className="font-data text-[10px] uppercase tracking-[.16em] text-text-muted">Estado de operación</p>
         <div className="mt-5 space-y-5">
@@ -34,7 +34,7 @@ export function OperationsCockpit({ rows, recent, metrics, signed, total }: { ro
         </div>
       </aside>
 
-      <div className="surface-panel flex min-h-0 flex-col overflow-hidden rounded-xl">
+      <div className="surface-panel flex min-h-0 flex-col rounded-xl xl:overflow-hidden">
         <div className="shrink-0 border-b border-border p-4 sm:p-5">
           <div className="flex items-center justify-between gap-4"><div><h2 className="font-display text-xl font-semibold text-text-primary">Cola operativa</h2><p className="font-data mt-1 text-[10px] uppercase tracking-[.14em] text-text-muted">{filtered.length} registros visibles</p></div><Link href="/contracts" className="text-xs font-semibold text-primary hover:text-primary-hover">Ver todos</Link></div>
           <label className="mt-4 flex h-11 items-center gap-3 rounded-lg border border-border bg-white/55 px-3 transition focus-within:border-[var(--color-3)] focus-within:bg-white">
@@ -42,12 +42,12 @@ export function OperationsCockpit({ rows, recent, metrics, signed, total }: { ro
             <input value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-text-disabled" placeholder="Buscar empleado, empresa o estado" />
           </label>
         </div>
-        <div className="panel-scroll flex-1 divide-y divide-border-subtle">
+        <div className="panel-scroll flex-1 divide-y divide-border-subtle max-xl:max-h-[60vh]">
           {filtered.length > 0 ? filtered.map((row) => <QueueRow key={row.employee_id} row={row} selected={row.employee_id === selected?.employee_id} onSelect={() => setSelectedId(row.employee_id)} />) : <div className="grid h-full min-h-40 place-items-center p-6 text-sm text-text-muted">No encontramos coincidencias.</div>}
         </div>
       </div>
 
-      <aside className="surface-panel panel-scroll min-h-[360px] rounded-xl p-5 xl:min-h-0">
+      <aside className="surface-panel min-h-[360px] rounded-xl p-5 xl:panel-scroll xl:min-h-0">
         <p className="font-data text-[10px] uppercase tracking-[.16em] text-text-muted">Inspector</p>
         {selected ? <Inspector row={selected} /> : <p className="mt-8 text-sm text-text-muted">Pasa el cursor por un registro para inspeccionarlo.</p>}
       </aside>
