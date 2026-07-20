@@ -57,7 +57,30 @@ export function OperationsCockpit({ rows, recent, metrics, signed, total }: { ro
 
 function QueueRow({ row, selected, onSelect }: { row: ContractControlRow; selected: boolean; onSelect: () => void }) {
   const tone = getTone(row.operational_status);
-  return <button type="button" onMouseEnter={onSelect} onFocus={onSelect} onClick={onSelect} className={`interactive-row grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-l-2 px-4 py-4 text-left ${selected ? "border-l-[var(--color-3)] bg-[rgba(212,225,232,.52)]" : "border-l-transparent"}`}><span className={`h-2 w-2 rounded-full ${tone.dot}`} /><span className="min-w-0"><strong className="block truncate text-sm font-semibold text-text-primary">{row.empleado || "Empleado sin nombre"}</strong><span className="mt-0.5 block truncate text-xs text-text-muted">{row.empleador || formatStatus(row.operational_status)}</span></span><span className="font-data text-xs font-medium text-text-secondary">{formatMoney(row.monto_prestamo_autorizado)}</span></button>;
+  const relativo = formatRelative(row.last_movement_at);
+  return (
+    <button
+      type="button"
+      onMouseEnter={onSelect}
+      onFocus={onSelect}
+      onClick={onSelect}
+      className={`interactive-row grid w-full grid-cols-[auto_1fr_auto] items-start gap-3 border-l-2 px-4 py-3.5 text-left ${selected ? "border-l-[var(--color-3)] bg-[rgba(212,225,232,.52)]" : "border-l-transparent"}`}
+    >
+      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${tone.dot}`} />
+      <span className="min-w-0">
+        <strong className="block truncate text-sm font-semibold text-text-primary">{row.empleado || "Empleado sin nombre"}</strong>
+        <span className="mt-1 flex min-w-0 items-center gap-1.5">
+          {/* El estado en la propia fila: el operador tría sin abrir el inspector. */}
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tone.badge}`}>{formatStatus(row.operational_status)}</span>
+          {row.empleador && <span className="truncate text-xs text-text-muted">· {row.empleador}</span>}
+        </span>
+      </span>
+      <span className="shrink-0 text-right">
+        <span className="font-data block text-xs font-medium text-text-secondary">{formatMoney(row.monto_prestamo_autorizado)}</span>
+        {relativo && <span className="mt-1 block text-[11px] text-text-muted">{relativo}</span>}
+      </span>
+    </button>
+  );
 }
 
 function Inspector({ row }: { row: ContractControlRow }) {
@@ -69,4 +92,25 @@ function Signal({ tone, label, value }: { tone: "success" | "warning" | "danger"
 function Detail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) { return <div><dt className="text-[10px] uppercase tracking-wider text-text-muted">{label}</dt><dd className={`mt-1 text-sm text-text-primary ${mono ? "font-data" : ""}`}>{value}</dd></div>; }
 function getTone(status: string) { if (status.includes("error")) return { dot: "bg-[var(--danger)]", badge: "bg-danger-bg text-danger" }; if (status.includes("firmado") || status.includes("generado")) return { dot: "bg-[var(--success)]", badge: "bg-success-bg text-success" }; return { dot: "bg-[var(--warning)]", badge: "bg-warning-bg text-warning" }; }
 function formatStatus(value: string) { return value.replaceAll("_", " "); }
+/**
+ * Antigüedad del último movimiento, en formato corto para escanear la cola:
+ * "hace 5 min", "hace 3 h", "hace 2 d". Más allá de un mes cae a fecha corta.
+ * La granularidad (minutos/horas/días) hace que el render de servidor y el de
+ * cliente coincidan, así que no hay desajuste de hidratación.
+ */
+function formatRelative(value: string | null): string {
+  if (!value) return "";
+  const then = new Date(value).getTime();
+  if (Number.isNaN(then)) return "";
+  const diffMs = Date.now() - then;
+  if (diffMs < 0) return "ahora";
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return "ahora";
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `hace ${d} d`;
+  return new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(then);
+}
 function formatMoney(value: number | null) { return value === null ? "—" : new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(value); }
