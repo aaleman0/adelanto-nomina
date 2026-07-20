@@ -1,5 +1,6 @@
 import { AppShell, PageHeader } from "@/components/layout/app-shell";
 import { GuidedSendFlow } from "@/components/whatsapp/send-flow/guided-send-flow";
+import { QuickSend } from "@/components/whatsapp/send-flow/quick-send";
 import Link from "next/link";
 
 export default function WhatsAppSendPage() {
@@ -19,6 +20,7 @@ export default function WhatsAppSendPage() {
           </Link>
         }
       />
+      <QuickSend />
       <GuidedSendFlow />
     </AppShell>
   );
