@@ -117,6 +117,14 @@ Por defecto `https://widgetsandbox.easylex.com/firmar` — **sandbox**. En produ
 
 El redirector permite usar un dominio propio en las plantillas de WhatsApp, lo cual importa porque Meta solo admite variables en la ruta de un botón URL, no en el dominio.
 
+### Envío del link al empleado
+
+Cuando el contrato queda listo, `requestContractFromWhatsApp` envía el link al empleado por WhatsApp (`src/lib/contracts/send-contract-link.ts`), como plantilla con **botón URL**: el link va en el botón, el cuerpo lleva nombre y monto. La plantilla se configura con `WHATSAPP_CONTRACT_TEMPLATE` (por defecto `contrato_listo`) y debe estar aprobada en Meta con ese botón.
+
+El envío es **no-fatal**: si falla (WhatsApp mal configurado, plantilla no aprobada, número inválido), el contrato ya está generado y el link sigue en la respuesta (`link_easylex`). El resultado incluye `link_enviado: boolean` y el intento queda registrado en `whatsapp_contract_messages` con `message_type = 'contract_link'`.
+
+> Antes, el endpoint solo **devolvía** el link y se asumía que un sistema externo (ManyChat, retirado) lo reenviaba. Ese hueco lo cerraba nadie; ahora lo envía la propia app.
+
 ## Webhook de firma
 
 `POST /api/webhooks/easylex/sign`. Detalle completo en [API](api.md#webhooks). Lo esencial:

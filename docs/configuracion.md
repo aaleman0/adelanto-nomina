@@ -102,7 +102,7 @@ No se usa `withSentryConfig` (el envoltorio webpack de Sentry) para no chocar co
 
 ### Google Docs (obligatorio para generar contratos)
 
-**No usa variables de entorno.** `src/lib/google/auth.ts` lee `google_oauth_client.json` y `token.json` desde `process.cwd()`.
+**No usa variables de entorno.** `src/lib/google/auth.ts` lee `google_oauth_client.json` y `token.json` desde `process.cwd()`. El `token.json` se genera una sola vez con `pnpm dlx tsx scripts/google-auth.ts`: abre una URL, inicias sesión con la cuenta dueña de la plantilla del contrato, apruebas Drive + Docs, y guarda el token.
 
 > No es opcional: la generación de contratos pasa por Google Docs. Sin esos dos archivos, `POST /api/whatsapp/request-contract` falla con `ENOENT` y devuelve `400`. En un contenedor hay que montarlos explícitamente (por ejemplo, como volumen desde Secret Manager). Ver [EasyLex y contratos](easylex-contratos.md#generación-del-pdf).
 
@@ -183,7 +183,8 @@ Configuración:
 - [ ] Solo tras verificar, poner `RLS_SESSION_READS=on` para que las lecturas del backoffice usen el cliente de sesión
 - [ ] Definir `BOOTSTRAP_ADMIN_EMAILS` **antes** de poner `RBAC_ENFORCEMENT=enforce`
 - [ ] Borrar de `settings` las filas antiguas con secretos en texto plano
-- [ ] **Montar `google_oauth_client.json` y `token.json` en el contenedor** — sin ellos no se genera ningún contrato
+- [ ] **Generar y montar las credenciales de Google** — sin ellas no se genera ningún contrato. Descarga `google_oauth_client.json` (OAuth client tipo Desktop) de Google Cloud Console, corre `pnpm dlx tsx scripts/google-auth.ts` para generar `token.json`, y monta ambos en el contenedor
+- [ ] Definir `WHATSAPP_CONTRACT_TEMPLATE` con una plantilla aprobada en Meta que tenga un botón URL, para que el link de firma se envíe al empleado
 - [ ] Verificar que la consola no reporta violaciones de CSP, y entonces cambiar `Content-Security-Policy-Report-Only` a `Content-Security-Policy` en `next.config.ts`
 
 Ya resuelto en código (fase 1 de endurecimiento):

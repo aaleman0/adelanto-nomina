@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { normalizePhoneFromCsv } from "@/lib/whatsapp/phone-utils";
 import { createEasyLexAttempt } from "@/lib/contracts/create-easylex-attempt";
+import { sendContractLinkWhatsApp } from "@/lib/contracts/send-contract-link";
 import { easylexEnv } from "@/lib/env";
 
 type JsonRecord = Record<string, unknown>;
@@ -103,6 +104,8 @@ type RequestContractResult = {
   request_id?: string;
   attempt_id?: string;
   link_easylex?: string;
+  /** Si el link se envió al empleado por WhatsApp (undefined si no aplica). */
+  link_enviado?: boolean;
   expires_at?: string;
   expires_at_formatted?: string;
 };
@@ -314,6 +317,20 @@ export async function requestContractFromWhatsApp(
     },
   });
 
+  // Enviar el link al empleado por WhatsApp. No es fatal: el contrato ya está
+  // generado y el link queda en el resultado aunque el envío falle.
+  const linkSend = await sendContractLinkWhatsApp({
+    employeeId: employee.id,
+    offerId: offer.id,
+    contractRequestId: contractRequest.id,
+    nombre: employee.nombre,
+    telefonoNormalizado: employee.telefono_normalizado,
+    monto: offer.monto_prestamo_autorizado,
+    signingUrl: attempt.signing_url,
+    subscriberId: input.subscriberId,
+    correlationId,
+  });
+
   const result: RequestContractResult = {
     ok: true,
     status: "contract_ready",
@@ -322,6 +339,7 @@ export async function requestContractFromWhatsApp(
     request_id: contractRequest.id,
     attempt_id: attempt.id,
     link_easylex: attempt.signing_url ?? undefined,
+    link_enviado: linkSend.sent,
     expires_at: attempt.expires_at ?? undefined,
     expires_at_formatted: attempt.expires_at
       ? formatDateForDisplay(attempt.expires_at)
