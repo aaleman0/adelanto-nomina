@@ -1,5 +1,10 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   DataTableCell,
@@ -9,21 +14,91 @@ import {
 } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { StatusTone } from "@/components/ui/status-badge";
+import { useHasRole } from "@/components/auth/role-context";
 import type { ContractControlRow } from "@/lib/backoffice/contract-control";
 
 const dateFormatter = new Intl.DateTimeFormat("es-MX", {
   dateStyle: "short",
 });
 
+type BulkState =
+  | { status: "idle" }
+  | { status: "sending" }
+  | { status: "done"; sent: number; failed: number }
+  | { status: "error"; message: string };
+
 export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
+  const router = useRouter();
+  const canSend = useHasRole("operaciones");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulk, setBulk] = useState<BulkState>({ status: "idle" });
+
+  // Solo tiene sentido enviar a quien no ha firmado. El "seleccionar todos"
+  // opera sobre este subconjunto para no ofrecer acciones imposibles.
+  const selectableRows = rows.filter((r) => r.operational_status !== "firmado");
+  const allSelected = selectableRows.length > 0 && selectableRows.every((r) => selected.has(r.employee_id));
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setBulk({ status: "idle" });
+  }
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(selectableRows.map((r) => r.employee_id)));
+    setBulk({ status: "idle" });
+  }
+
+  async function sendSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!window.confirm(`Se enviará el mensaje de WhatsApp a ${ids.length} empleado${ids.length !== 1 ? "s" : ""} con la plantilla por defecto. ¿Continuar?`)) return;
+
+    setBulk({ status: "sending" });
+    try {
+      const res = await fetch("/api/whatsapp/bulk?action=send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "manual", employeeIds: ids }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setBulk({ status: "error", message: data.error ?? `Error ${res.status}` });
+        return;
+      }
+      setBulk({ status: "done", sent: data.sent ?? 0, failed: data.failed ?? 0 });
+      setSelected(new Set());
+      router.refresh();
+    } catch (error) {
+      setBulk({ status: "error", message: error instanceof Error ? error.message : "Error de red." });
+    }
+  }
+
+  const selectedCount = selected.size;
+
   return (
     <Card className="surface-panel flex min-h-[360px] flex-1 flex-col overflow-hidden">
       <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h2 className="font-display text-base font-semibold text-text-primary">Expedientes</h2><p className="text-xs text-text-muted">Abre un registro para revisar contrato, mensajes y evidencia.</p></div><span className="font-data text-xs text-text-muted">{rows.length} visibles</span></div>
+
       {/* Desktop table */}
       <div className="panel-scroll hidden min-h-0 flex-1 lg:block">
         <DataTable className="w-full">
           <DataTableHead>
             <tr>
+              <DataTableHeaderCell>
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  disabled={selectableRows.length === 0}
+                  aria-label="Seleccionar todos"
+                  className="h-4 w-4 cursor-pointer accent-[var(--color-5)]"
+                />
+              </DataTableHeaderCell>
               <DataTableHeaderCell>Empleado</DataTableHeaderCell>
               <DataTableHeaderCell>Contacto</DataTableHeaderCell>
               <DataTableHeaderCell>Monto</DataTableHeaderCell>
@@ -34,8 +109,21 @@ export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
           </DataTableHead>
           <tbody>
             {rows.length > 0 ? (
-              rows.map((row) => (
-                <tr key={row.employee_id} className={`border-l-2 border-t border-border transition hover:bg-surface-muted/70 ${getPriorityBorder(row.operational_status)}`}>
+              rows.map((row) => {
+                const seleccionable = row.operational_status !== "firmado";
+                const marcado = selected.has(row.employee_id);
+                return (
+                <tr key={row.employee_id} className={`border-l-2 border-t border-border transition hover:bg-surface-muted/70 ${marcado ? "bg-primary-light/40" : ""} ${getPriorityBorder(row.operational_status)}`}>
+                  <DataTableCell>
+                    <input
+                      type="checkbox"
+                      checked={marcado}
+                      onChange={() => toggle(row.employee_id)}
+                      disabled={!seleccionable}
+                      aria-label={`Seleccionar ${row.empleado ?? "empleado"}`}
+                      className="h-4 w-4 cursor-pointer accent-[var(--color-5)] disabled:cursor-not-allowed disabled:opacity-30"
+                    />
+                  </DataTableCell>
                   <DataTableCell>
                     <div>
                       <p className="font-semibold text-text-primary">{row.empleado || "Empleado sin nombre"}</p>
@@ -62,9 +150,10 @@ export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
                     </Link>
                   </DataTableCell>
                 </tr>
-              ))
+                );
+              })
             ) : (
-              <DataTableEmpty colSpan={6}>
+              <DataTableEmpty colSpan={7}>
                 Sin contratos para mostrar.
               </DataTableEmpty>
             )}
@@ -94,6 +183,29 @@ export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
           </p>
         )}
       </div>
+
+      {/* Barra de acción en lote: aparece al seleccionar */}
+      {selectedCount > 0 && (
+        <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-surface px-5 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-text-primary">{selectedCount} seleccionado{selectedCount !== 1 ? "s" : ""}</span>
+            <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-text-muted underline hover:text-text-primary">Limpiar</button>
+            {bulk.status === "done" && (
+              <span className={["text-xs", bulk.sent > 0 ? "text-emerald-600" : "text-amber-700"].join(" ")}>
+                {bulk.sent > 0 ? `Enviado a ${bulk.sent}${bulk.failed > 0 ? ` · ${bulk.failed} con error` : ""}.` : "No se pudo enviar."}
+              </span>
+            )}
+            {bulk.status === "error" && <span className="text-xs text-red-600">{bulk.message}</span>}
+          </div>
+          <Button
+            onClick={sendSelected}
+            disabled={bulk.status === "sending" || !canSend}
+            title={canSend ? undefined : "Requiere rol operaciones."}
+          >
+            {bulk.status === "sending" ? "Enviando…" : `Enviar WhatsApp a ${selectedCount}`}
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }
