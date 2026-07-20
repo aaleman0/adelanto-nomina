@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@komandero/numeros-a-letras": "2.0.0",
+    "@sentry/nextjs": "^10.67.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.107.0",
     "csv-parse": "^6.2.1",

@@ -57,6 +57,7 @@ Configuración: `@vitejs/plugin-react-swc`, entorno `jsdom`, `globals: true`, se
 | `src/lib/security/rate-limit.test.ts` | Ventana fija: permite hasta el límite y bloquea, cuota independiente por identificador y por limitador, reinicio al expirar, `retryAfterSeconds`; extracción de IP de `x-forwarded-for`/`x-real-ip` y agrupación `unknown` |
 | `src/lib/imports/csv.test.ts` | `prepareCsvImport`: alias de encabezado, columnas ausentes, validación de RFC/CLABE/teléfono, normalización de monto y fecha, elegibilidad y monto condicional, duplicados dentro del archivo, aviso de CURP, hash de fila |
 | `src/lib/imports/apply.test.ts` | Funciones puras de `applyImportBatch`: `hasEmployeeChanged` (detección campo a campo, `?? null` vs `\|\| null`), `buildOfferPayload` (elegibilidad → estado, monto por defecto, idempotencia), `requireString` |
+| `src/lib/observability/observability.test.ts` | `captureException` reenvía al manejador y no propaga fallos; `logger.error`/`critical` reportan y `logger.info` no; lectura de configuración desde entorno. Usa `vi.importActual` para el logger real, porque el setup lo mockea |
 
 ### Huecos
 

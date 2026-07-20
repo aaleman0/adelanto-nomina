@@ -87,6 +87,19 @@ Si falta una sola de las cuatro obligatorias, el sistema **degrada a inline y lo
 
 La autenticación usa ADC (Application Default Credentials), que en Cloud Run funciona sin configuración adicional. Ver [WhatsApp](whatsapp.md#cola).
 
+### Observabilidad de errores (Sentry) — opcional
+
+| Variable | Notas |
+|---|---|
+| `SENTRY_DSN` | DSN de servidor. **Sin él, el SDK no se carga y nada cambia** |
+| `NEXT_PUBLIC_SENTRY_DSN` | DSN de navegador; puede ser el mismo valor |
+| `SENTRY_ENVIRONMENT` / `NEXT_PUBLIC_SENTRY_ENVIRONMENT` | Etiqueta de entorno; por defecto `NODE_ENV` |
+| `SENTRY_TRACES_SAMPLE_RATE` / `NEXT_PUBLIC_...` | Fracción 0–1 de tracing; por defecto `0` |
+
+Cómo funciona: el arranque nativo de Next (`src/instrumentation.ts`) inicializa Sentry solo si hay DSN, cargándolo de forma dinámica. Una vez activo, `logger.error` y `logger.critical` reportan automáticamente —el logger es el punto único por el que ya pasan todos los errores— junto con los errores de servidor que Next captura vía `onRequestError`.
+
+No se usa `withSentryConfig` (el envoltorio webpack de Sentry) para no chocar con el build de Turbopack. La contrapartida es que **no se suben source maps**: los stack traces del servidor ya son legibles, pero los del navegador irán minificados hasta que se configure la subida por separado.
+
 ### Google Docs (obligatorio para generar contratos)
 
 **No usa variables de entorno.** `src/lib/google/auth.ts` lee `google_oauth_client.json` y `token.json` desde `process.cwd()`.
@@ -188,10 +201,10 @@ Ya resuelto (fase 4):
 Ya resuelto (fase 5):
 
 - [x] Rate limiting en webhooks y endpoints de escritura caros
+- [x] Observabilidad de errores (Sentry), inerte sin DSN
 
 Seguridad pendiente en el código:
 
 - [ ] Fase B de RLS: políticas por rol y lecturas con el cliente de sesión
-- [ ] Observabilidad de errores (Sentry)
 
 Ver también: [WhatsApp](whatsapp.md) · [EasyLex y contratos](easylex-contratos.md) · [Infraestructura](infraestructura.md)

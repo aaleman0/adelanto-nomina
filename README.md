@@ -78,6 +78,6 @@ Funcionando: importación, backoffice, WhatsApp Cloud API, autenticación con Go
 
 Implementado pero desactivado por defecto: la cola de envío masivo (Cloud Tasks) y la aplicación estricta de roles (`RBAC_ENFORCEMENT=warn`). Ambas se activan por configuración.
 
-Pendiente: pagos y CEP (sin código), rate limiting, fase B de RLS, y el pipeline de despliegue.
+Pendiente: pagos y CEP (sin código), fase B de RLS, y el pipeline de despliegue.
 
 Antes de operar en producción, revisar el [checklist de producción](docs/configuracion.md#checklist-antes-de-producción). Dos puntos que se pasan por alto con facilidad: hay variables que por defecto apuntan al **sandbox de EasyLex**, y la migración de RLS debe aplicarse a mano en la base de producción.

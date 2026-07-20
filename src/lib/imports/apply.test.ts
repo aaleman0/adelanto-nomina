@@ -37,8 +37,9 @@ const EMPLOYEE: Employee = {
 
 /** Un payload idéntico al empleado de referencia (mismos valores). */
 function payloadFrom(employee: Employee): EmployeePayload {
-  const { id: _id, ...rest } = employee;
-  return { ...rest, source_batch_id: "batch-1", source_row_id: "row-1" };
+  const rest = { ...employee } as Partial<Employee>;
+  delete rest.id;
+  return { ...(rest as Omit<Employee, "id">), source_batch_id: "batch-1", source_row_id: "row-1" };
 }
 
 describe("hasEmployeeChanged", () => {
