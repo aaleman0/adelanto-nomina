@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { postSignedWebhook } from "../helpers/meta-signature";
 
 // ---------------------------------------------------------------------------
 // GET /api/webhooks/whatsapp — verificación de webhook por Meta
@@ -73,7 +74,7 @@ test("webhook POST acepta payload whatsapp_business_account", async ({ request }
     ],
   };
 
-  const response = await request.post("/api/webhooks/whatsapp", { data: payload });
+  const response = await postSignedWebhook(request, payload);
   expect(response.status()).toBe(200);
   const body = await response.json();
   expect(body).toMatchObject({ ok: true });
@@ -105,7 +106,7 @@ test("webhook POST acepta payload de delivery status (sent)", async ({ request }
     ],
   };
 
-  const response = await request.post("/api/webhooks/whatsapp", { data: payload });
+  const response = await postSignedWebhook(request, payload);
   expect(response.status()).toBe(200);
   const body = await response.json();
   expect(body).toMatchObject({ ok: true });
@@ -138,7 +139,7 @@ test("webhook POST acepta payload de delivery status (delivered)", async ({ requ
     ],
   };
 
-  const response = await request.post("/api/webhooks/whatsapp", { data: payload });
+  const response = await postSignedWebhook(request, payload);
   expect(response.status()).toBe(200);
   const body = await response.json();
   expect(body).toMatchObject({ ok: true });
@@ -171,7 +172,7 @@ test("webhook POST acepta payload de delivery status (failed)", async ({ request
     ],
   };
 
-  const response = await request.post("/api/webhooks/whatsapp", { data: payload });
+  const response = await postSignedWebhook(request, payload);
   expect(response.status()).toBe(200);
   const body = await response.json();
   expect(body).toMatchObject({ ok: true });
@@ -183,7 +184,7 @@ test("webhook POST ignora objeto que no es whatsapp_business_account", async ({ 
     entry: [],
   };
 
-  const response = await request.post("/api/webhooks/whatsapp", { data: payload });
+  const response = await postSignedWebhook(request, payload);
   expect(response.status()).toBe(200);
   const body = await response.json();
   expect(body).toMatchObject({ ok: true });
@@ -205,7 +206,7 @@ test("webhook POST ignora cambios con field distinto a messages", async ({ reque
     ],
   };
 
-  const response = await request.post("/api/webhooks/whatsapp", { data: payload });
+  const response = await postSignedWebhook(request, payload);
   expect(response.status()).toBe(200);
   const body = await response.json();
   expect(body).toMatchObject({ ok: true });

@@ -41,3 +41,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Sesión de pruebas E2E (contiene un token real)
+tests/e2e/.auth/
