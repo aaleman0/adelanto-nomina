@@ -137,6 +137,46 @@ export const CONTRACT_CONTROL_SELECT = [
   "last_audit_at",
 ].join(", ");
 
+/**
+ * Estados en los que el OPERADOR es el bloqueo, ordenados por urgencia. Los
+ * demás están en vuelo (esperando al empleado) o cerrados, y no requieren
+ * acción. Esta es la diferencia de propósito entre el cockpit y Contratos: el
+ * cockpit muestra "lo que hay que hacer"; Contratos es el archivo completo.
+ */
+export const ACTION_REQUIRED_STATUSES: ContractOperationalStatus[] = [
+  "error",
+  "link_expirado",
+  "pendiente_envio",
+];
+
+/**
+ * Cola de acción del cockpit: solo los expedientes que requieren que el
+ * operador haga algo, ordenados por urgencia (error → link vencido →
+ * pendiente) y, dentro de cada grupo, por actividad más reciente.
+ */
+export async function getActionQueue(limit = 50): Promise<ContractControlRow[]> {
+  const supabase = await getReadClient();
+
+  const { data, error } = await supabase
+    .from("backoffice_contract_control_v1")
+    .select(CONTRACT_CONTROL_SELECT)
+    .in("operational_status", ACTION_REQUIRED_STATUSES)
+    .order("last_movement_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  const rows = (data ?? []) as unknown as ContractControlRow[];
+
+  // El orden por urgencia se aplica aquí: PostgREST no ordena por una lista
+  // arbitraria de valores, y son ≤ limit filas, así que ordenar en memoria es
+  // trivial y mantiene el "más reciente primero" dentro de cada grupo.
+  const rank = new Map(ACTION_REQUIRED_STATUSES.map((status, index) => [status, index]));
+  return rows.sort(
+    (a, b) => (rank.get(a.operational_status) ?? 99) - (rank.get(b.operational_status) ?? 99),
+  );
+}
+
 export async function getContractControlData(
   filters: ContractControlFilters = {},
 ): Promise<ContractControlData> {

@@ -6,13 +6,13 @@ import { useRouter } from "next/navigation";
 import type { ContractControlRow, ContractControlMetric } from "@/lib/backoffice/contract-control";
 import { SendWhatsAppButton } from "@/components/whatsapp/send-whatsapp-button";
 
-type Activity = { employee_id: string; empleado: string | null; operational_status: string; last_movement_at: string | null };
-
-export function OperationsCockpit({ rows, recent, metrics, signed, total }: { rows: ContractControlRow[]; recent: Activity[]; metrics: ContractControlMetric[]; signed: number; total: number }) {
+export function OperationsCockpit({ rows, metrics, signed, total }: { rows: ContractControlRow[]; metrics: ContractControlMetric[]; signed: number; total: number }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("es"));
-  const queue = rows.length > 0 ? rows : recent.map((item) => ({ ...item, empleador: null, monto_prestamo_autorizado: null } as ContractControlRow));
+  // El cockpit muestra solo lo que requiere acción del operador (lo trae ya
+  // filtrado el servidor). El archivo completo y buscable vive en /contracts.
+  const queue = rows;
   const filtered = queue.filter((row) => [row.empleado, row.empleador, row.operational_status].some((value) => value?.toLocaleLowerCase("es").includes(deferredQuery)));
   const [selectedId, setSelectedId] = useState(queue[0]?.employee_id ?? "");
   const selected = queue.find((row) => row.employee_id === selectedId) ?? filtered[0] ?? queue[0];
@@ -88,7 +88,7 @@ export function OperationsCockpit({ rows, recent, metrics, signed, total }: { ro
 
       <div className="surface-panel flex min-h-0 flex-col rounded-xl xl:overflow-hidden">
         <div className="shrink-0 border-b border-border p-4 sm:p-5">
-          <div className="flex items-center justify-between gap-4"><div><h2 className="font-display text-xl font-semibold text-text-primary">Cola operativa</h2><p className="font-data mt-1 text-[10px] uppercase tracking-[.14em] text-text-muted">{filtered.length} registros visibles</p></div><Link href="/contracts" className="text-xs font-semibold text-primary hover:text-primary-hover">Ver todos</Link></div>
+          <div className="flex items-center justify-between gap-4"><div><h2 className="font-display text-xl font-semibold text-text-primary">Requieren acción</h2><p className="font-data mt-1 text-[10px] uppercase tracking-[.14em] text-text-muted">{filtered.length} por resolver</p></div><Link href="/contracts" className="text-xs font-semibold text-primary hover:text-primary-hover">Ver archivo completo</Link></div>
           <label className="mt-4 flex h-11 items-center gap-3 rounded-lg border border-border bg-white/55 px-3 transition focus-within:border-[var(--color-3)] focus-within:bg-white">
             <svg className="h-4 w-4 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
             <input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-text-disabled" placeholder="Buscar empleado, empresa o estado" />
@@ -96,7 +96,20 @@ export function OperationsCockpit({ rows, recent, metrics, signed, total }: { ro
           </label>
         </div>
         <div className="panel-scroll flex-1 divide-y divide-border-subtle max-xl:max-h-[60vh]">
-          {filtered.length > 0 ? filtered.map((row) => <QueueRow key={row.employee_id} row={row} rowRef={row.employee_id === selected?.employee_id ? selectedRowRef : undefined} selected={row.employee_id === selected?.employee_id} onSelect={() => setSelectedId(row.employee_id)} />) : <div className="grid h-full min-h-40 place-items-center p-6 text-sm text-text-muted">No encontramos coincidencias.</div>}
+          {filtered.length > 0 ? (
+            filtered.map((row) => <QueueRow key={row.employee_id} row={row} rowRef={row.employee_id === selected?.employee_id ? selectedRowRef : undefined} selected={row.employee_id === selected?.employee_id} onSelect={() => setSelectedId(row.employee_id)} />)
+          ) : queue.length === 0 ? (
+            // Cola de acción vacía = todo al día. Es buena noticia, no un error.
+            <div className="grid h-full min-h-40 place-items-center p-6 text-center">
+              <div>
+                <div className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-success-bg text-success"><svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" /></svg></div>
+                <p className="mt-3 text-sm font-semibold text-text-primary">Todo al día</p>
+                <p className="mt-1 text-xs text-text-muted">No hay expedientes esperando acción. El resto vive en el <Link href="/contracts" className="text-primary hover:underline">archivo completo</Link>.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid h-full min-h-40 place-items-center p-6 text-sm text-text-muted">Ningún resultado para «{query}».</div>
+          )}
         </div>
         {/* Atajos de teclado (solo escritorio, donde el flujo es con teclado). */}
         <div className="hidden shrink-0 items-center gap-3 border-t border-border px-4 py-2.5 font-data text-[10px] text-text-muted xl:flex">

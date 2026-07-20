@@ -5,17 +5,18 @@ import { LetterWave } from "@/components/ui/letter-wave";
 import {
   EMPTY_CONTRACT_CONTROL_METRICS,
   getContractControlData,
+  getActionQueue,
   getDashboardKpis,
+  type ContractControlRow,
   type DashboardKpis,
 } from "@/lib/backoffice/contract-control";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [result, recent, kpis] = await Promise.all([
+  const [result, actionQueue, kpis] = await Promise.all([
     getContractControlResult(),
-    getRecentActivityRows(),
+    getActionQueueResult(),
     getDashboardKpisResult(),
   ]);
 
@@ -41,17 +42,18 @@ export default async function Home() {
           <p className="mt-1 text-amber-700">Configura variables de Supabase para ver datos reales del backoffice.</p>
         </section>
       ) : null}
-      <OperationsCockpit rows={result.rows} recent={recent} metrics={result.metrics} signed={kpis.firmados} total={kpis.totalElegibles} />
+      <OperationsCockpit rows={actionQueue} metrics={result.metrics} signed={kpis.firmados} total={kpis.totalElegibles} />
     </AppShell>
   );
 }
 
-type RecentActivityRow = {
-  employee_id: string;
-  empleado: string | null;
-  operational_status: string;
-  last_movement_at: string | null;
-};
+async function getActionQueueResult(): Promise<ContractControlRow[]> {
+  try {
+    return await getActionQueue();
+  } catch {
+    return [];
+  }
+}
 
 async function getContractControlResult() {
   try {
@@ -66,21 +68,5 @@ async function getDashboardKpisResult(): Promise<DashboardKpis> {
     return await getDashboardKpis();
   } catch {
     return { totalElegibles: 0, firmados: 0, expiringLinks: [] };
-  }
-}
-
-async function getRecentActivityRows(): Promise<RecentActivityRow[]> {
-  try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("backoffice_contract_control_v1")
-      .select("employee_id, empleado, operational_status, last_movement_at")
-      .not("last_movement_at", "is", null)
-      .order("last_movement_at", { ascending: false })
-      .limit(6);
-    if (error) return [];
-    return (data ?? []) as RecentActivityRow[];
-  } catch {
-    return [];
   }
 }
