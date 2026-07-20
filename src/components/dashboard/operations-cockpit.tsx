@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { ContractControlRow, ContractControlMetric } from "@/lib/backoffice/contract-control";
 import { SendWhatsAppButton } from "@/components/whatsapp/send-whatsapp-button";
 
 type Activity = { employee_id: string; empleado: string | null; operational_status: string; last_movement_at: string | null };
 
 export function OperationsCockpit({ rows, recent, metrics, signed, total }: { rows: ContractControlRow[]; recent: Activity[]; metrics: ContractControlMetric[]; signed: number; total: number }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("es"));
   const queue = rows.length > 0 ? rows : recent.map((item) => ({ ...item, empleador: null, monto_prestamo_autorizado: null } as ContractControlRow));
@@ -15,6 +17,56 @@ export function OperationsCockpit({ rows, recent, metrics, signed, total }: { ro
   const [selectedId, setSelectedId] = useState(queue[0]?.employee_id ?? "");
   const selected = queue.find((row) => row.employee_id === selectedId) ?? filtered[0] ?? queue[0];
   const progress = total > 0 ? Math.min(100, Math.round((signed / total) * 100)) : 0;
+
+  const searchRef = useRef<HTMLInputElement>(null);
+  const selectedRowRef = useRef<HTMLButtonElement>(null);
+
+  // Navegación por teclado: la herramienta se usa todo el día, así que operarla
+  // sin ratón multiplica la velocidad. j/k (o flechas) mueven la selección,
+  // Enter abre el expediente, s envía WhatsApp, / enfoca el buscador.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const active = document.activeElement as HTMLElement | null;
+      const typing =
+        !!active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+
+      if (event.key === "/" && !typing) {
+        event.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+      if (typing) {
+        if (event.key === "Escape") active?.blur();
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      const index = filtered.findIndex((row) => row.employee_id === selected?.employee_id);
+
+      if (event.key === "j" || event.key === "ArrowDown") {
+        event.preventDefault();
+        const next = filtered[Math.min(filtered.length - 1, index + 1)];
+        if (next) setSelectedId(next.employee_id);
+      } else if (event.key === "k" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const prev = filtered[Math.max(0, index - 1)];
+        if (prev) setSelectedId(prev.employee_id);
+      } else if (event.key === "Enter") {
+        if (selected) router.push(`/contracts/${selected.employee_id}`);
+      } else if (event.key === "s") {
+        // Dispara el botón de envío del inspector (autocontenido, con su confirm).
+        const btn = document.querySelector<HTMLButtonElement>("[data-cockpit-send] button");
+        btn?.click();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [filtered, selected, router]);
+
+  // Mantener la fila seleccionada a la vista al moverse con el teclado.
+  useEffect(() => {
+    selectedRowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [selectedId]);
   const errors = metrics.find((metric) => metric.key === "errors")?.value ?? 0;
   const pending = metrics.find((metric) => metric.key === "pendingSend")?.value ?? 0;
 
@@ -39,11 +91,19 @@ export function OperationsCockpit({ rows, recent, metrics, signed, total }: { ro
           <div className="flex items-center justify-between gap-4"><div><h2 className="font-display text-xl font-semibold text-text-primary">Cola operativa</h2><p className="font-data mt-1 text-[10px] uppercase tracking-[.14em] text-text-muted">{filtered.length} registros visibles</p></div><Link href="/contracts" className="text-xs font-semibold text-primary hover:text-primary-hover">Ver todos</Link></div>
           <label className="mt-4 flex h-11 items-center gap-3 rounded-lg border border-border bg-white/55 px-3 transition focus-within:border-[var(--color-3)] focus-within:bg-white">
             <svg className="h-4 w-4 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-text-disabled" placeholder="Buscar empleado, empresa o estado" />
+            <input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-text-disabled" placeholder="Buscar empleado, empresa o estado" />
+            <kbd className="hidden shrink-0 rounded border border-border px-1.5 py-0.5 font-data text-[10px] text-text-muted xl:inline">/</kbd>
           </label>
         </div>
         <div className="panel-scroll flex-1 divide-y divide-border-subtle max-xl:max-h-[60vh]">
-          {filtered.length > 0 ? filtered.map((row) => <QueueRow key={row.employee_id} row={row} selected={row.employee_id === selected?.employee_id} onSelect={() => setSelectedId(row.employee_id)} />) : <div className="grid h-full min-h-40 place-items-center p-6 text-sm text-text-muted">No encontramos coincidencias.</div>}
+          {filtered.length > 0 ? filtered.map((row) => <QueueRow key={row.employee_id} row={row} rowRef={row.employee_id === selected?.employee_id ? selectedRowRef : undefined} selected={row.employee_id === selected?.employee_id} onSelect={() => setSelectedId(row.employee_id)} />) : <div className="grid h-full min-h-40 place-items-center p-6 text-sm text-text-muted">No encontramos coincidencias.</div>}
+        </div>
+        {/* Atajos de teclado (solo escritorio, donde el flujo es con teclado). */}
+        <div className="hidden shrink-0 items-center gap-3 border-t border-border px-4 py-2.5 font-data text-[10px] text-text-muted xl:flex">
+          <ShortcutHint keys="j / k" label="mover" />
+          <ShortcutHint keys="Enter" label="abrir" />
+          <ShortcutHint keys="s" label="enviar" />
+          <ShortcutHint keys="/" label="buscar" />
         </div>
       </div>
 
@@ -55,11 +115,12 @@ export function OperationsCockpit({ rows, recent, metrics, signed, total }: { ro
   );
 }
 
-function QueueRow({ row, selected, onSelect }: { row: ContractControlRow; selected: boolean; onSelect: () => void }) {
+function QueueRow({ row, selected, onSelect, rowRef }: { row: ContractControlRow; selected: boolean; onSelect: () => void; rowRef?: React.Ref<HTMLButtonElement> }) {
   const tone = getTone(row.operational_status);
   const relativo = formatRelative(row.last_movement_at);
   return (
     <button
+      ref={rowRef}
       type="button"
       onMouseEnter={onSelect}
       onFocus={onSelect}
@@ -85,12 +146,21 @@ function QueueRow({ row, selected, onSelect }: { row: ContractControlRow; select
 
 function Inspector({ row }: { row: ContractControlRow }) {
   const tone = getTone(row.operational_status);
-  return <div className="mt-6 animate-fade-up" key={row.employee_id}><div className="flex items-center justify-between gap-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${tone.badge}`}>{formatStatus(row.operational_status)}</span><span className={`h-2.5 w-2.5 rounded-full ${tone.dot}`} /></div><h3 className="font-display mt-6 text-2xl font-semibold leading-tight text-text-primary">{row.empleado || "Empleado sin nombre"}</h3><p className="mt-2 text-sm text-text-muted">{row.empleador || "Sin empleador registrado"}</p><div className="my-6 border-y border-border py-5"><p className="text-xs text-text-muted">Monto autorizado</p><p className="font-data mt-1 text-3xl font-medium text-text-primary">{formatMoney(row.monto_prestamo_autorizado)}</p></div><dl className="space-y-4"><Detail label="Estado" value={formatStatus(row.operational_status)} /><Detail label="Identificador" value={row.employee_id.slice(0, 12)} mono /></dl><div className="mt-7 flex flex-col gap-2">{row.operational_status !== "firmado" && <SendWhatsAppButton employeeId={row.employee_id} employeeName={row.empleado} className="w-full justify-center" />}<Link href={`/contracts/${row.employee_id}`} className="button-contrast flex h-10 items-center justify-center rounded-lg bg-[var(--color-5)] text-sm font-semibold transition hover:-translate-y-0.5 hover:bg-[var(--color-4)]">Abrir expediente</Link></div></div>;
+  return <div className="mt-6 animate-fade-up" key={row.employee_id}><div className="flex items-center justify-between gap-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${tone.badge}`}>{formatStatus(row.operational_status)}</span><span className={`h-2.5 w-2.5 rounded-full ${tone.dot}`} /></div><h3 className="font-display mt-6 text-2xl font-semibold leading-tight text-text-primary">{row.empleado || "Empleado sin nombre"}</h3><p className="mt-2 text-sm text-text-muted">{row.empleador || "Sin empleador registrado"}</p><div className="my-6 border-y border-border py-5"><p className="text-xs text-text-muted">Monto autorizado</p><p className="font-data mt-1 text-3xl font-medium text-text-primary">{formatMoney(row.monto_prestamo_autorizado)}</p></div><dl className="space-y-4"><Detail label="Estado" value={formatStatus(row.operational_status)} /><Detail label="Identificador" value={row.employee_id.slice(0, 12)} mono /></dl><div className="mt-7 flex flex-col gap-2">{row.operational_status !== "firmado" && <span data-cockpit-send><SendWhatsAppButton employeeId={row.employee_id} employeeName={row.empleado} className="w-full justify-center" /></span>}<Link href={`/contracts/${row.employee_id}`} className="button-contrast flex h-10 items-center justify-center rounded-lg bg-[var(--color-5)] text-sm font-semibold transition hover:-translate-y-0.5 hover:bg-[var(--color-4)]">Abrir expediente</Link></div></div>;
 }
 
 function Signal({ tone, label, value }: { tone: "success" | "warning" | "danger"; label: string; value: number }) { const colors = { success: "bg-[var(--success)]", warning: "bg-[var(--warning)]", danger: "bg-[var(--danger)]" }; return <div className="flex items-center gap-3"><span className={`h-2.5 w-2.5 rounded-full shadow-[0_0_0_4px_rgba(167,190,216,.25)] ${colors[tone]}`} /><div><p className="font-data text-xl font-semibold text-text-primary">{value}</p><p className="text-xs text-text-muted">{label}</p></div></div>; }
 function Detail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) { return <div><dt className="text-[10px] uppercase tracking-wider text-text-muted">{label}</dt><dd className={`mt-1 text-sm text-text-primary ${mono ? "font-data" : ""}`}>{value}</dd></div>; }
 function getTone(status: string) { if (status.includes("error")) return { dot: "bg-[var(--danger)]", badge: "bg-danger-bg text-danger" }; if (status.includes("firmado") || status.includes("generado")) return { dot: "bg-[var(--success)]", badge: "bg-success-bg text-success" }; return { dot: "bg-[var(--warning)]", badge: "bg-warning-bg text-warning" }; }
+function ShortcutHint({ keys, label }: { keys: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1">
+      <kbd className="rounded border border-border px-1.5 py-0.5 text-[10px] text-text-secondary">{keys}</kbd>
+      <span>{label}</span>
+    </span>
+  );
+}
+
 function formatStatus(value: string) { return value.replaceAll("_", " "); }
 /**
  * Antigüedad del último movimiento, en formato corto para escanear la cola:
