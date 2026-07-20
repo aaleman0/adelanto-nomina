@@ -1,8 +1,8 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { getWhatsAppClient, type TemplateComponent } from "@/lib/whatsapp/client";
+import { getWhatsAppClient } from "@/lib/whatsapp/client";
 import { getEmployeesEligibility } from "@/lib/whatsapp/eligibility";
 import { getEmployeesFromImport } from "@/lib/whatsapp/imports";
-import { normalizePhoneForMeta } from "@/lib/whatsapp/phone-utils";
+import { buildBulkTemplateMessage, DEFAULT_BULK_TEMPLATE } from "@/lib/whatsapp/message-builder";
 import { logger } from "@/lib/logger";
 
 const BATCH_SIZE = 100;
@@ -29,7 +29,13 @@ export type BulkSendProgress = {
 
 export type BulkSendResult = BulkSendProgress & {
   bulkSendId: string;
-  status: "completed" | "failed";
+  /**
+   * `queued` significa que los mensajes se encolaron y se enviarán de forma
+   * asíncrona: en ese caso `sent` y `failed` valen 0 y hay que consultar el
+   * detalle del envío para conocer el avance real.
+   */
+  status: "completed" | "failed" | "queued";
+  queued?: number;
 };
 
 export async function validateBulkEligibility(params: { mode: "import" | "manual"; importId?: string; employeeIds?: string[] }) {
@@ -106,53 +112,31 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
     const batch = eligible.slice(i, i + BATCH_SIZE);
 
     for (const emp of batch) {
-      const to = normalizePhoneForMeta(emp.telefono_normalizado);
+      const built = buildBulkTemplateMessage(emp, templateName, {
+        headerImageUrl: process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE_URL,
+      });
 
-      if (!to) {
+      if (!built.ok) {
         progress.failed++;
-        progress.errors.push({ employeeId: emp.employee_id, rfc: emp.rfc, error: "Sin teléfono normalizado" });
+        progress.errors.push({ employeeId: emp.employee_id, rfc: emp.rfc, error: built.error });
         try {
-          await recordMessage({ supabase, bulkSendId, emp, status: "failed", error: "Sin teléfono normalizado" });
+          await recordMessage({ supabase, bulkSendId, emp, status: "failed", error: built.error });
         } catch (recordError) {
-          progress.errors.push({ 
-            employeeId: emp.employee_id, 
-            rfc: emp.rfc, 
-            error: `Error al registrar mensaje: ${recordError instanceof Error ? recordError.message : 'Error desconocido'}` 
+          progress.errors.push({
+            employeeId: emp.employee_id,
+            rfc: emp.rfc,
+            error: `Error al registrar mensaje: ${recordError instanceof Error ? recordError.message : 'Error desconocido'}`,
           });
         }
         continue;
       }
 
-      const monto = emp.monto_prestamo_autorizado
-        ? new Intl.NumberFormat("es-MX", { maximumFractionDigits: 0 }).format(emp.monto_prestamo_autorizado)
-        : "N/A";
-
-      const variables: Record<string, string> =
-        templateName === "adelanto_nomina"
-          ? { "1": emp.nombre || "Empleado", "2": monto }
-          : { "1": emp.nombre || "Empleado", "2": emp.empleador || "Tu empresa", "3": monto };
-
-      // Para adelanto_nomina_v2: header de imagen + body con 3 variables.
-      // Meta renderiza el botón de URL fija automáticamente.
-      const headerImageUrl = process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE_URL;
-      const components: TemplateComponent[] = [
-        {
-          type: "body",
-          parameters: Object.entries(variables).map(([, value]) => ({
-            type: "text",
-            text: value,
-          })),
-        },
-      ];
-
-      if (headerImageUrl && templateName === "adelanto_nomina_v2") {
-        components.unshift({
-          type: "header",
-          parameters: [{ type: "image", image: { link: headerImageUrl } }],
-        });
-      }
-
-      const result = await client.sendTemplateMessage(to, templateName, variables, components);
+      const result = await client.sendTemplateMessage(
+        built.to,
+        templateName,
+        built.variables,
+        built.components,
+      );
 
       if (result.ok) {
         progress.sent++;
@@ -298,4 +282,338 @@ async function recordMessage(params: {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ---------------------------------------------------------------------------
+// Camino asíncrono: encolar en vez de enviar dentro del request
+// ---------------------------------------------------------------------------
+
+export const WHATSAPP_SEND_WORKER_PATH = "/api/tasks/whatsapp/send-message";
+
+/** Estados no terminales de un mensaje encolado. */
+const QUEUED_STATUS = "queued";
+const SENDING_STATUS = "sending";
+
+export type QueuedMessagePayload = {
+  bulkSendId: string;
+  messageId: string;
+  templateName: string;
+};
+
+/**
+ * Prepara un envío masivo y lo encola.
+ *
+ * A diferencia de `sendBulkMessages`, devuelve en cuanto las tareas están en la
+ * cola. Los mensajes se crean por adelantado en estado `queued` con un snapshot
+ * de los datos del empleado, de modo que:
+ *
+ * - el worker no necesita volver a consultar al empleado;
+ * - un cambio de datos a mitad del envío no altera mensajes ya encolados;
+ * - cada fila sirve de registro de idempotencia (ver `processQueuedMessage`).
+ */
+export async function enqueueBulkSend(
+  params: BulkSendParams,
+  driver: { enqueue: (path: string, tasks: Array<{ id: string; payload: Record<string, unknown> }>) => Promise<{ enqueued: number; failed: number; errors: Array<{ id: string; error: string }> }> },
+): Promise<BulkSendResult> {
+  const supabase = getSupabaseAdmin();
+  const templateName = params.templateName ?? DEFAULT_BULK_TEMPLATE;
+
+  let employeeIds: string[] = params.employeeIds ?? [];
+  if (params.mode === "import" && params.importId) {
+    const employees = await getEmployeesFromImport(params.importId);
+    employeeIds = employees.map((e) => e.employee_id);
+  }
+
+  const eligibility = await getEmployeesEligibility(employeeIds);
+  const eligible = eligibility.filter((e) => e.eligible);
+
+  const { data: bulkSendData, error: bulkError } = await supabase
+    .from("whatsapp_bulk_sends")
+    .insert({
+      mode: params.mode,
+      import_id: params.importId ?? null,
+      employee_ids: employeeIds,
+      eligible_count: eligible.length,
+      status: "sending",
+    })
+    .select("id")
+    .single();
+
+  if (bulkError) throw bulkError;
+
+  const bulkSendId = bulkSendData.id as string;
+
+  logger.info("whatsapp.bulk_send.started", {
+    bulkSendId,
+    mode: params.mode,
+    importId: params.importId,
+    totalEmployees: employeeIds.length,
+    eligibleCount: eligible.length,
+    templateName,
+    transport: "queue",
+  });
+
+  const progress: BulkSendProgress = {
+    total: employeeIds.length,
+    eligible: eligible.length,
+    sent: 0,
+    failed: 0,
+    errors: [],
+  };
+
+  if (eligible.length === 0) {
+    await supabase
+      .from("whatsapp_bulk_sends")
+      .update({ status: "completed", sent_count: 0, failed_count: 0 })
+      .eq("id", bulkSendId);
+
+    return { ...progress, bulkSendId, status: "completed", queued: 0 };
+  }
+
+  // Crear las filas de mensaje por adelantado, con snapshot del destinatario.
+  const { data: created, error: createError } = await supabase
+    .from("whatsapp_contract_messages")
+    .insert(
+      eligible.map((emp) => ({
+        employee_id: emp.employee_id,
+        bulk_send_id: bulkSendId,
+        message_type: "bulk_contract_offer",
+        status: QUEUED_STATUS,
+        delivery_status: null,
+        whatsapp_subscriber_id: emp.telefono_normalizado,
+        metadata: {
+          template_name: templateName,
+          recipient: {
+            employee_id: emp.employee_id,
+            nombre: emp.nombre ?? null,
+            empleador: emp.empleador ?? null,
+            rfc: emp.rfc ?? null,
+            telefono_normalizado: emp.telefono_normalizado ?? null,
+            monto_prestamo_autorizado: emp.monto_prestamo_autorizado ?? null,
+          },
+        },
+      })),
+    )
+    .select("id");
+
+  if (createError) throw createError;
+
+  const tasks = (created ?? []).map((row) => ({
+    id: row.id as string,
+    payload: {
+      bulkSendId,
+      messageId: row.id as string,
+      templateName,
+    } satisfies QueuedMessagePayload as unknown as Record<string, unknown>,
+  }));
+
+  const enqueueResult = await driver.enqueue(WHATSAPP_SEND_WORKER_PATH, tasks);
+
+  // Las tareas que no se pudieron encolar se marcan como fallidas de inmediato:
+  // de lo contrario quedarían en `queued` para siempre y el envío nunca se
+  // daría por completado.
+  if (enqueueResult.failed > 0) {
+    const failedIds = enqueueResult.errors.map((e) => e.id);
+
+    await supabase
+      .from("whatsapp_contract_messages")
+      .update({
+        status: "failed",
+        delivery_status: "failed",
+        error_message: "No se pudo encolar el mensaje.",
+      })
+      .in("id", failedIds);
+
+    progress.failed = enqueueResult.failed;
+    progress.errors = enqueueResult.errors.map((e) => ({
+      employeeId: e.id,
+      error: e.error,
+    }));
+
+    logger.error("whatsapp.bulk_send.enqueue_partial_failure", null, {
+      bulkSendId,
+      enqueued: enqueueResult.enqueued,
+      failed: enqueueResult.failed,
+    });
+  }
+
+  return {
+    ...progress,
+    bulkSendId,
+    status: "queued",
+    queued: enqueueResult.enqueued,
+  };
+}
+
+export type ProcessQueuedMessageResult =
+  | { status: "sent"; messageId: string }
+  | { status: "failed"; messageId: string; error: string }
+  | { status: "skipped"; messageId: string; reason: string };
+
+/**
+ * Procesa una tarea de la cola: envía un único mensaje.
+ *
+ * Cloud Tasks garantiza entrega *al menos una vez*, así que esta función debe
+ * ser idempotente. Lo consigue reclamando la fila con un UPDATE condicional
+ * (`queued` → `sending`): solo un intento gana la carrera, el resto sale por
+ * `skipped` sin volver a llamar a Meta.
+ */
+export async function processQueuedMessage(
+  payload: QueuedMessagePayload,
+): Promise<ProcessQueuedMessageResult> {
+  const supabase = getSupabaseAdmin();
+  const { messageId, bulkSendId, templateName } = payload;
+
+  // Reclamo atómico. Postgres resuelve el UPDATE ... WHERE status='queued'
+  // bajo un único bloqueo de fila, así que dos workers no pueden ganarlo.
+  const { data: claimed, error: claimError } = await supabase
+    .from("whatsapp_contract_messages")
+    .update({ status: SENDING_STATUS })
+    .eq("id", messageId)
+    .eq("status", QUEUED_STATUS)
+    .select("id, employee_id, metadata")
+    .maybeSingle();
+
+  if (claimError) throw claimError;
+
+  if (!claimed) {
+    logger.info("whatsapp.queue.message_already_processed", { messageId, bulkSendId });
+    return { status: "skipped", messageId, reason: "already_processed" };
+  }
+
+  const metadata = (claimed.metadata ?? {}) as {
+    recipient?: {
+      employee_id: string;
+      nombre: string | null;
+      empleador: string | null;
+      rfc: string | null;
+      telefono_normalizado: string | null;
+      monto_prestamo_autorizado: number | null;
+    };
+  };
+
+  const recipient = metadata.recipient;
+
+  if (!recipient) {
+    await markMessageFailed(messageId, bulkSendId, "Snapshot del destinatario ausente.");
+    return { status: "failed", messageId, error: "Snapshot del destinatario ausente." };
+  }
+
+  const built = buildBulkTemplateMessage(recipient, templateName, {
+    headerImageUrl: process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE_URL,
+  });
+
+  if (!built.ok) {
+    await markMessageFailed(messageId, bulkSendId, built.error);
+    return { status: "failed", messageId, error: built.error };
+  }
+
+  const client = getWhatsAppClient();
+  const result = await client.sendTemplateMessage(
+    built.to,
+    templateName,
+    built.variables,
+    built.components,
+  );
+
+  if (!result.ok) {
+    const error = result.error ?? "Error desconocido";
+    await markMessageFailed(messageId, bulkSendId, error);
+    logger.warn("whatsapp.message.send_failed", {
+      bulkSendId,
+      messageId,
+      employeeId: claimed.employee_id,
+      error,
+    });
+    return { status: "failed", messageId, error };
+  }
+
+  await supabase
+    .from("whatsapp_contract_messages")
+    .update({
+      status: "sent",
+      delivery_status: "sent",
+      wa_message_id: result.messageId ?? null,
+      error_message: null,
+    })
+    .eq("id", messageId);
+
+  await supabase.rpc("increment_bulk_send_counter", {
+    p_bulk_send_id: bulkSendId,
+    p_field: "sent_count",
+  });
+
+  await finalizeBulkSendIfDone(bulkSendId);
+
+  return { status: "sent", messageId };
+}
+
+async function markMessageFailed(messageId: string, bulkSendId: string, error: string) {
+  const supabase = getSupabaseAdmin();
+
+  await supabase
+    .from("whatsapp_contract_messages")
+    .update({ status: "failed", delivery_status: "failed", error_message: error })
+    .eq("id", messageId);
+
+  await supabase.rpc("increment_bulk_send_counter", {
+    p_bulk_send_id: bulkSendId,
+    p_field: "failed_count",
+  });
+
+  await finalizeBulkSendIfDone(bulkSendId);
+}
+
+/**
+ * Marca el envío como completado cuando ya no quedan mensajes pendientes.
+ *
+ * Es idempotente a propósito: si dos workers terminan a la vez, ambos pueden
+ * ejecutar la actualización y el resultado es el mismo.
+ */
+async function finalizeBulkSendIfDone(bulkSendId: string) {
+  const supabase = getSupabaseAdmin();
+
+  const { count: pending, error } = await supabase
+    .from("whatsapp_contract_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("bulk_send_id", bulkSendId)
+    .in("status", [QUEUED_STATUS, SENDING_STATUS]);
+
+  if (error) {
+    logger.error("whatsapp.queue.finalize_check_failed", error, { bulkSendId });
+    return;
+  }
+
+  if ((pending ?? 0) > 0) return;
+
+  const { data: counts } = await supabase
+    .from("whatsapp_contract_messages")
+    .select("status")
+    .eq("bulk_send_id", bulkSendId);
+
+  const sent = (counts ?? []).filter((m) => m.status === "sent").length;
+  const failed = (counts ?? []).filter((m) => m.status === "failed").length;
+
+  await supabase
+    .from("whatsapp_bulk_sends")
+    .update({ status: "completed", sent_count: sent, failed_count: failed })
+    .eq("id", bulkSendId);
+
+  const totalAttempted = sent + failed;
+  if (totalAttempted > 0) {
+    const errorRate = Math.round((failed / totalAttempted) * 100);
+    if (errorRate > 10) {
+      logger.warn("whatsapp.bulk_send.high_error_rate", {
+        bulkSendId,
+        errorRate,
+        sent,
+        failed,
+        totalAttempted,
+        threshold: 10,
+        action: "Revisar configuración de WhatsApp API o lista de teléfonos.",
+      });
+    }
+  }
+
+  logger.info("whatsapp.bulk_send.completed", { bulkSendId, sent, failed });
 }

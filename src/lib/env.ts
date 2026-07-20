@@ -124,6 +124,35 @@ export const whatsAppEnv = {
 /**
  * Acceso tipado a variables de EasyLex (lazy, sin validación).
  */
+/**
+ * Configuración de Google Cloud Tasks para el envío masivo asíncrono.
+ *
+ * `isConfigured` exige las cuatro variables imprescindibles. Si falta alguna,
+ * el sistema usa el driver inline (comportamiento histórico) en vez de fallar:
+ * la cola es una mejora opt-in, no un requisito.
+ */
+export const cloudTasksEnv = {
+  get projectId() { return process.env.GCP_PROJECT_ID ?? ""; },
+  get location() { return process.env.CLOUD_TASKS_LOCATION ?? "us-central1"; },
+  get queue() { return process.env.CLOUD_TASKS_QUEUE ?? "whatsapp-bulk"; },
+  /** URL pública del propio servicio; Cloud Tasks hace POST contra ella. */
+  get workerBaseUrl() { return process.env.TASKS_WORKER_BASE_URL ?? ""; },
+  /** Service account que Cloud Tasks usa para firmar el token OIDC. */
+  get invokerServiceAccount() { return process.env.TASKS_INVOKER_SERVICE_ACCOUNT ?? ""; },
+  /** Secreto compartido: solo se acepta fuera de producción, para pruebas locales. */
+  get workerSecret() { return process.env.TASKS_WORKER_SECRET ?? ""; },
+  /** Fuerza un driver concreto: "cloud-tasks" | "inline". Vacío = automático. */
+  get driverOverride() { return process.env.QUEUE_DRIVER ?? ""; },
+  get isConfigured() {
+    return Boolean(
+      process.env.GCP_PROJECT_ID &&
+      process.env.CLOUD_TASKS_QUEUE &&
+      process.env.TASKS_WORKER_BASE_URL &&
+      process.env.TASKS_INVOKER_SERVICE_ACCOUNT,
+    );
+  },
+};
+
 export const easylexEnv = {
   get accessKeyId() { return process.env.EASYLEX_ACCESS_KEY_ID ?? ""; },
   get secretAccessKey() { return process.env.EASYLEX_SECRET_ACCESS_KEY ?? ""; },

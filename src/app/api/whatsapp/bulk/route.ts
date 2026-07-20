@@ -1,54 +1,56 @@
 import { NextResponse } from "next/server";
-import { sendBulkMessages, validateBulkEligibility } from "@/lib/whatsapp/bulk-send";
+import { sendBulkMessages, enqueueBulkSend, validateBulkEligibility } from "@/lib/whatsapp/bulk-send";
+import { getQueueDriver } from "@/lib/queue";
+import { requireRole } from "@/lib/auth/roles";
+import { BulkSendBodySchema, BulkSendActionSchema } from "@/lib/whatsapp/schemas";
+import { parseJsonBody, parseQuery } from "@/lib/api/validation";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
 // POST /api/whatsapp/bulk?action=send|validate
 export async function POST(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const action = searchParams.get("action") ?? "send";
+  const query = parseQuery(request, BulkSendActionSchema);
+  if (!query.success) return query.response;
+  const { action } = query.data;
+
+  // Validar elegibilidad es una consulta sin efectos; enviar no lo es.
+  const auth = await requireRole(action === "validate" ? "solo_lectura" : "operaciones");
+  if (!auth.ok) return auth.response;
+
+  const parsed = await parseJsonBody(request, BulkSendBodySchema);
+  if (!parsed.success) return parsed.response;
+  const { mode, importId, employeeIds, templateName, buttonConfig } = parsed.data;
 
   try {
-    const body = await request.json();
-    const { mode, importId, employeeIds, templateName, buttonConfig } = body as {
-      mode?: "import" | "manual";
-      importId?: string;
-      employeeIds?: string[];
-      templateName?: string;
-      buttonConfig?: {
-        text: string;
-        url: string;
-      };
-    };
-
-    if (!mode || !["import", "manual"].includes(mode)) {
-      return NextResponse.json({ ok: false, error: "mode es requerido (import | manual)." }, { status: 400 });
-    }
-
-    if (mode === "import" && !importId) {
-      return NextResponse.json({ ok: false, error: "importId es requerido para mode=import." }, { status: 400 });
-    }
-
-    if (mode === "manual" && (!employeeIds || employeeIds.length === 0)) {
-      return NextResponse.json({ ok: false, error: "employeeIds es requerido para mode=manual." }, { status: 400 });
-    }
-
     if (action === "validate") {
       const result = await validateBulkEligibility({ mode, importId, employeeIds });
       return NextResponse.json({ ok: true, ...result });
     }
 
-    // action === "send"
-    const result = await sendBulkMessages({ mode, importId, employeeIds, templateName, buttonConfig });
-    logger.info("whatsapp.bulk_send.completed", {
+    const driver = getQueueDriver();
+
+    // Con cola configurada el envío es asíncrono: se responde en cuanto las
+    // tareas están encoladas. Sin ella se mantiene el envío dentro del request,
+    // que es el comportamiento histórico.
+    const result =
+      driver.kind === "inline"
+        ? await sendBulkMessages({ mode, importId, employeeIds, templateName, buttonConfig })
+        : await enqueueBulkSend({ mode, importId, employeeIds, templateName, buttonConfig }, driver);
+
+    logger.info("whatsapp.bulk_send.dispatched", {
       bulkSendId: result.bulkSendId,
+      transport: driver.kind,
       mode,
       importId,
       total: result.total,
+      eligible: result.eligible,
       sent: result.sent,
       failed: result.failed,
+      queued: result.queued,
+      status: result.status,
     });
+
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     logger.error("whatsapp.bulk_send.error", err);
