@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth/roles";
 import { applyImportBatch } from "@/lib/imports/apply";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const auth = await requireRole("operaciones");
+  if (!auth.ok) return auth.response;
+
   try {
     const batchId = getBatchId(request.url);
     const result = await applyImportBatch(batchId);

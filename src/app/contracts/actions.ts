@@ -6,6 +6,7 @@ import {
   type BackofficeContractAction,
   runBackofficeContractAction,
 } from "@/lib/contracts/backoffice-actions";
+import { requireRole } from "@/lib/auth/roles";
 
 export async function regenerateContractLinkAction(formData: FormData) {
   await runContractAction(formData, "regenerate_expired");
@@ -26,9 +27,17 @@ async function runContractAction(
     redirect("/");
   }
 
+  // Las server actions no pasan por `src/proxy.ts`, así que el rol se
+  // comprueba aquí igual que en los route handlers.
+  const auth = await requireRole("operaciones");
+  if (!auth.ok) {
+    redirect(`/contracts/${employeeId}?action_status=forbidden`);
+  }
+
   const result = await runBackofficeContractAction({
     contractRequestId,
     action,
+    actor: auth.actor,
   });
   const detailPath = `/contracts/${employeeId}`;
 

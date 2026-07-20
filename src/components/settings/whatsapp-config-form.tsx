@@ -8,12 +8,12 @@ import { Button } from "@/components/ui/button";
 type ConnectionStatus = "idle" | "testing" | "ok" | "error";
 
 export function WhatsAppConfigForm() {
+  // Sin access_token ni app_secret: los secretos no viajan al navegador ni se
+  // guardan en base. Solo se configuran por variables de entorno.
   const [form, setForm] = useState({
-    access_token: "",
     phone_number_id: "",
     business_number: "",
     webhook_verify_token: "",
-    app_secret: "",
   });
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -49,10 +49,12 @@ export function WhatsAppConfigForm() {
     setConnInfo(null);
     setConnError(null);
     try {
+      // Sin cuerpo: el endpoint usa las credenciales de las variables de
+      // entorno del servidor. El navegador ya no maneja el access token.
       const res = await fetch("/api/whatsapp/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ access_token: form.access_token, phone_number_id: form.phone_number_id }),
+        body: JSON.stringify({}),
       });
       const json = await res.json();
       if (json.ok) {
@@ -84,20 +86,28 @@ export function WhatsAppConfigForm() {
           </div>
           {connInfo && <span className="text-sm text-text-muted">{connInfo.displayName} · {connInfo.phoneNumber}</span>}
           {connError && <span className="text-sm text-red-600">{connError}</span>}
-          <Button variant="secondary" disabled={connStatus === "testing" || !form.access_token || !form.phone_number_id} onClick={handleTest}>
+          <Button variant="secondary" disabled={connStatus === "testing"} onClick={handleTest}>
             {connStatus === "testing" ? "Verificando..." : "Probar"}
           </Button>
         </div>
       </Card>
 
       <Card className="p-4">
-        <h3 className="text-sm font-medium text-text-muted">Credenciales</h3>
+        <h3 className="text-sm font-medium text-text-muted">Configuración</h3>
+
+        <p className="mt-2 rounded-lg border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-muted">
+          El <strong className="text-text-primary">Access Token</strong> y el{" "}
+          <strong className="text-text-primary">App Secret</strong> ya no se guardan aquí.
+          Se configuran con las variables de entorno{" "}
+          <code className="font-data">WHATSAPP_ACCESS_TOKEN</code> y{" "}
+          <code className="font-data">WHATSAPP_APP_SECRET</code>, porque en base de datos
+          quedaban sin cifrar y las variables de entorno tienen precedencia de todas formas.
+        </p>
+
         <form className="mt-3 flex flex-col gap-4" onSubmit={handleSave}>
-          <Field label="Access Token" name="access_token" type="password" placeholder="EAAxxxxx..." value={form.access_token} onChange={handleChange} />
           <Field label="Phone Number ID" name="phone_number_id" placeholder="1234567890" value={form.phone_number_id} onChange={handleChange} />
           <Field label="Número de negocio" name="business_number" placeholder="521XXXXXXXXXX" value={form.business_number} onChange={handleChange} />
           <Field label="Webhook Verify Token" name="webhook_verify_token" placeholder="token" value={form.webhook_verify_token} onChange={handleChange} />
-          <Field label="App Secret" name="app_secret" type="password" placeholder="xxxxxxxxxxxxx" value={form.app_secret} onChange={handleChange} />
 
           {saveMsg && (
             <div className={["rounded-lg border px-4 py-3 text-sm", saveMsg.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"].join(" ")}>

@@ -1,11 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth/roles";
 import { prepareCsvImport } from "@/lib/imports/csv";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const auth = await requireRole("operaciones");
+  if (!auth.ok) return auth.response;
+
   try {
     const formData = await request.formData();
     const file = formData.get("file");

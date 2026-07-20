@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { createEasyLexAttempt, type ContractAttempt } from "@/lib/contracts/create-easylex-attempt";
 import { easylexEnv } from "@/lib/env";
+import { recordAuditEvent } from "@/lib/audit";
+import type { Actor } from "@/lib/auth/roles";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -72,6 +74,11 @@ const LINK_TTL_HOURS = 2;
 export async function runBackofficeContractAction(input: {
   contractRequestId: string;
   action: BackofficeContractAction;
+  /**
+   * Operador que ejecuta la acción. Se propaga a la auditoría: sin él no se
+   * puede saber quién regeneró un link o reintentó un contrato.
+   */
+  actor?: Actor | null;
 }): Promise<BackofficeContractActionResult> {
   const correlationId = randomUUID();
   const contractRequest = await getContractRequest(input.contractRequestId);
@@ -136,6 +143,7 @@ export async function runBackofficeContractAction(input: {
     await createAuditEvent({
       contractRequest,
       action: input.action,
+      actor: input.actor ?? null,
       correlationId,
       previousState: contractRequest.status,
       newState: "link_generado",
@@ -207,6 +215,7 @@ export async function runBackofficeContractAction(input: {
   await createAuditEvent({
     contractRequest,
     action: input.action,
+    actor: input.actor ?? null,
     correlationId,
     previousState: contractRequest.status,
     newState: "link_generado",
@@ -391,36 +400,37 @@ async function markContractRequestLinkGenerated(
   }
 }
 
+/**
+ * Delega en el módulo compartido de auditoría, aplicando los campos fijos de
+ * las acciones de backoffice.
+ */
 async function createAuditEvent(input: {
   contractRequest: ContractRequest;
   action: BackofficeContractAction;
+  actor?: Actor | null;
   correlationId: string;
   previousState: string;
   newState: string;
   summary: string;
   metadata: JsonRecord;
 }) {
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("audit_events").insert({
-    event_name:
+  await recordAuditEvent({
+    eventName:
       input.action === "retry"
         ? "contract.retry_backoffice"
         : "contract.link_regenerated_backoffice",
-    entity_type: "contract_requests",
-    entity_id: input.contractRequest.id,
-    employee_id: input.contractRequest.employee_id,
-    correlation_id: input.correlationId,
+    entityType: "contract_requests",
+    entityId: input.contractRequest.id,
+    employeeId: input.contractRequest.employee_id,
+    correlationId: input.correlationId,
     source: "backoffice",
-    previous_state: input.previousState,
-    new_state: input.newState,
+    previousState: input.previousState,
+    newState: input.newState,
     summary: input.summary,
     metadata: input.metadata,
-    actor_type: "internal_operator",
+    actor: input.actor ?? null,
+    actorType: "internal_operator",
   });
-
-  if (error) {
-    throw error;
-  }
 }
 
 async function createIntegrationLog(input: {

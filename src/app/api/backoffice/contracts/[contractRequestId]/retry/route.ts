@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth/roles";
 import { runBackofficeContractAction } from "@/lib/contracts/backoffice-actions";
 
 export const runtime = "nodejs";
@@ -11,11 +12,15 @@ type RouteContext = {
 
 export async function POST(_request: Request, context: RouteContext) {
   const { contractRequestId } = await context.params;
+  const auth = await requireRole("operaciones");
+  if (!auth.ok) return auth.response;
+
 
   try {
     const result = await runBackofficeContractAction({
       contractRequestId,
       action: "retry",
+      actor: auth.actor,
     });
 
     return NextResponse.json(result, {

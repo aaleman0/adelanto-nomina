@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth/roles";
 import { WhatsAppClient } from "@/lib/whatsapp/client";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const auth = await requireRole("admin");
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json();
     const { access_token, phone_number_id } = body as {
