@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 type JsonRecord = Record<string, unknown>;
 
-type RawImportRow = {
+export type RawImportRow = {
   id: string;
   batch_id: string;
   row_number: number;
@@ -12,7 +12,7 @@ type RawImportRow = {
   status: string;
 };
 
-type NormalizedPayload = {
+export type NormalizedPayload = {
   nombre?: string;
   apellido_paterno?: string | null;
   apellido_materno?: string | null;
@@ -38,7 +38,7 @@ type NormalizedPayload = {
   is_eligible?: boolean;
 };
 
-type Employee = {
+export type Employee = {
   id: string;
   rfc: string;
   curp: string | null;
@@ -58,7 +58,7 @@ type Employee = {
   domicilio: string | null;
 };
 
-type EmployeePayload = Omit<Employee, "id"> & {
+export type EmployeePayload = Omit<Employee, "id"> & {
   source_batch_id: string;
   source_row_id: string;
 };
@@ -531,7 +531,8 @@ async function syncOffer(
   };
 }
 
-function buildOfferPayload(
+// Exportada para pruebas: mapea elegibilidad a estado de la oferta.
+export function buildOfferPayload(
   row: RawImportRow,
   employeeId: string,
   normalized: NormalizedPayload,
@@ -590,7 +591,9 @@ async function createAuditEvent(input: {
   }
 }
 
-function hasEmployeeChanged(
+// Exportada para pruebas: decide si un empleado existente cambió respecto al
+// CSV. De aquí salen los conteos de "actualizados" vs "sin cambios".
+export function hasEmployeeChanged(
   existing: Employee,
   next: EmployeePayload,
 ) {
@@ -613,7 +616,8 @@ function hasEmployeeChanged(
   );
 }
 
-function requireString(value: unknown, message: string) {
+// Exportada para pruebas.
+export function requireString(value: unknown, message: string) {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(message);
   }

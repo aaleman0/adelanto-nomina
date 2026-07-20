@@ -54,12 +54,15 @@ Configuración: `@vitejs/plugin-react-swc`, entorno `jsdom`, `globals: true`, se
 | `src/lib/contracts/request-contract.test.ts` | `parseRequestContractPayload`: alias snake/camelCase, RFC insensible a mayúsculas, faltantes que lanzan, normalización de teléfono mexicano, prefijo `52` ya presente, opcionales nulos, paso de `rawPayload` |
 | `src/lib/whatsapp/phone-utils.test.ts` | Móvil local → `521`, `52` → `521`, `521` sin cambios, internacional no mexicano intacto, `52` clasificado como `long_distance` |
 | `src/lib/easylex/monto-en-letra.test.ts` | Montos enteros, con centavos, superiores al millón, y redondeo a dos decimales |
+| `src/lib/security/rate-limit.test.ts` | Ventana fija: permite hasta el límite y bloquea, cuota independiente por identificador y por limitador, reinicio al expirar, `retryAfterSeconds`; extracción de IP de `x-forwarded-for`/`x-real-ip` y agrupación `unknown` |
+| `src/lib/imports/csv.test.ts` | `prepareCsvImport`: alias de encabezado, columnas ausentes, validación de RFC/CLABE/teléfono, normalización de monto y fecha, elegibilidad y monto condicional, duplicados dentro del archivo, aviso de CURP, hash de fila |
+| `src/lib/imports/apply.test.ts` | Funciones puras de `applyImportBatch`: `hasEmployeeChanged` (detección campo a campo, `?? null` vs `\|\| null`), `buildOfferPayload` (elegibilidad → estado, monto por defecto, idempotencia), `requireString` |
 
 ### Huecos
 
-Están instalados `jsdom`, Testing Library y `msw`, pero **no hay ni un test de componente**. Tampoco hay cobertura unitaria de `src/lib/imports/`, `src/lib/backoffice/`, `src/lib/google/` ni de los route handlers.
+Están instalados `jsdom`, Testing Library y `msw`, pero **no hay ni un test de componente**. Falta cobertura unitaria de `src/lib/backoffice/`, `src/lib/google/` y los route handlers.
 
-Los dos primeros son los más relevantes: la lógica de importación (normalización, detección de duplicados, versionado de ofertas) y los modelos de lectura del backoffice concentran reglas de negocio y hoy solo se validan indirectamente por E2E.
+De `src/lib/imports/` ya se cubre la parte pura (`csv.ts` completo y las funciones de decisión de `apply.ts`). Lo que queda de `apply.ts` está acoplado a Supabase —upserts, versionado de ofertas, paginación— y solo se valida por E2E; probarlo requeriría un mock del cliente o una base de prueba aislada.
 
 ## Playwright
 
