@@ -73,7 +73,11 @@ export const BulkSendBodySchema = z
         text: z.string().trim().min(1).max(25),
         url: z.string().url("Debe ser una URL válida."),
       })
-      .optional(),
+      // El cliente arranca el estado del botón en `null` y lo envía tal cual
+      // cuando no se activa. `null` significa "sin botón", igual que ausente,
+      // así que se acepta y se normaliza a `undefined` para el resto del flujo.
+      .nullish()
+      .transform((value) => value ?? undefined),
   })
   .superRefine((value, ctx) => {
     if (value.mode === "import" && !value.importId) {
