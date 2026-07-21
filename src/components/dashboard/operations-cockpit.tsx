@@ -135,7 +135,9 @@ function QueueRow({ row, selected, onSelect, rowRef }: { row: ContractControlRow
         </span>
       </span>
       <span className="shrink-0 text-right">
-        <span className="font-data block text-xs font-medium text-text-secondary">{formatMoney(row.monto_prestamo_autorizado)}</span>
+        {/* text-sm para igualar la altura de línea del nombre: así la hora de la
+            segunda línea queda alineada con el pill de estado del lado izquierdo. */}
+        <span className="font-data block text-sm font-medium text-text-secondary">{formatMoney(row.monto_prestamo_autorizado)}</span>
         {relativo && <span className="mt-1 block text-[11px] text-text-muted">{relativo}</span>}
       </span>
     </button>
