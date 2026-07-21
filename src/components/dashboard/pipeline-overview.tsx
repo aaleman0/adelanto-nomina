@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ContractControlMetric, ContractControlMetricKey } from "@/lib/backoffice/contract-control";
 import { StageBatchSend } from "./stage-batch-send";
+import { StageBatchAction } from "./stage-batch-action";
 
 /**
  * Embudo de conversión — la pieza ancla del rediseño por flujo.
@@ -53,8 +54,8 @@ export function PipelineOverview({
 
   // Desvíos: solo se muestran si existen, para no gritar cuando todo va bien.
   const attention = [
-    { label: "Con error", value: errores, href: "/contracts?status=error", tone: "danger" as const },
-    { label: "Link vencido", value: vencidos, href: "/contracts?status=link_expirado", tone: "warning" as const },
+    { label: "Con error", value: errores, href: "/contracts?status=error", tone: "danger" as const, status: "error" as const, actionLabel: "Reintentar todos", noun: "reintentarán" },
+    { label: "Link vencido", value: vencidos, href: "/contracts?status=link_expirado", tone: "warning" as const, status: "link_expirado" as const, actionLabel: "Regenerar todos", noun: "regenerarán" },
   ].filter((item) => item.value > 0);
 
   const conversion = total > 0 ? Math.round((signed / total) * 100) : 0;
@@ -82,19 +83,27 @@ export function PipelineOverview({
       </div>
 
       {attention.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border-subtle pt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border-subtle pt-3">
           <span className="font-data text-[10px] uppercase tracking-[.14em] text-text-muted">Requieren atención</span>
           {attention.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={[
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition hover:-translate-y-0.5",
-                item.tone === "danger" ? "bg-danger-bg text-danger" : "bg-warning-bg text-warning",
-              ].join(" ")}
-            >
-              <span className="font-data">{item.value}</span> {item.label}
-            </Link>
+            <span key={item.label} className="inline-flex items-center gap-2">
+              <Link
+                href={item.href}
+                className={[
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition hover:-translate-y-0.5",
+                  item.tone === "danger" ? "bg-danger-bg text-danger" : "bg-warning-bg text-warning",
+                ].join(" ")}
+              >
+                <span className="font-data">{item.value}</span> {item.label}
+              </Link>
+              <StageBatchAction
+                status={item.status}
+                count={item.value}
+                label={item.label}
+                actionLabel={item.actionLabel}
+                noun={item.noun}
+              />
+            </span>
           ))}
         </div>
       )}

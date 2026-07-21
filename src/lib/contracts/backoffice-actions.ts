@@ -71,6 +71,101 @@ export type BackofficeContractActionResult = {
 
 const LINK_TTL_HOURS = 2;
 
+/**
+ * Tope de expedientes que procesa una sola invocación en lote.
+ *
+ * Cada acción llama a EasyLex (crear documento), que es lento y externo. Sin
+ * tope, "regenerar los 165 vencidos" excedería el timeout del request. Se
+ * procesa una tanda y el operador vuelve a pulsar para seguir; la respuesta
+ * dice cuántos quedan, así que no hay truncado silencioso.
+ */
+export const MAX_BATCH_ACTIONS = 25;
+
+/** Estado operativo → acción de backoffice que lo resuelve. */
+const BATCH_ACTION_BY_STATUS: Record<string, BackofficeContractAction> = {
+  link_expirado: "regenerate_expired",
+  error: "retry",
+};
+
+export type BatchActionSummary = {
+  status: string;
+  action: BackofficeContractAction;
+  /** Total de expedientes en ese estado (antes del tope). */
+  totalInStatus: number;
+  /** Cuántos se intentaron en esta tanda (≤ MAX_BATCH_ACTIONS). */
+  processed: number;
+  /** Acciones que hicieron algo (ok: true). */
+  succeeded: number;
+  /** Omitidos sin error (ya firmados, no encontrados). */
+  skipped: number;
+  /** Fallaron con excepción. */
+  failed: number;
+  /** Cuántos quedan por procesar tras esta tanda. */
+  remaining: number;
+};
+
+/**
+ * Ejecuta una acción de backoffice sobre todos los expedientes de un estado,
+ * en tandas acotadas y tolerante a fallos individuales: un error en uno no
+ * detiene el resto.
+ */
+export async function runBatchBackofficeAction(input: {
+  status: string;
+  actor?: Actor | null;
+}): Promise<BatchActionSummary> {
+  const action = BATCH_ACTION_BY_STATUS[input.status];
+  if (!action) {
+    throw new Error(`No hay acción en lote para el estado "${input.status}".`);
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data, error, count } = await supabase
+    .from("backoffice_contract_control_v1")
+    .select("contract_request_id", { count: "exact" })
+    .eq("operational_status", input.status)
+    .not("contract_request_id", "is", null)
+    .order("last_movement_at", { ascending: false })
+    .limit(MAX_BATCH_ACTIONS);
+
+  if (error) throw error;
+
+  const ids = (data ?? [])
+    .map((row) => row.contract_request_id as string | null)
+    .filter((id): id is string => Boolean(id));
+
+  let succeeded = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const contractRequestId of ids) {
+    try {
+      const result = await runBackofficeContractAction({
+        contractRequestId,
+        action,
+        actor: input.actor ?? null,
+      });
+      if (result.ok) succeeded += 1;
+      else skipped += 1;
+    } catch {
+      // Un fallo individual (p. ej. EasyLex caído para ese expediente) no debe
+      // abortar la tanda; ya queda registrado por runBackofficeContractAction.
+      failed += 1;
+    }
+  }
+
+  const totalInStatus = count ?? ids.length;
+  return {
+    status: input.status,
+    action,
+    totalInStatus,
+    processed: ids.length,
+    succeeded,
+    skipped,
+    failed,
+    remaining: Math.max(0, totalInStatus - succeeded),
+  };
+}
+
 export async function runBackofficeContractAction(input: {
   contractRequestId: string;
   action: BackofficeContractAction;
