@@ -106,17 +106,23 @@ Si Supabase no está configurado, el setup **falla en voz alta** explicando por 
 
 Las pruebas del webhook de Meta firman su payload con `WHATSAPP_APP_SECRET` (`helpers/meta-signature.ts`), porque desde el endurecimiento de seguridad un payload sin firma recibe `401`.
 
+### Servidor de pruebas: dev, con timeouts holgados y un reintento
+
+La suite corre contra `pnpm dev`, no contra el build de producción. Es a propósito: la suite `api` depende del comportamiento de **desarrollo** —`mock-sign` habilitado y el webhook laxo cuando no hay `WHATSAPP_APP_SECRET`—, que en producción se endurece adrede (404 y 401 respectivamente).
+
+El coste de correr contra dev es que Turbopack compila cada ruta en el primer acceso, y esos segundos causaban timeouts intermitentes (la suite se veía flaky sin serlo). Se absorbe con `timeout: 60s`, `expect.timeout: 15s` y `retries: 1`: al reintentar, la ruta ya está compilada y responde al instante. El reintento no enmascara bugs reales —esos también fallan al reintentar— solo el arranque en frío.
+
 ### Estado actual
 
 | Suite | Pasan | Fallan | Causa de los fallos |
 |---|---|---|---|
 | `smoke` | 3 | 0 | — |
 | `api` | 43 | 6 | Falta `google_oauth_client.json`: no se puede generar ningún contrato |
-| `flows` | 8 | 37 | Prueban una versión anterior de la UI |
+| `flows` | 46 | 0 (1 omitido) | — |
 
 Los 6 de `api` son de entorno, no de código: la generación de contratos pasa por Google Docs y sus credenciales son archivos que no están presentes. Ver [EasyLex y contratos](easylex-contratos.md#generación-del-pdf).
 
-Los 37 de `flows` prueban el formulario de envío anterior (pestañas, barra adhesiva) que fue sustituido por el asistente de 5 pasos. **Están pendientes de reescribir** contra la UI actual.
+La suite `flows` se reescribió por completo contra la UI del rediseño por flujo (embudo, cola de acción, asistente de 4 pasos, filtros de contratos). El único caso omitido depende de que exista un contrato elegible en la base y usa `test.skip` cuando no lo hay.
 
 ### Advertencias operativas
 
@@ -124,7 +130,7 @@ Los 37 de `flows` prueban el formulario de envío anterior (pestañas, barra adh
 
 2. **Los tests escriben en la base real.** No hay base de datos de prueba separada: las fixtures crean empleados, ofertas y contratos —y ahora también un usuario— en la misma instancia de Supabase que usa el desarrollo. No apuntar la suite a producción.
 
-3. **La suite E2E no está en CI.** El pipeline corre lint, tipos, tests unitarios, build, escaneo de secretos y auditoría. Añadir E2E requiere antes reescribir `flows` y resolver las credenciales de Google.
+3. **La suite E2E no está en CI.** El pipeline corre lint, tipos, tests unitarios, build, escaneo de secretos y auditoría. Meter E2E en CI requiere levantar Supabase de prueba y montar las credenciales de Google (los 6 fallos de `api` son por su ausencia); `flows` y `smoke` ya son verdes.
 
 ## Flujo recomendado
 

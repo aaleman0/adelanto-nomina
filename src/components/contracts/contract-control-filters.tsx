@@ -50,7 +50,11 @@ export function ContractControlFilters({
   return (
     <div className="surface-panel shrink-0 rounded-xl p-4 sm:p-5">
       <div className="mb-4 flex items-center justify-between gap-3"><div><h2 className="font-display text-base font-semibold text-text-primary">Buscar contratos</h2><p className="text-xs text-text-muted">Encuentra por nombre, teléfono o RFC.</p></div>{Object.keys(activeParams).length > 0 ? <Link className="text-xs font-semibold text-primary hover:text-primary-hover" href="/contracts">Quitar filtros</Link> : null}</div>
-      <Form action="/contracts" className="flex flex-col gap-3 lg:flex-row lg:items-end">
+      {/* key ligado a los filtros activos: en navegación de cliente (Aplicar /
+          Restablecer) los inputs no controlados no resetean su defaultValue al
+          reconciliar; remontar el formulario al cambiar los filtros hace que el
+          select y el buscador reflejen de verdad la URL. */}
+      <Form key={JSON.stringify(activeParams)} action="/contracts" className="flex flex-col gap-3 lg:flex-row lg:items-end">
         <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium text-text-muted">
           Buscar
           <SearchInput defaultValue={filters.q} />

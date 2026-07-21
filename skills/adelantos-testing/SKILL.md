@@ -19,7 +19,7 @@ Al probar el webhook de Meta, usa `postSignedWebhook` de `helpers/meta-signature
 
 ## Tres advertencias que cambian cómo lees un resultado
 
-1. **`flows` prueba una UI que ya no existe.** 37 de sus 45 tests describen el formulario de envío anterior. Sus fallos no dicen nada sobre el código actual; están pendientes de reescribir contra el asistente de 5 pasos.
+1. **La suite corre contra `pnpm dev` con `retries: 1`.** El dev server compila cada ruta en el primer acceso; el reintento y los timeouts holgados absorben ese arranque en frío. No cambies a un build de producción: la suite `api` depende del comportamiento de desarrollo (`mock-sign` habilitado, webhook laxo sin secreto).
 
 2. **Sin Supabase configurado, parte de la suite se salta en silencio.** **Antes de declarar que algo pasa, comprueba cuántos tests se ejecutaron**, no solo que no haya fallos.
 

@@ -3,23 +3,30 @@ import { STORAGE_STATE } from "./tests/e2e/storage-state";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  timeout: 30_000,
+  // Timeouts holgados: el servidor de desarrollo (pnpm dev) compila cada ruta en
+  // el primer acceso (Turbopack on-demand) y esos segundos causaban timeouts
+  // intermitentes. Se corre contra dev —no producción— porque la suite `api`
+  // depende del comportamiento de desarrollo (mock-sign habilitado, webhook
+  // laxo sin secreto); en producción esas rutas se endurecen a propósito.
+  timeout: 60_000,
   expect: {
-    timeout: 10_000,
+    timeout: 15_000,
   },
   fullyParallel: false,
-  retries: 0,
+  // Un reintento absorbe el arranque en frío de una ruta sin compilar: al
+  // reintentar la ruta ya está compilada y responde al instante. No enmascara
+  // bugs reales (un fallo real también falla en el reintento).
+  retries: 1,
   reporter: [["list"]],
   use: {
     baseURL: "http://localhost:3000",
-    // `retries: 0` haría que "on-first-retry" no capturara nunca nada.
     trace: "retain-on-failure",
   },
   webServer: {
     command: "pnpm dev",
     url: "http://localhost:3000",
     reuseExistingServer: true,
-    timeout: 60_000,
+    timeout: 120_000,
   },
   projects: [
     {

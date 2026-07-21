@@ -52,7 +52,7 @@ Lo anterior corre también en CI (`.github/workflows/ci.yml`), junto con build, 
 
 Las pruebas E2E se autentican solas (crean un usuario de prueba y guardan la sesión), así que necesitan Supabase configurado en `.env.local`.
 
-> `test:e2e:flows` **falla**: prueba una versión anterior de la UI y está pendiente de reescribir. `smoke` y `api` pasan, salvo 6 casos que necesitan las credenciales de Google para generar contratos. Ver [docs/testing.md](docs/testing.md).
+> `smoke` y `flows` pasan; `api` pasa salvo 6 casos que necesitan las credenciales de Google para generar contratos. La suite corre contra `pnpm dev` con un reintento para absorber el arranque en frío de las rutas. Ver [docs/testing.md](docs/testing.md).
 
 ## Documentación
 
