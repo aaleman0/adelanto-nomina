@@ -16,7 +16,9 @@ test("backoffice carga la vista de operación", async ({ page }) => {
   // Si el proxy redirigiera por falta de sesión, acabaríamos en /login.
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { name: "Operación", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Cola operativa" })).toBeVisible();
+  // El rediseño por flujo: embudo arriba + cola de acción abajo.
+  await expect(page.getByText("Embudo de conversión")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Requieren acción" })).toBeVisible();
 });
 
 test("backoffice carga control de contratos", async ({ page }) => {
