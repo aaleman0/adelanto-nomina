@@ -8,16 +8,52 @@ import { logger } from "@/lib/logger";
 const BATCH_SIZE = 100;
 const BATCH_DELAY_MS = 1000;
 
+export type BulkSendMode = "import" | "manual" | "status";
+
 export type BulkSendParams = {
-  mode: "import" | "manual";
+  mode: BulkSendMode;
   importId?: string;
   employeeIds?: string[];
+  /** Estado operativo a enviar en bloque cuando mode === "status". */
+  status?: string;
   templateName?: string;
   buttonConfig?: {
     text: string;
     url: string;
   };
 };
+
+/**
+ * IDs de todos los empleados en un estado operativo. Sostiene la acción en lote
+ * por etapa del embudo: enviar a "todos los por contactar" sin depender de la
+ * página visible ni de mandar cientos de IDs desde el cliente.
+ */
+async function getEmployeeIdsByStatus(status: string): Promise<string[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("backoffice_contract_control_v1")
+    .select("employee_id")
+    .eq("operational_status", status);
+  if (error) throw error;
+  return (data ?? []).map((row) => row.employee_id as string);
+}
+
+/** Resuelve los IDs de destinatarios según el modo. */
+async function resolveEmployeeIds(params: {
+  mode: BulkSendMode;
+  importId?: string;
+  employeeIds?: string[];
+  status?: string;
+}): Promise<string[]> {
+  if (params.mode === "import" && params.importId) {
+    const employees = await getEmployeesFromImport(params.importId);
+    return employees.map((e) => e.employee_id);
+  }
+  if (params.mode === "status" && params.status) {
+    return getEmployeeIdsByStatus(params.status);
+  }
+  return params.employeeIds ?? [];
+}
 
 export type BulkSendProgress = {
   total: number;
@@ -38,13 +74,8 @@ export type BulkSendResult = BulkSendProgress & {
   queued?: number;
 };
 
-export async function validateBulkEligibility(params: { mode: "import" | "manual"; importId?: string; employeeIds?: string[] }) {
-  let ids: string[] = params.employeeIds ?? [];
-
-  if (params.mode === "import" && params.importId) {
-    const employees = await getEmployeesFromImport(params.importId);
-    ids = employees.map((e) => e.employee_id);
-  }
+export async function validateBulkEligibility(params: { mode: BulkSendMode; importId?: string; employeeIds?: string[]; status?: string }) {
+  const ids = await resolveEmployeeIds(params);
 
   const eligibility = await getEmployeesEligibility(ids);
 
@@ -61,11 +92,7 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
   const templateName = params.templateName ?? "adelanto_nomina_v2";
 
   // 1. Obtener lista de employees
-  let employeeIds: string[] = params.employeeIds ?? [];
-  if (params.mode === "import" && params.importId) {
-    const employees = await getEmployeesFromImport(params.importId);
-    employeeIds = employees.map((e) => e.employee_id);
-  }
+  const employeeIds = await resolveEmployeeIds(params);
 
   // 2. Validar elegibilidad de cada uno
   const eligibility = await getEmployeesEligibility(employeeIds);
@@ -318,11 +345,7 @@ export async function enqueueBulkSend(
   const supabase = getSupabaseAdmin();
   const templateName = params.templateName ?? DEFAULT_BULK_TEMPLATE;
 
-  let employeeIds: string[] = params.employeeIds ?? [];
-  if (params.mode === "import" && params.importId) {
-    const employees = await getEmployeesFromImport(params.importId);
-    employeeIds = employees.map((e) => e.employee_id);
-  }
+  const employeeIds = await resolveEmployeeIds(params);
 
   const eligibility = await getEmployeesEligibility(employeeIds);
   const eligible = eligibility.filter((e) => e.eligible);

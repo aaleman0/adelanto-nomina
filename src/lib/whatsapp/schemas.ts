@@ -7,7 +7,12 @@ import { z } from "zod";
  * de forma aislada sin levantar el servidor.
  */
 
-export const BULK_SEND_MODES = ["import", "manual"] as const;
+export const BULK_SEND_MODES = ["import", "manual", "status"] as const;
+
+// Estados operativos a los que se puede enviar en bloque desde una etapa del
+// embudo. Hoy solo "pendiente_envio" (el primer contacto); ampliar con cuidado,
+// porque reenviar la plantilla inicial a otras etapas sería incorrecto.
+export const BULK_SEND_TARGET_STATUSES = ["pendiente_envio"] as const;
 export const BULK_SEND_STATUSES = ["pending", "sending", "completed", "failed"] as const;
 export const DELIVERY_STATUSES = ["sent", "delivered", "read", "failed"] as const;
 
@@ -56,10 +61,11 @@ export const uuidParam = (message = "Debe ser un UUID válido.") =>
 export const BulkSendBodySchema = z
   .object({
     mode: z.enum(BULK_SEND_MODES, {
-      message: "Es requerido y debe ser 'import' o 'manual'.",
+      message: "Es requerido y debe ser 'import', 'manual' o 'status'.",
     }),
     importId: uuidParam().optional(),
     employeeIds: z.array(uuidParam()).optional(),
+    status: z.enum(BULK_SEND_TARGET_STATUSES).optional(),
     templateName: z.string().trim().min(1).max(512).optional(),
     buttonConfig: z
       .object({
@@ -83,6 +89,14 @@ export const BulkSendBodySchema = z
         code: "custom",
         path: ["employeeIds"],
         message: "Debe incluir al menos un empleado cuando mode=manual.",
+      });
+    }
+
+    if (value.mode === "status" && !value.status) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["status"],
+        message: "Es requerido cuando mode=status.",
       });
     }
   });

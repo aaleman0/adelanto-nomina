@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ContractControlMetric, ContractControlMetricKey } from "@/lib/backoffice/contract-control";
+import { StageBatchSend } from "./stage-batch-send";
 
 /**
  * Embudo de conversión — la pieza ancla del rediseño por flujo.
@@ -18,7 +19,13 @@ function metricValue(metrics: ContractControlMetric[], key: ContractControlMetri
   return metrics.find((metric) => metric.key === key)?.value ?? 0;
 }
 
-type Stage = { label: string; value: number; href: string };
+type Stage = {
+  label: string;
+  value: number;
+  href: string;
+  /** Estado al que se puede enviar en lote desde esta etapa (solo Por contactar). */
+  batchStatus?: string;
+};
 
 export function PipelineOverview({
   metrics,
@@ -38,7 +45,7 @@ export function PipelineOverview({
 
   // El camino feliz, en orden de avance por el embudo.
   const stages: Stage[] = [
-    { label: "Por contactar", value: porContactar, href: "/contracts?status=pendiente_envio" },
+    { label: "Por contactar", value: porContactar, href: "/contracts?status=pendiente_envio", batchStatus: "pendiente_envio" },
     { label: "En proceso", value: enProceso, href: "/contracts?status=mensaje_enviado" },
     { label: "Contrato listo", value: contratoListo, href: "/contracts?status=contrato_generado" },
     { label: "Firmados", value: firmados, href: "/contracts?status=firmado" },
@@ -96,14 +103,32 @@ export function PipelineOverview({
 }
 
 function StageCard({ stage, isLast }: { stage: Stage; isLast: boolean }) {
+  const cardClass = [
+    "flex flex-1 flex-col rounded-lg border px-3 py-2.5 transition",
+    isLast ? "border-[var(--success)]/30 bg-success-bg/40" : "border-border bg-surface",
+  ].join(" ");
+
+  // El botón de envío es interactivo, así que no puede vivir dentro de un
+  // <Link>. Cuando la etapa tiene acción en lote, el drill-down es un enlace
+  // interno (la etiqueta y el número) y el botón va aparte.
+  const drill = (
+    <Link href={stage.href} className="group block">
+      <span className="text-[11px] font-medium text-text-muted group-hover:text-text-secondary">{stage.label}</span>
+      <span className={["font-data mt-1 block text-2xl font-semibold", isLast ? "text-success" : "text-text-primary"].join(" ")}>{stage.value}</span>
+    </Link>
+  );
+
+  if (stage.batchStatus) {
+    return (
+      <div className={cardClass}>
+        {drill}
+        <StageBatchSend status={stage.batchStatus} count={stage.value} label={stage.label} />
+      </div>
+    );
+  }
+
   return (
-    <Link
-      href={stage.href}
-      className={[
-        "group flex flex-1 flex-col justify-between rounded-lg border px-3 py-2.5 transition hover:-translate-y-0.5 hover:shadow-sm",
-        isLast ? "border-[var(--success)]/30 bg-success-bg/40" : "border-border bg-surface hover:bg-surface-muted",
-      ].join(" ")}
-    >
+    <Link href={stage.href} className={[cardClass, "group justify-between hover:-translate-y-0.5 hover:shadow-sm", isLast ? "" : "hover:bg-surface-muted"].join(" ")}>
       <span className="text-[11px] font-medium text-text-muted group-hover:text-text-secondary">{stage.label}</span>
       <span className={["font-data mt-1 text-2xl font-semibold", isLast ? "text-success" : "text-text-primary"].join(" ")}>{stage.value}</span>
     </Link>

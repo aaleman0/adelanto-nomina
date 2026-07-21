@@ -29,11 +29,11 @@ export async function POST(request: Request) {
 
   const parsed = await parseJsonBody(request, BulkSendBodySchema);
   if (!parsed.success) return parsed.response;
-  const { mode, importId, employeeIds, templateName, buttonConfig } = parsed.data;
+  const { mode, importId, employeeIds, status, templateName, buttonConfig } = parsed.data;
 
   try {
     if (action === "validate") {
-      const result = await validateBulkEligibility({ mode, importId, employeeIds });
+      const result = await validateBulkEligibility({ mode, importId, employeeIds, status });
       return NextResponse.json({ ok: true, ...result });
     }
 
@@ -44,8 +44,8 @@ export async function POST(request: Request) {
     // que es el comportamiento histórico.
     const result =
       driver.kind === "inline"
-        ? await sendBulkMessages({ mode, importId, employeeIds, templateName, buttonConfig })
-        : await enqueueBulkSend({ mode, importId, employeeIds, templateName, buttonConfig }, driver);
+        ? await sendBulkMessages({ mode, importId, employeeIds, status, templateName, buttonConfig })
+        : await enqueueBulkSend({ mode, importId, employeeIds, status, templateName, buttonConfig }, driver);
 
     logger.info("whatsapp.bulk_send.dispatched", {
       bulkSendId: result.bulkSendId,

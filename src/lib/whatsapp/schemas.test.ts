@@ -72,6 +72,24 @@ describe("BulkSendBodySchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("acepta mode=status con un estado válido (acción por etapa)", () => {
+    const result = BulkSendBodySchema.safeParse({ mode: "status", status: "pendiente_envio" });
+    expect(result.success).toBe(true);
+  });
+
+  it("rechaza mode=status sin status", () => {
+    const result = BulkSendBodySchema.safeParse({ mode: "status" });
+    expect(result.success).toBe(false);
+    expect(failedPaths(result)).toContain("status");
+  });
+
+  it("rechaza un status fuera de la lista permitida", () => {
+    // Solo se puede enviar en bloque a etapas donde tiene sentido el primer
+    // contacto; reenviar la plantilla inicial a otras sería incorrecto.
+    const result = BulkSendBodySchema.safeParse({ mode: "status", status: "firmado" });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("BulkHistoryQuerySchema", () => {
