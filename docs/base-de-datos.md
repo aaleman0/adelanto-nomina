@@ -401,7 +401,7 @@ Las lecturas se mueven al cliente de sesión mediante `getReadClient()` (`src/li
 
 **Primer camino migrado:** el modelo de control de contratos (`src/lib/backoffice/contract-control.ts`), que alimenta el dashboard y la lista de contratos. El resto de lecturas sigue en service role, pendiente de migrar una a una con el mismo patrón.
 
-> **Requisito previo no cumplido en la base actual.** Se verificó que RLS **no está activa**: la anon key pública lee todas las tablas. Las migraciones `20260720` y `20260722` deben aplicarse antes de encender el flag. Ver [Configuración](configuracion.md#seguridad-y-checklist-de-produccion).
+> **RLS activa y verificada (2026-07-21).** Las migraciones `20260720`, `20260721` y `20260722` están aplicadas; la anon key pública devuelve **0 filas** en las 18 tablas. Antes de encender `RLS_SESSION_READS`, endurecer la política de lectura de las tablas más sensibles ([M1](seguridad.md#plan-de-endurecimiento)). Ver [Configuración](configuracion.md#seguridad-y-checklist-de-produccion) y [Seguridad](seguridad.md).
 
 `current_user_role()` (SECURITY DEFINER) lee el rol aunque `profiles` tenga RLS, y devuelve null sin sesión, de modo que las políticas basadas en ella excluyen al acceso anónimo.
 

@@ -178,10 +178,12 @@ Configuración:
 - [ ] `NEXT_PUBLIC_APP_URL` con el dominio real (rompe el OAuth si no)
 - [ ] Webhook de Meta apuntando al dominio público y verificado
 
-- [ ] **URGENTE — RLS no está aplicada.** Se verificó (2026-07-20) que la anon key **pública** lee directamente las tablas: 504 empleados, 48 cuentas bancarias, 310 solicitudes de contrato, 347 logs de integración. La migración `20260720_enable_rls_deny_all.sql` existe en el repo pero **nunca se aplicó a la base**. Aplicarla es prioritario sobre cualquier otra cosa de esta lista.
-- [ ] Aplicar, en orden: `20260720_enable_rls_deny_all.sql` (deny-all), `20260721_profiles_provisioning_and_roles.sql` (perfiles), `20260722_rls_policies_phase_b.sql` (políticas por rol)
-- [ ] Verificar el cierre: con la anon key sin sesión, `select count(*) from employees` debe devolver **0**
-- [ ] Solo tras verificar, poner `RLS_SESSION_READS=on` para que las lecturas del backoffice usen el cliente de sesión
+- [x] **RLS aplicada y verificada (2026-07-21).** Se descubrió (2026-07-20) que la anon key **pública** leía todas las tablas (504 empleados, 48 cuentas bancarias, 310 solicitudes, 347 logs) porque la migración nunca se había aplicado. Se aplicaron las tres migraciones y se verificó el cierre: la anon key sin sesión devuelve **0 filas** en las 18 tablas.
+- [x] Aplicadas, en orden: `20260720_enable_rls_deny_all.sql` (deny-all), `20260721_profiles_provisioning_and_roles.sql` (perfiles), `20260722_rls_policies_phase_b.sql` (políticas por rol)
+- [ ] **Al aprovisionar una base de producción separada, re-aplicar las tres migraciones en ese orden y re-verificar el count 0** (la verificación de arriba es sobre la base actual)
+- [ ] Añadir un test post-deploy que verifique el invariante de RLS (`rowsecurity`, políticas, `security_invoker`) — ver [Plan de endurecimiento H2](seguridad.md#plan-de-endurecimiento)
+- [ ] Restringir la política de lectura de `employee_bank_accounts` (CLABE) a `operaciones`+ **antes** de encender `RLS_SESSION_READS` — ver [M1](seguridad.md#plan-de-endurecimiento)
+- [ ] Tras M1, poner `RLS_SESSION_READS=on` para que las lecturas del backoffice usen el cliente de sesión
 - [ ] Definir `BOOTSTRAP_ADMIN_EMAILS` **antes** de poner `RBAC_ENFORCEMENT=enforce`
 - [ ] Borrar de `settings` las filas antiguas con secretos en texto plano
 - [ ] **Generar y montar las credenciales de Google** — sin ellas no se genera ningún contrato. Descarga `google_oauth_client.json` (OAuth client tipo Desktop) de Google Cloud Console, corre `pnpm dlx tsx scripts/google-auth.ts` para generar `token.json`, y monta ambos en el contenedor
@@ -193,12 +195,12 @@ Ya resuelto en código (fase 1 de endurecimiento):
 - [x] Verificación HMAC de `X-Hub-Signature-256` en el webhook de Meta
 - [x] Webhook de EasyLex con comparación en tiempo constante y *fail closed*
 - [x] `mock-sign` deshabilitado en producción
-- [x] RLS deny-all en las 18 tablas + `security_invoker` en las vistas — **escrito, pero la migración no está aplicada en la base** (ver checklist urgente arriba)
+- [x] RLS deny-all en las 18 tablas + `security_invoker` en las vistas — **aplicada y verificada en la base actual** (anon key = 0 filas)
 - [x] Cabeceras de seguridad HTTP y `poweredByHeader: false`
 
 Ya resuelto (fase 4):
 
-- [x] RBAC aplicado con `requireRole()` en todas las rutas de escritura
+- [x] RBAC con `requireRole()` en las rutas de escritura — **con una excepción pendiente**: `POST /api/whatsapp/request-contract` no lo tiene (ver [Plan de endurecimiento H1](seguridad.md#plan-de-endurecimiento))
 - [x] Aprovisionamiento automático de `profiles` y función `current_user_role()`
 - [x] Secretos fuera de la tabla `settings`
 - [x] Módulo de auditoría compartido, con el operador registrado
@@ -210,6 +212,8 @@ Ya resuelto (fase 5):
 
 Seguridad pendiente en el código:
 
-- [ ] Fase B de RLS: políticas por rol y lecturas con el cliente de sesión
+- [x] Fase B de RLS: políticas por rol aplicadas (`20260722`); primer camino de lectura migrado al cliente de sesión (`contract-control`)
+- [ ] Migrar el resto de lecturas al cliente de sesión y encender `RLS_SESSION_READS`
+- [ ] **Endurecimiento pendiente** — ver el [Plan de endurecimiento](seguridad.md#plan-de-endurecimiento) en el documento de seguridad, con los huecos priorizados (H1 `request-contract` sin `requireRole`, H2 test de invariante RLS, M1–M7, L1–L6)
 
 Ver también: [WhatsApp](whatsapp.md) · [EasyLex y contratos](easylex-contratos.md) · [Infraestructura](infraestructura.md)

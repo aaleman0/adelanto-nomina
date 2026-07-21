@@ -11,6 +11,7 @@ Cada tema tiene **un solo documento**. Si un dato aparece en dos sitios, uno de 
 | [Importación CSV](importacion-csv.md) | Columnas, validación, normalización, elegibilidad, reimportación |
 | [WhatsApp](whatsapp.md) | Configuración, plantillas, envío masivo, webhook, operación diaria |
 | [EasyLex y contratos](easylex-contratos.md) | Reglas del contrato, PDF, cliente de EasyLex, firma |
+| [Seguridad](seguridad.md) | Los cinco pilares (auth, RBAC, rate limiting, RLS, validación), casos comunes y plan de endurecimiento |
 | [Configuración](configuracion.md) | Variables de entorno, `settings`, `company_settings`, checklist de producción |
 | [Testing](testing.md) | Vitest, Playwright, comandos, cobertura y huecos |
 | [Scripts](scripts.md) | Utilidades de `scripts/` |
@@ -20,7 +21,9 @@ Cada tema tiene **un solo documento**. Si un dato aparece en dos sitios, uno de 
 
 **Es tu primer contacto con el proyecto** → [Arquitectura](arquitectura.md), y luego [Base de datos](base-de-datos.md).
 
-**Vas a tocar un endpoint** → [API](api.md). Ojo: ningún handler valida con zod, el parseo es manual.
+**Vas a tocar un endpoint** → [API](api.md). La entrada se valida con Zod en el borde (`parseJsonBody`/`parseQuery`); ver también [Seguridad](seguridad.md#5-validación-server-side).
+
+**Te importa la seguridad** → [Seguridad](seguridad.md): los cinco pilares con sus casos comunes y el [plan de endurecimiento](seguridad.md#plan-de-endurecimiento).
 
 **Vas a tocar la UI** → [Frontend](frontend.md), sección de tokens antes de escribir CSS.
 
