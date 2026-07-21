@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ContractControlRow, ContractControlMetric } from "@/lib/backoffice/contract-control";
+import type { ContractControlRow } from "@/lib/backoffice/contract-control";
 import { SendWhatsAppButton } from "@/components/whatsapp/send-whatsapp-button";
 
-export function OperationsCockpit({ rows, metrics, signed, total }: { rows: ContractControlRow[]; metrics: ContractControlMetric[]; signed: number; total: number }) {
+export function OperationsCockpit({ rows }: { rows: ContractControlRow[] }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("es"));
@@ -16,7 +16,6 @@ export function OperationsCockpit({ rows, metrics, signed, total }: { rows: Cont
   const filtered = queue.filter((row) => [row.empleado, row.empleador, row.operational_status].some((value) => value?.toLocaleLowerCase("es").includes(deferredQuery)));
   const [selectedId, setSelectedId] = useState(queue[0]?.employee_id ?? "");
   const selected = queue.find((row) => row.employee_id === selectedId) ?? filtered[0] ?? queue[0];
-  const progress = total > 0 ? Math.min(100, Math.round((signed / total) * 100)) : 0;
 
   const searchRef = useRef<HTMLInputElement>(null);
   const selectedRowRef = useRef<HTMLButtonElement>(null);
@@ -67,25 +66,11 @@ export function OperationsCockpit({ rows, metrics, signed, total }: { rows: Cont
   useEffect(() => {
     selectedRowRef.current?.scrollIntoView({ block: "nearest" });
   }, [selectedId]);
-  const errors = metrics.find((metric) => metric.key === "errors")?.value ?? 0;
-  const pending = metrics.find((metric) => metric.key === "pendingSend")?.value ?? 0;
 
   return (
-    <section className="grid flex-1 gap-3 xl:min-h-0 xl:grid-cols-[200px_minmax(420px,1fr)_320px]">
-      <aside className="surface-panel flex min-h-0 flex-col rounded-xl p-4">
-        <p className="font-data text-[10px] uppercase tracking-[.16em] text-text-muted">Estado de operación</p>
-        <div className="mt-5 space-y-5">
-          <Signal tone={errors > 0 ? "danger" : "success"} label="Incidencias" value={errors} />
-          <Signal tone={pending > 0 ? "warning" : "success"} label="Por contactar" value={pending} />
-          <Signal tone="success" label="Firmados" value={signed} />
-        </div>
-        <div className="mt-auto pt-7">
-          <div className="flex items-end justify-between"><span className="text-xs text-text-muted">Avance</span><strong className="font-data text-xl text-text-primary">{progress}%</strong></div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-alt"><div className="h-full bg-[var(--success)]" style={{ width: `${progress}%` }} /></div>
-          <p className="mt-2 text-xs text-text-muted">{signed} de {total} elegibles</p>
-        </div>
-      </aside>
-
+    // El embudo (arriba) lleva el resumen de etapas; aquí el cockpit se queda
+    // con lo accionable: la cola de trabajo y el inspector.
+    <section className="grid flex-1 gap-3 xl:min-h-0 xl:grid-cols-[minmax(420px,1fr)_340px]">
       <div className="surface-panel flex min-h-0 flex-col rounded-xl xl:overflow-hidden">
         <div className="shrink-0 border-b border-border p-4 sm:p-5">
           <div className="flex items-center justify-between gap-4"><div><h2 className="font-display text-xl font-semibold text-text-primary">Requieren acción</h2><p className="font-data mt-1 text-[10px] uppercase tracking-[.14em] text-text-muted">{filtered.length} por resolver</p></div><Link href="/contracts" className="text-xs font-semibold text-primary hover:text-primary-hover">Ver archivo completo</Link></div>
@@ -162,7 +147,6 @@ function Inspector({ row }: { row: ContractControlRow }) {
   return <div className="mt-6 animate-fade-up" key={row.employee_id}><div className="flex items-center justify-between gap-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${tone.badge}`}>{formatStatus(row.operational_status)}</span><span className={`h-2.5 w-2.5 rounded-full ${tone.dot}`} /></div><h3 className="font-display mt-6 text-2xl font-semibold leading-tight text-text-primary">{row.empleado || "Empleado sin nombre"}</h3><p className="mt-2 text-sm text-text-muted">{row.empleador || "Sin empleador registrado"}</p><div className="my-6 border-y border-border py-5"><p className="text-xs text-text-muted">Monto autorizado</p><p className="font-data mt-1 text-3xl font-medium text-text-primary">{formatMoney(row.monto_prestamo_autorizado)}</p></div><dl className="space-y-4"><Detail label="Estado" value={formatStatus(row.operational_status)} /><Detail label="Identificador" value={row.employee_id.slice(0, 12)} mono /></dl><div className="mt-7 flex flex-col gap-2">{row.operational_status !== "firmado" && <span data-cockpit-send><SendWhatsAppButton employeeId={row.employee_id} employeeName={row.empleado} className="w-full justify-center" /></span>}<Link href={`/contracts/${row.employee_id}`} className="button-contrast flex h-10 items-center justify-center rounded-lg bg-[var(--color-5)] text-sm font-semibold transition hover:-translate-y-0.5 hover:bg-[var(--color-4)]">Abrir expediente</Link></div></div>;
 }
 
-function Signal({ tone, label, value }: { tone: "success" | "warning" | "danger"; label: string; value: number }) { const colors = { success: "bg-[var(--success)]", warning: "bg-[var(--warning)]", danger: "bg-[var(--danger)]" }; return <div className="flex items-center gap-3"><span className={`h-2.5 w-2.5 rounded-full shadow-[0_0_0_4px_rgba(167,190,216,.25)] ${colors[tone]}`} /><div><p className="font-data text-xl font-semibold text-text-primary">{value}</p><p className="text-xs text-text-muted">{label}</p></div></div>; }
 function Detail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) { return <div><dt className="text-[10px] uppercase tracking-wider text-text-muted">{label}</dt><dd className={`mt-1 text-sm text-text-primary ${mono ? "font-data" : ""}`}>{value}</dd></div>; }
 function getTone(status: string) { if (status.includes("error")) return { dot: "bg-[var(--danger)]", badge: "bg-danger-bg text-danger" }; if (status.includes("firmado") || status.includes("generado")) return { dot: "bg-[var(--success)]", badge: "bg-success-bg text-success" }; return { dot: "bg-[var(--warning)]", badge: "bg-warning-bg text-warning" }; }
 function ShortcutHint({ keys, label }: { keys: string; label: string }) {

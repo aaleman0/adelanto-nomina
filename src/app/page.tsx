@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { OperationsCockpit } from "@/components/dashboard/operations-cockpit";
+import { PipelineOverview } from "@/components/dashboard/pipeline-overview";
 import { AppShell, PageHeader } from "@/components/layout/app-shell";
 import { LetterWave } from "@/components/ui/letter-wave";
 import {
@@ -42,7 +43,8 @@ export default async function Home() {
           <p className="mt-1 text-amber-700">Configura variables de Supabase para ver datos reales del backoffice.</p>
         </section>
       ) : null}
-      <OperationsCockpit rows={actionQueue} metrics={result.metrics} signed={kpis.firmados} total={kpis.totalElegibles} />
+      <PipelineOverview metrics={result.metrics} signed={kpis.firmados} total={kpis.totalElegibles} />
+      <OperationsCockpit rows={actionQueue} />
     </AppShell>
   );
 }
