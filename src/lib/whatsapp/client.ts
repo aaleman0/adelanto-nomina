@@ -25,6 +25,22 @@ export type TestConnectionResult = {
   error?: string;
 };
 
+/**
+ * Traduce el error de la Graph API a un mensaje accionable.
+ *
+ * Meta devuelve mensajes poco útiles en el endpoint de mensajes: un token
+ * caducado llega como "Authentication Error" a secas, sin pista de qué hacer.
+ * El código 190 (OAuthException) siempre significa token inválido o expirado,
+ * así que se reemplaza por una instrucción concreta. El resto se pasa tal cual.
+ */
+export function describeMetaError(json: unknown, status: number): string {
+  const error = (json as { error?: { message?: string; code?: number } } | null)?.error;
+  if (error?.code === 190) {
+    return "Token de WhatsApp expirado o inválido (código 190 de Meta). Genera uno nuevo y actualiza WHATSAPP_ACCESS_TOKEN.";
+  }
+  return error?.message ?? `HTTP ${status}`;
+}
+
 export class WhatsAppClient {
   private accessToken: string;
   private phoneNumberId: string;
@@ -78,7 +94,7 @@ export class WhatsAppClient {
       const json = await res.json();
 
       if (!res.ok) {
-        const errMsg = json?.error?.message ?? `HTTP ${res.status}`;
+        const errMsg = describeMetaError(json, res.status);
         console.error("[WhatsApp] send failed", JSON.stringify(json));
         return { ok: false, error: errMsg };
       }
@@ -156,7 +172,7 @@ export class WhatsAppClient {
       const json = await res.json();
 
       if (!res.ok) {
-        const errMsg = json?.error?.message ?? `HTTP ${res.status}`;
+        const errMsg = describeMetaError(json, res.status);
         return { ok: false, error: errMsg };
       }
 
@@ -196,7 +212,7 @@ export class WhatsAppClient {
       const json = await res.json();
 
       if (!res.ok) {
-        const errMsg = json?.error?.message ?? `HTTP ${res.status}`;
+        const errMsg = describeMetaError(json, res.status);
         return { ok: false, error: errMsg };
       }
 
@@ -223,7 +239,7 @@ export class WhatsAppClient {
       const json = await res.json();
 
       if (!res.ok) {
-        const errMsg = json?.error?.message ?? `HTTP ${res.status}`;
+        const errMsg = describeMetaError(json, res.status);
         return { ok: false, error: errMsg };
       }
 
