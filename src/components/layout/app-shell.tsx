@@ -6,10 +6,15 @@ import { RoleProvider } from "@/components/auth/role-context";
 import { getCurrentActor, hasRole, type UserRole } from "@/lib/auth/roles";
 import { getUser } from "@/lib/supabase/session";
 
+// Navegación organizada por el flujo del empleado, no por herramientas: entra
+// (Importar), se le contacta (WhatsApp), avanza (Operación) y queda en el
+// archivo (Contratos). Las secciones reflejan ese recorrido.
 const navigation: NavEntry[] = [
+  { section: "Flujo" },
   { href: "/", label: "Operación", icon: "D" },
   { href: "/imports", label: "Importar", icon: "I" },
   { href: "/contracts", label: "Contratos", icon: "C" },
+  { section: "Mensajería" },
   { label: "WhatsApp", icon: "W", prefix: "/whatsapp", items: [
     { href: "/whatsapp", label: "Resumen", icon: "W" },
     { href: "/whatsapp/send", label: "Nuevo envío", icon: "W" },
@@ -19,8 +24,9 @@ const navigation: NavEntry[] = [
     { href: "/settings/whatsapp/templates", label: "Plantillas", icon: "W", minimumRole: "admin" },
     { href: "/settings/whatsapp", label: "Conexión", icon: "W", minimumRole: "admin" },
   ] },
-  // Ajustes concentra la configuración sensible (credenciales, plantillas), que
-  // solo un admin puede tocar. El enlace se filtra en el servidor.
+  // La sección y su único ítem son admin: sin ese rol, ambos desaparecen y no
+  // queda un encabezado colgando.
+  { section: "Configuración", minimumRole: "admin" },
   { href: "/settings", label: "Ajustes", icon: "S", minimumRole: "admin" },
 ];
 

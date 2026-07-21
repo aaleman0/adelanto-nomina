@@ -10,8 +10,11 @@ import type { UserRole } from "@/lib/auth/roles-shared";
 
 export type NavItem = { href: string; label: string; icon: string; minimumRole?: UserRole };
 export type NavGroup = { label: string; icon: string; prefix: string; items: NavItem[]; minimumRole?: UserRole };
-export type NavEntry = NavItem | NavGroup;
+// Encabezado que agrupa la navegación por etapa del flujo (no es un destino).
+export type NavSection = { section: string; minimumRole?: UserRole };
+export type NavEntry = NavItem | NavGroup | NavSection;
 const isGroup = (entry: NavEntry): entry is NavGroup => "items" in entry;
+const isSection = (entry: NavEntry): entry is NavSection => "section" in entry;
 const SIDEBAR_STORAGE_KEY = "backoffice-sidebar-collapsed";
 const sidebarListeners = new Set<() => void>();
 
@@ -50,7 +53,7 @@ export function SidebarFrame({ children, navigation, user }: { children: React.R
           <MenuButton open={!collapsed} onClick={toggle} label={collapsed ? "Expandir menú" : "Colapsar menú"} />
         </div>
         <nav className={`panel-scroll flex flex-1 flex-col gap-1 py-4 ${collapsed ? "px-3" : "px-3"}`} aria-label="Navegación principal">
-          {navigation.map((entry) => isGroup(entry) ? <Group key={entry.prefix} group={entry} collapsed={collapsed} /> : <Item key={entry.href} item={entry} collapsed={collapsed} />)}
+          {navigation.map((entry, index) => isSection(entry) ? <SectionHeader key={`s-${entry.section}`} section={entry} collapsed={collapsed} first={index === 0} /> : isGroup(entry) ? <Group key={entry.prefix} group={entry} collapsed={collapsed} /> : <Item key={entry.href} item={entry} collapsed={collapsed} />)}
         </nav>
         <div className={`shrink-0 border-t border-[var(--sidebar-border)] p-3 ${collapsed ? "flex justify-center" : ""}`}><SidebarFooter collapsed={collapsed} user={user} /></div>
       </aside>
@@ -62,7 +65,7 @@ export function SidebarFrame({ children, navigation, user }: { children: React.R
         </div>
         {mobileOpen ? (
           <nav className="absolute inset-x-0 top-14 z-40 max-h-[calc(100dvh-3.5rem)] overflow-auto border-b border-[var(--sidebar-border)] bg-sidebar p-3 shadow-xl lg:hidden">
-            {navigation.map((entry) => isGroup(entry) ? <Group key={entry.prefix} group={entry} collapsed={false} onNavigate={() => setMobileOpen(false)} /> : <Item key={entry.href} item={entry} collapsed={false} onNavigate={() => setMobileOpen(false)} />)}
+            {navigation.map((entry, index) => isSection(entry) ? <SectionHeader key={`s-${entry.section}`} section={entry} collapsed={false} first={index === 0} /> : isGroup(entry) ? <Group key={entry.prefix} group={entry} collapsed={false} onNavigate={() => setMobileOpen(false)} /> : <Item key={entry.href} item={entry} collapsed={false} onNavigate={() => setMobileOpen(false)} />)}
             <div className="mt-3 border-t border-[var(--sidebar-border)] pt-3"><SidebarFooter collapsed={false} user={user} /></div>
           </nav>
         ) : null}
@@ -74,6 +77,19 @@ export function SidebarFrame({ children, navigation, user }: { children: React.R
 
 function SidebarFooter({ collapsed, user }: { collapsed: boolean; user: SidebarUser }) {
   return <div className={`flex items-center ${collapsed ? "flex-col gap-2" : "gap-2"}`}><NotificationBell placement="sidebar" /><UserControls collapsed={collapsed} displayName={user.displayName} email={user.email} avatarUrl={user.avatarUrl} role={user.role} /></div>;
+}
+
+function SectionHeader({ section, collapsed, first }: { section: NavSection; collapsed: boolean; first: boolean }) {
+  // Colapsado no hay espacio para el texto: se muestra un separador fino, salvo
+  // el primero (arriba del todo no hace falta).
+  if (collapsed) {
+    return first ? null : <div className="my-2 border-t border-white/10" />;
+  }
+  return (
+    <p className={`px-3 pb-1 font-data text-[10px] uppercase tracking-[.16em] text-sidebar-text-muted ${first ? "pt-0" : "pt-4"}`}>
+      {section.section}
+    </p>
+  );
 }
 
 function Item({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boolean; onNavigate?: () => void }) {
