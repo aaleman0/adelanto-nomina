@@ -128,16 +128,23 @@ function StageCard({ stage, isLast }: { stage: Stage; isLast: boolean }) {
   );
 
   if (stage.batchStatus) {
+    // La etiqueta y el número quedan arriba (alineados con las demás tarjetas);
+    // el botón se empuja al fondo con mt-auto para que su altura extra no baje
+    // el número.
     return (
       <div className={cardClass}>
         {drill}
-        <StageBatchSend status={stage.batchStatus} count={stage.value} label={stage.label} />
+        <div className="mt-auto">
+          <StageBatchSend status={stage.batchStatus} count={stage.value} label={stage.label} />
+        </div>
       </div>
     );
   }
 
+  // Sin justify-between: la etiqueta y el número van arriba, alineados con la
+  // tarjeta que sí lleva botón, aunque el grid las estire a la misma altura.
   return (
-    <Link href={stage.href} className={[cardClass, "group justify-between hover:-translate-y-0.5 hover:shadow-sm", isLast ? "" : "hover:bg-surface-muted"].join(" ")}>
+    <Link href={stage.href} className={[cardClass, "group hover:-translate-y-0.5 hover:shadow-sm", isLast ? "" : "hover:bg-surface-muted"].join(" ")}>
       <span className="text-[11px] font-medium text-text-muted group-hover:text-text-secondary">{stage.label}</span>
       <span className={["font-data mt-1 text-2xl font-semibold", isLast ? "text-success" : "text-text-primary"].join(" ")}>{stage.value}</span>
     </Link>
