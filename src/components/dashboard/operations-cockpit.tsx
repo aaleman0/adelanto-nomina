@@ -105,7 +105,7 @@ export function OperationsCockpit({ rows }: { rows: ContractControlRow[] }) {
         </div>
       </div>
 
-      <aside className="surface-panel min-h-[360px] rounded-xl p-5 xl:panel-scroll xl:min-h-0">
+      <aside className="surface-panel min-h-[360px] rounded-xl p-5 xl:self-start">
         <p className="font-data text-[10px] uppercase tracking-[.16em] text-text-muted">Inspector</p>
         {selected ? <Inspector row={selected} /> : <p className="mt-8 text-sm text-text-muted">Pasa el cursor por un registro para inspeccionarlo.</p>}
       </aside>
