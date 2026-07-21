@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { normalizePhoneFromCsv } from "@/lib/whatsapp/phone-utils";
 import { createEasyLexAttempt } from "@/lib/contracts/create-easylex-attempt";
 import { sendContractLinkWhatsApp } from "@/lib/contracts/send-contract-link";
+import { recordAuditEvent, recordIntegrationLog } from "@/lib/audit";
 import { easylexEnv } from "@/lib/env";
 
 type JsonRecord = Record<string, unknown>;
@@ -661,6 +662,8 @@ async function logBusinessResult(
   });
 }
 
+// Delegan en el módulo de auditoría compartido; se conserva la firma para no
+// tocar los llamadores. Son acciones de sistema (solicitud entrante), sin actor.
 async function createIntegrationLog(input: {
   correlationId: string;
   requestPayload: JsonRecord;
@@ -669,25 +672,19 @@ async function createIntegrationLog(input: {
   entityType?: string;
   entityId?: string;
 }) {
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("integration_logs").insert({
+  await recordIntegrationLog({
     provider: "whatsapp",
     direction: "inbound",
     endpoint: "/api/whatsapp/request-contract",
     method: "POST",
-    request_payload: input.requestPayload,
-    response_payload: input.responsePayload,
-    status_code: 200,
-    status: input.success ? "success" : "failed",
+    requestPayload: input.requestPayload,
+    responsePayload: input.responsePayload,
+    statusCode: 200,
     success: input.success,
-    correlation_id: input.correlationId,
-    entity_type: input.entityType ?? null,
-    entity_id: input.entityId ?? null,
+    correlationId: input.correlationId,
+    entityType: input.entityType ?? null,
+    entityId: input.entityId ?? null,
   });
-
-  if (error) {
-    throw error;
-  }
 }
 
 async function createAuditEvent(input: {
@@ -699,21 +696,16 @@ async function createAuditEvent(input: {
   summary: string;
   metadata: JsonRecord;
 }) {
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("audit_events").insert({
-    event_name: input.eventName,
-    entity_type: input.entityType,
-    entity_id: input.entityId,
-    employee_id: input.employeeId,
+  await recordAuditEvent({
+    eventName: input.eventName,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    employeeId: input.employeeId,
     source: input.source,
     summary: input.summary,
     metadata: input.metadata,
-    actor_type: "system",
+    actorType: "system",
   });
-
-  if (error) {
-    throw error;
-  }
 }
 
 function readString(value: unknown) {

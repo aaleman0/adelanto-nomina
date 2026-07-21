@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { recordAuditEvent, recordIntegrationLog } from "@/lib/audit";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -291,34 +292,31 @@ async function createEasyLexEvent(input: {
   }
 }
 
+// Delegan en el módulo de auditoría compartido; se conserva la firma para no
+// tocar los llamadores.
 async function createAuditEvent(input: {
   contractRequest: ContractRequest;
   attempt: ContractAttempt;
   signedAt: string;
   correlationId: string;
 }) {
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("audit_events").insert({
-    event_name: "contract.signed",
-    entity_type: "contract_requests",
-    entity_id: input.contractRequest.id,
-    employee_id: input.contractRequest.employee_id,
-    correlation_id: input.correlationId,
+  await recordAuditEvent({
+    eventName: "contract.signed",
+    entityType: "contract_requests",
+    entityId: input.contractRequest.id,
+    employeeId: input.contractRequest.employee_id,
+    correlationId: input.correlationId,
     source: "easylex",
-    previous_state: input.contractRequest.status,
-    new_state: "firmado",
+    previousState: input.contractRequest.status,
+    newState: "firmado",
     summary: "Contrato firmado por webhook mock de EasyLex.",
     metadata: {
       contract_attempt_id: input.attempt.id,
       easylex_contract_id: input.attempt.easylex_contract_id,
       signed_at: input.signedAt,
     },
-    actor_type: "system",
+    actorType: "system",
   });
-
-  if (error) {
-    throw error;
-  }
 }
 
 async function createIntegrationLog(input: {
@@ -329,25 +327,19 @@ async function createIntegrationLog(input: {
   entityType?: string;
   entityId?: string;
 }) {
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("integration_logs").insert({
+  await recordIntegrationLog({
     provider: "easylex",
     direction: "inbound",
     endpoint: "/api/webhooks/easylex/mock-sign",
     method: "POST",
-    request_payload: input.requestPayload,
-    response_payload: input.responsePayload,
-    status_code: 200,
-    status: input.success ? "success" : "failed",
+    requestPayload: input.requestPayload,
+    responsePayload: input.responsePayload,
+    statusCode: 200,
     success: input.success,
-    correlation_id: input.correlationId,
-    entity_type: input.entityType ?? null,
-    entity_id: input.entityId ?? null,
+    correlationId: input.correlationId,
+    entityType: input.entityType ?? null,
+    entityId: input.entityId ?? null,
   });
-
-  if (error) {
-    throw error;
-  }
 }
 
 function readString(value: unknown) {

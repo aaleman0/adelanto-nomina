@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { recordAuditEvent } from "@/lib/audit";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -566,6 +567,9 @@ async function updateRowStatus(rowId: string, status: "aplicada" | "sin_cambios"
   }
 }
 
+// Delega en el módulo de auditoría compartido, conservando la firma para no
+// tocar los llamadores. Estas son acciones de sistema (job de importación), sin
+// actor humano.
 async function createAuditEvent(input: {
   event_name: string;
   entity_type: string;
@@ -574,21 +578,16 @@ async function createAuditEvent(input: {
   summary: string;
   metadata?: JsonRecord;
 }) {
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("audit_events").insert({
-    event_name: input.event_name,
-    entity_type: input.entity_type,
-    entity_id: input.entity_id,
-    employee_id: input.employee_id ?? null,
+  await recordAuditEvent({
+    eventName: input.event_name,
+    entityType: input.entity_type,
+    entityId: input.entity_id,
+    employeeId: input.employee_id ?? null,
     source: "backend",
     summary: input.summary,
-    metadata: input.metadata ?? {},
-    actor_type: "system",
+    metadata: input.metadata,
+    actorType: "system",
   });
-
-  if (error) {
-    throw error;
-  }
 }
 
 // Exportada para pruebas: decide si un empleado existente cambió respecto al

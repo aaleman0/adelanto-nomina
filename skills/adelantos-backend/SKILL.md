@@ -72,7 +72,7 @@ Usa `recordAuditEvent` / `recordIntegrationLog` de `src/lib/audit/`. **Pasa siem
 
 `audit_events.entity_id` es de tipo **uuid**: pasar una cadena arbitraria hace fallar el insert.
 
-Quedan 3 helpers duplicados por migrar (`request-contract.ts`, `mock-sign.ts`, `imports/apply.ts`).
+Toda la auditoría pasa ya por el módulo compartido; no quedan helpers privados por migrar.
 
 ## Seguridad — pendientes reales
 

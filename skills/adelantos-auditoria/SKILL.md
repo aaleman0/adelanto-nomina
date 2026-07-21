@@ -45,7 +45,7 @@ Permite cruzar por: `batch_id`, `row_id`, `employee_id`, `offer_id`, `contract_r
 
 Al auditar, empieza por aquí:
 
-1. **El módulo compartido existe** (`src/lib/audit/`) pero la migración está a medias: `backoffice-actions.ts`, `phone-audit/fix` y el webhook de EasyLex ya lo usan; `request-contract.ts`, `mock-sign.ts` e `imports/apply.ts` conservan su helper privado. Migrarlos es mecánico.
+1. **Todo pasa por el módulo compartido** (`src/lib/audit/`): `recordAuditEvent` y `recordIntegrationLog`. Ya no hay helpers privados ni inserts directos a `audit_events`/`integration_logs` repartidos por el código; los sitios que los tenían (`request-contract.ts`, `mock-sign.ts`, `imports/apply.ts`, backoffice) delegan en él.
 2. **La idempotencia del webhook de EasyLex tiene un hueco**: si falta `webhookId`, el `event_id` se sintetiza con `Date.now()` y nunca colisiona, así que el evento se procesa siempre.
 3. **La corrección masiva de teléfonos no es transaccional** y registra un único `audit_events` con `entity_id: "bulk"`, sin detalle por empleado. No se puede reconstruir qué número tenía cada uno.
 4. **El actor ya se registra** en las acciones de backoffice: `recordAuditEvent` recibe el `Actor` de la sesión y guarda `actor_id`, más el correo y el rol en `metadata`. Al añadir una acción nueva, pásalo — si no, vuelve el problema de no saber quién hizo qué.
