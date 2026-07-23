@@ -25,6 +25,13 @@ export const RATE_LIMITS = {
    */
   whatsappBulkSend: { name: "whatsapp:bulk-send", limit: 12, windowMs: 60_000 },
 
+  /**
+   * Solicitud de contrato. Cada llamada genera el PDF, crea el documento en
+   * EasyLex y envía el link por WhatsApp: efectos externos caros. Un operador
+   * dispara unas pocas; el límite corta un bucle accidental sin estorbar.
+   */
+  contractRequest: { name: "contract:request", limit: 30, windowMs: 60_000 },
+
   /** Prueba de conexión y sincronización de plantillas: acciones puntuales. */
   whatsappAdminAction: { name: "whatsapp:admin-action", limit: 20, windowMs: 60_000 },
 

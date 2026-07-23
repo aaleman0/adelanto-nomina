@@ -17,7 +17,8 @@
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test tests/e2e/smoke",
     "test:e2e:api": "playwright test tests/e2e/api",
-    "test:e2e:flows": "playwright test tests/e2e/flows"
+    "test:e2e:flows": "playwright test tests/e2e/flows",
+    "verify:rls": "RUN_RLS_CHECK=1 vitest run src/lib/security/rls-invariant.test.ts"
   },
   "dependencies": {
     "@komandero/numeros-a-letras": "2.0.0",
