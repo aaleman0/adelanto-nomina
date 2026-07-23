@@ -1,0 +1,152 @@
+# Cloud Run — configuración declarativa del servicio (Knative).
+#
+# Es la BASE del servicio: sizing, escalado, SA, sondas, env vars y secretos.
+# Se aplica una vez (y cada vez que cambie la CONFIG, no la imagen):
+#
+#   gcloud run services replace deploy/cloud-run-service.yaml --region=REGION
+#
+# A partir de ahí, el job `deploy` de CI sólo cambia la imagen
+# (`gcloud run deploy --image ...`), preservando todo lo de aquí.
+#
+# Reemplaza los marcadores: PROJECT_ID, REGION, REPO, TU-DOMINIO.
+# Sizing pensado para UN operador (UI trivial) + lotes de MILES vía Cloud Tasks:
+# instancia modesta que escala a CERO entre lotes; el ritmo real lo pone la cola.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: adelantos-admin
+  labels:
+    cloud.googleapis.com/location: REGION
+  annotations:
+    # `all` = público. Los webhooks (Meta/EasyLex) y el worker de Cloud Tasks
+    # necesitan entrar; cada endpoint se autentica por su cuenta (HMAC / OIDC).
+    # Si pones un Load Balancer + Cloud Armor delante, cámbialo a
+    # `internal-and-cloud-load-balancing`.
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        # Escala a cero entre lotes (barato); tope para proteger Supabase y las
+        # cuotas de Meta/Google/EasyLex aunque lluevan tareas.
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+        # CPU sólo durante el request: cada tarea de Cloud Tasks ES un request,
+        # así que no hay trabajo en segundo plano que pagar.
+        run.googleapis.com/cpu-throttling: "true"
+        # Acelera el arranque en frío (Next + min=0). Vale la pena aquí.
+        run.googleapis.com/startup-cpu-boost: "true"
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      # SA dedicada de mínimo privilegio con la que corre el servicio. Necesita
+      # roles/cloudtasks.enqueuer y actAs sobre la SA invoker (ver
+      # scripts/setup-cloud-tasks.sh), además de acceso a los secretos.
+      serviceAccountName: adelantos-admin-run@PROJECT_ID.iam.gserviceaccount.com
+      # Concurrency BAJA: la generación de PDF (Google Docs) es pesada en RAM;
+      # mejor que Cloud Run levante instancias a que una sola se sature/OOM.
+      containerConcurrency: 8
+      # El request-contract genera el PDF inline; deja margen. El envío masivo ya
+      # no depende de esto (lo drena la cola).
+      timeoutSeconds: 300
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT_ID/REPO/adelantos-admin:latest
+          ports:
+            - name: http1
+              containerPort: 8080
+          resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          # Sonda de arranque TCP: confirma que el proceso escucha, SIN acoplarse
+          # a Supabase. (`/api/health` 503-ea si Supabase está degradado; usarlo
+          # como liveness reiniciaría el contenedor ante un blip de la base. Ese
+          # endpoint queda para el uptime check EXTERNO, no para la sonda.)
+          startupProbe:
+            tcpSocket:
+              port: 8080
+            failureThreshold: 10
+            periodSeconds: 3
+          env:
+            - name: NODE_ENV
+              value: production
+            # También es build-arg (se inlinea); aquí para el código server-side.
+            - name: NEXT_PUBLIC_APP_URL
+              value: https://TU-DOMINIO
+            # --- Endurecimiento (opt-in) — ver docs/seguridad.md --------------
+            - name: RBAC_ENFORCEMENT
+              value: enforce
+            - name: BOOTSTRAP_ADMIN_EMAILS
+              value: tu-operador@tu-dominio.com
+            - name: ALLOWED_EMAIL_DOMAINS
+              value: tu-dominio.com
+            - name: WEBHOOK_ENFORCE_SIGNATURES
+              value: "true"
+            # 1 = Cloud Run directo. Si hay Load Balancer + Cloud Armor delante, 2.
+            - name: TRUSTED_PROXY_COUNT
+              value: "1"
+            # --- Cola (Cloud Tasks) — ver scripts/setup-cloud-tasks.sh --------
+            - name: GCP_PROJECT_ID
+              value: PROJECT_ID
+            - name: CLOUD_TASKS_LOCATION
+              value: REGION
+            - name: CLOUD_TASKS_QUEUE
+              value: whatsapp-bulk
+            - name: TASKS_WORKER_BASE_URL
+              value: https://TU-DOMINIO
+            - name: TASKS_INVOKER_SERVICE_ACCOUNT
+              value: cloud-tasks-invoker@PROJECT_ID.iam.gserviceaccount.com
+            # --- Config no sensible ------------------------------------------
+            - name: SUPABASE_URL
+              value: https://TU-PROYECTO.supabase.co/rest/v1/
+            # --- Secretos: desde Secret Manager, NUNCA en texto plano ---------
+            # Crea cada secreto (gcloud secrets create ...) y da a la SA del
+            # servicio el rol roles/secretmanager.secretAccessor.
+            - name: SUPABASE_SERVICE_ROLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-service-role-key
+                  key: latest
+            - name: SUPABASE_ANON_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-anon-key
+                  key: latest
+            - name: WHATSAPP_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: whatsapp-access-token
+                  key: latest
+            - name: WHATSAPP_APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: whatsapp-app-secret
+                  key: latest
+            - name: EASYLEX_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: easylex-secret-access-key
+                  key: latest
+            - name: EASYLEX_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: easylex-webhook-secret
+                  key: latest
+            # + el resto de WhatsApp/EasyLex (phone_number_id, business_account_id,
+            #   webhook_verify_token, access_key_id, base_url, signing_link_base_url,
+            #   callback_url, contract_template) — completa según docs/configuracion.md,
+            #   con valueFrom para los secretos y value para lo no sensible.
+          # --- Credenciales de Google (autollenado del contrato) --------------
+          # google_oauth_client.json y token.json son ARCHIVOS, no env vars. Se
+          # montan como volumen desde Secret Manager. Descomenta cuando los tengas:
+          # volumeMounts:
+          #   - name: google-creds
+          #     mountPath: /secrets/google
+          #     readOnly: true
+      # volumes:
+      #   - name: google-creds
+      #     secret:
+      #       secretName: google-token-json
+      #       items:
+      #         - key: latest
+      #           path: token.json

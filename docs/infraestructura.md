@@ -54,6 +54,18 @@ Para que la imagen sea razonable conviene activar `output: "standalone"` en `nex
 ### Cloud Run
 Escalado automático, HTTPS y TLS gestionados, dominios personalizados, health checks contra `/api/health`, y rollback a revisiones anteriores desde la consola.
 
+La configuración declarativa vive en **`deploy/cloud-run-service.yaml`** (sizing, escalado, SA, sondas, env vars y secretos desde Secret Manager). El sizing es para **un operador + lotes de miles**: 2 vCPU / 2 GiB, `containerConcurrency: 8`, `minScale: 0` (escala a cero entre lotes) y `maxScale: 10` (protege a Supabase y las cuotas externas). La cola es el throttle real, no la instancia.
+
+**Dos planos, a propósito:**
+
+- **Config (la BASE)** → se aplica una vez, y cada vez que cambie algo que no sea la imagen:
+  ```bash
+  gcloud run services replace deploy/cloud-run-service.yaml --region=REGION
+  ```
+- **Imagen** → el job `deploy` de CI hace `gcloud run deploy --image ...` en cada merge, conservando todo lo del yaml.
+
+La sonda de arranque es **TCP** (que el proceso escuche), no HTTP contra `/api/health`: ese endpoint devuelve 503 si Supabase está degradado, y usarlo como sonda reiniciaría el contenedor ante un blip de la base. `/api/health` queda para el **uptime check externo** de Cloud Monitoring.
+
 ### Artifact Registry
 Registro privado de imágenes, una por commit etiquetada con su SHA, con control de acceso vía IAM.
 
