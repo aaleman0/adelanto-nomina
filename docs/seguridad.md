@@ -97,19 +97,18 @@ Estado en la base a 2026-07-21: **RLS activa y verificada.** La `anon key` públ
 
 Huecos reales encontrados en la auditoría del 2026-07-21, priorizados. Ninguno bloquea el funcionamiento; son mejoras de postura de seguridad.
 
-**Resuelto (2026-07-23):** H1, H2 y M1 ya están implementados — ver la sección de abajo. El resto sigue pendiente.
+**Estado (2026-07-23): los 15 items (H1–H2, M1–M7, L1–L6) están resueltos en código.** Cada fila de abajo lo detalla. Quedan solo **acciones de despliegue** (no código):
 
-### Resuelto
+- **Aplicar la migración `20260723_restrict_sensitive_reads.sql`** (M1) en el SQL Editor, antes de encender `RLS_SESSION_READS`.
+- **Definir en producción** las variables que activan las protecciones opt-in: `ALLOWED_EMAIL_DOMAINS` (M6), `TASKS_INVOKER_SERVICE_ACCOUNT` + `TASKS_WORKER_BASE_URL` (M3), `TRUSTED_PROXY_COUNT` (M5), `WEBHOOK_ENFORCE_SIGNATURES=true` (L6).
+- **Correr `pnpm verify:rls`** (H2) como gate post-deploy.
 
-| # | Pilar | Qué se hizo |
+### Prioridad alta
+
+| # | Pilar | Estado |
 |---|---|---|
-| ✅ H1 | Autorización | `POST /api/whatsapp/request-contract` ahora exige `requireRole("operaciones")` + `enforceRateLimit(contractRequest)` (30/min). Era el único endpoint de escritura de sesión sin guard. |
-| ✅ H2 | RLS | Test automatizado del invariante en `src/lib/security/rls-invariant.test.ts` (`pnpm verify:rls`): con la anon key, las 18 tablas deben devolver 0 filas. Desactivado por defecto; corre en CI/post-deploy con `RUN_RLS_CHECK=1`. Verificado en vivo: 18/18 a 0. |
-| ✅ M1 | RLS | Migración `20260723_restrict_sensitive_reads.sql`: la lectura de `employee_bank_accounts` (CLABE) y `raw_import_rows` (PII cruda) pasa de "cualquier aprovisionado" a `operaciones`+. **Pendiente aplicarla** en el SQL Editor antes de encender `RLS_SESSION_READS`. |
-
-### Prioridad alta (pendiente)
-
-_H1 y H2 resueltos (ver arriba). Sin pendientes de prioridad alta._
+| ~~H1~~ | Autorización | ✅ **Resuelto**: `POST /api/whatsapp/request-contract` exige `requireRole("operaciones")` + `enforceRateLimit(contractRequest)` (30/min). Era el único endpoint de escritura de sesión sin guard. |
+| ~~H2~~ | RLS | ✅ **Resuelto**: test automatizado del invariante (`src/lib/security/rls-invariant.test.ts`, `pnpm verify:rls`): con la anon key las 18 tablas + 2 vistas devuelven 0 filas. Off por defecto; corre con `RUN_RLS_CHECK=1` en CI/post-deploy. Verificado en vivo: 20/20. |
 
 ### Prioridad media
 
@@ -131,7 +130,7 @@ _H1 y H2 resueltos (ver arriba). Sin pendientes de prioridad alta._
 | ~~L2~~ | Validación | ✅ **Resuelto**: `BulkSendBodySchema.employeeIds` acota a `.max(5000)`, igual que `PhoneAuditFixBodySchema`. | — |
 | ~~L3~~ | Validación | ✅ **Resuelto**: `/whatsapp/bulk/detail` maneja `PGRST103` (página fuera de rango) devolviendo página vacía, como `bulk/history`. | — |
 | ~~L4~~ | Validación | ✅ **Resuelto**: `/whatsapp/test` usa `WhatsAppTestBodySchema` + `parseJsonBody`; un JSON malformado da 400 uniforme. | — |
-| L5 | Autenticación | ✅ **Parcial**: (1) el proxy ya no deja público un futuro `/api/health-xyz` (match exacto + prefijo `/api/health/`); (2) `/api/health` ya no expone el `error.message` de Supabase ni las env vars faltantes (solo booleanos; el detalle va a los logs). Pendiente: `/api/health/whatsapp` sigue exponiendo presencia de env vars y nombres de tablas, porque el script `verify-whatsapp-setup.ts` depende de esa forma. | Mover el detalle de `/api/health/whatsapp` tras auth, o desacoplar el script. |
+| ~~L5~~ | Autenticación | ✅ **Resuelto**: (1) el proxy ya no deja público un futuro `/api/health-xyz` (match exacto + prefijo `/api/health/`); (2) ni `/api/health` ni `/api/health/whatsapp` exponen ya `error.message` crudo — el detalle va a los logs y la respuesta pública queda en booleanos. Nota: `/api/health/whatsapp` conserva los booleanos de `checks` (presencia de env/existencia de tablas) porque el script de readiness `verify-whatsapp-setup.ts` los consume; son de baja sensibilidad. | — |
 | ~~L6~~ | Autenticación | ✅ **Resuelto** (opt-in): segunda señal `WEBHOOK_ENFORCE_SIGNATURES=true` que fuerza el rechazo de un webhook sin secreto **con independencia de `NODE_ENV`** (ambos webhooks, WhatsApp y EasyLex). Sin definir conserva el comportamiento actual (no afecta a dev/tests). **Definirla en producción** como cinturón por si `NODE_ENV` se fija mal. | Definir `WEBHOOK_ENFORCE_SIGNATURES=true` en producción. |
 
 ### Decisiones conscientes (no son huecos, pero deben quedar explícitas)

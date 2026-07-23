@@ -92,12 +92,14 @@ export async function GET() {
     errors: errors.length > 0 ? errors : undefined,
   });
 
+  // La respuesta pública no incluye `errors`: llevaban `error.message` crudo de
+  // Supabase, que expone internals. El detalle queda en el log de arriba; la
+  // respuesta se queda con los booleanos de `checks`.
   return NextResponse.json(
     {
       ok: status === 200 && checks.supabase && allTablesOk,
       status: status === 200 ? "healthy" : "unhealthy",
       checks,
-      errors: errors.length > 0 ? errors : undefined,
       whatsappConfigured: isConfigured,
     },
     { status }
