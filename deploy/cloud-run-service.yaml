@@ -77,9 +77,13 @@ spec:
             - name: RBAC_ENFORCEMENT
               value: enforce
             - name: BOOTSTRAP_ADMIN_EMAILS
-              value: tu-operador@tu-dominio.com
-            - name: ALLOWED_EMAIL_DOMAINS
-              value: tu-dominio.com
+              value: admin@tu-dominio.com
+            # Con datos de nómina/PII, nombra a las PERSONAS concretas
+            # (ALLOWED_EMAILS) en vez de abrir todo un dominio: solo_lectura ya
+            # puede leer PII, así que no querés que entre cualquiera del dominio.
+            # (ALLOWED_EMAIL_DOMAINS existe para el caso de un dominio dedicado.)
+            - name: ALLOWED_EMAILS
+              value: admin@tu-dominio.com,operador1@tu-dominio.com,operador2@tu-dominio.com
             - name: WEBHOOK_ENFORCE_SIGNATURES
               value: "true"
             # 1 = Cloud Run directo. Si hay Load Balancer + Cloud Armor delante, 2.

@@ -12,20 +12,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createSessionClient } from "@/lib/supabase/session";
-
-/**
- * Allow-list de dominios de correo (opt-in). Si `ALLOWED_EMAIL_DOMAINS` está
- * definida (p. ej. "orbitware.com,ejemplo.mx"), solo se admiten correos de esos
- * dominios; vacía = sin restricción (comportamiento actual). Es defensa en
- * profundidad frente a un OAuth de Supabase permisivo combinado con RBAC en
- * `warn`.
- */
-function allowedEmailDomains(): string[] {
-  return (process.env.ALLOWED_EMAIL_DOMAINS ?? "")
-    .split(",")
-    .map((domain) => domain.trim().toLowerCase().replace(/^@/, ""))
-    .filter(Boolean);
-}
+import { isEmailAllowed } from "@/lib/auth/access-allowlist";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -48,17 +35,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Rechazar dominios no autorizados (si hay allow-list configurada).
-  const allowed = allowedEmailDomains();
-  if (allowed.length > 0) {
-    const email = data.user?.email?.toLowerCase() ?? "";
-    const domain = email.includes("@") ? email.slice(email.lastIndexOf("@") + 1) : "";
-    if (!allowed.includes(domain)) {
-      await supabase.auth.signOut();
-      return NextResponse.redirect(
-        `${origin}/login?error=${encodeURIComponent("Tu cuenta no está autorizada para este backoffice.")}`,
-      );
-    }
+  // Rechazar cuentas fuera del allow-list (si hay alguno configurado).
+  if (!isEmailAllowed(data.user?.email)) {
+    await supabase.auth.signOut();
+    return NextResponse.redirect(
+      `${origin}/login?error=${encodeURIComponent("Tu cuenta no está autorizada para este backoffice.")}`,
+    );
   }
 
   // Validar que el `next` no sea una URL externa (prevención de open redirect).
