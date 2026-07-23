@@ -15,7 +15,8 @@ Cada tema tiene **un solo documento**. Si un dato aparece en dos sitios, uno de 
 | [Configuración](configuracion.md) | Variables de entorno, `settings`, `company_settings`, checklist de producción |
 | [Testing](testing.md) | Vitest, Playwright, comandos, cobertura y huecos |
 | [Scripts](scripts.md) | Utilidades de `scripts/` |
-| [Infraestructura](infraestructura.md) | Despliegue — **decidido, no implementado** |
+| [Infraestructura](infraestructura.md) | Despliegue: Docker, Cloud Run, CI/CD, Cloud Tasks |
+| [Go-live](go-live.md) | Checklist ordenado de puesta en producción — **empieza aquí para desplegar** |
 
 ## Por dónde empezar
 
