@@ -92,18 +92,38 @@ export function checkRateLimit(config: RateLimitConfig, identifier: string): Rat
 }
 
 /**
+ * Nº de proxies de confianza delante de la app (`TRUSTED_PROXY_COUNT`). Los
+ * últimos N valores de `x-forwarded-for` los añade tu infraestructura; las de
+ * más a la izquierda las controla el cliente y puede falsificarlas. En Cloud Run
+ * suele ser 1. Sin configurar (0), se conserva el comportamiento histórico.
+ */
+function trustedProxyCount(): number {
+  const raw = Number.parseInt(process.env.TRUSTED_PROXY_COUNT ?? "", 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 0;
+}
+
+/**
  * Extrae la IP del cliente de las cabeceras de reenvío.
  *
- * Detrás de Cloud Run / un balanceador, `x-forwarded-for` es una lista y la IP
- * del cliente es la primera. Si no hay ninguna se cae a "unknown", que agrupa a
- * todos esos bajo una sola cuota: es intencionado, así un origen sin IP
+ * Con `TRUSTED_PROXY_COUNT` configurado, la IP real se toma **contando desde la
+ * derecha** (justo a la izquierda de los proxies de confianza), para que un
+ * atacante no evada el límite falsificando la primera entrada de
+ * `x-forwarded-for`. Sin configurar, se mantiene el comportamiento histórico
+ * (primera entrada). Si no hay ninguna cabecera se cae a "unknown", que agrupa a
+ * todos esos bajo una sola cuota: intencionado, así un origen sin IP
  * identificable no evade el límite quedando fuera.
  */
 export function getClientIp(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) return first;
+    const parts = forwarded.split(",").map((part) => part.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      const trusted = trustedProxyCount();
+      if (trusted > 0) {
+        return parts[Math.max(0, parts.length - trusted)];
+      }
+      return parts[0];
+    }
   }
   return request.headers.get("x-real-ip")?.trim() || "unknown";
 }

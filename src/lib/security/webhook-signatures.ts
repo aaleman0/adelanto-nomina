@@ -61,3 +61,14 @@ export function verifySharedSecret(
 }
 
 export const isProduction = () => process.env.NODE_ENV === "production";
+
+/**
+ * Segunda señal para exigir verificación de firma con independencia de
+ * `NODE_ENV`. Toda la superficie de fail-open de desarrollo depende de
+ * `isProduction()`; si un despliegue arranca con `NODE_ENV` mal fijado, esa
+ * única señal fallaría abierta. Poniendo `WEBHOOK_ENFORCE_SIGNATURES=true` en
+ * producción, un webhook sin secreto se rechaza aunque `NODE_ENV` no diga
+ * "production". Sin definir (default) se conserva el comportamiento actual, así
+ * que no afecta a desarrollo ni a los tests.
+ */
+export const enforceSignatures = () => process.env.WEBHOOK_ENFORCE_SIGNATURES === "true";

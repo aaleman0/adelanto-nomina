@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { easylexEnv } from "@/lib/env";
-import { verifySharedSecret, isProduction } from "@/lib/security/webhook-signatures";
+import { verifySharedSecret, isProduction, enforceSignatures } from "@/lib/security/webhook-signatures";
 import { randomUUID } from "node:crypto";
 
 import { enforceRateLimit } from "@/lib/security/rate-limit";
@@ -47,9 +47,10 @@ export async function POST(request: Request) {
 
     if (!webhookSecret) {
       // Antes, un secreto vacío omitía la validación por completo (fail open).
-      // Ahora en producción se rechaza; en desarrollo se permite para poder
-      // probar el flujo sin credenciales, dejando constancia en el log.
-      if (isProduction()) {
+      // Ahora en producción (o con WEBHOOK_ENFORCE_SIGNATURES=true) se rechaza;
+      // en desarrollo se permite para poder probar el flujo sin credenciales,
+      // dejando constancia en el log.
+      if (isProduction() || enforceSignatures()) {
         logger.error("easylex.webhook.secret_missing", null, {
           correlationId,
           detail: "EASYLEX_WEBHOOK_SECRET no configurado: se rechaza el webhook.",

@@ -81,9 +81,29 @@ describe("checkRateLimit", () => {
 });
 
 describe("getClientIp", () => {
-  it("toma la primera IP de x-forwarded-for", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("toma la primera IP de x-forwarded-for (sin TRUSTED_PROXY_COUNT)", () => {
     const req = new Request("http://x", {
       headers: { "x-forwarded-for": "203.0.113.5, 10.0.0.1, 10.0.0.2" },
+    });
+    expect(getClientIp(req)).toBe("203.0.113.5");
+  });
+
+  it("con TRUSTED_PROXY_COUNT=1 toma la IP más a la derecha, no la falsificable", () => {
+    // El cliente controla la primera entrada; con 1 proxy de confianza (Cloud
+    // Run) la IP real es la que añade ese proxy: la última.
+    vi.stubEnv("TRUSTED_PROXY_COUNT", "1");
+    const req = new Request("http://x", {
+      headers: { "x-forwarded-for": "6.6.6.6, 203.0.113.5" },
+    });
+    expect(getClientIp(req)).toBe("203.0.113.5");
+  });
+
+  it("con TRUSTED_PROXY_COUNT=2 toma la 2ª entrada desde la derecha", () => {
+    vi.stubEnv("TRUSTED_PROXY_COUNT", "2");
+    const req = new Request("http://x", {
+      headers: { "x-forwarded-for": "6.6.6.6, 203.0.113.5, 10.0.0.1" },
     });
     expect(getClientIp(req)).toBe("203.0.113.5");
   });

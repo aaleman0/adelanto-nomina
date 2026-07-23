@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyWebhook, handleWebhook } from "@/lib/whatsapp/webhooks";
-import { verifyMetaSignature, isProduction } from "@/lib/security/webhook-signatures";
+import { verifyMetaSignature, isProduction, enforceSignatures } from "@/lib/security/webhook-signatures";
 import { whatsAppEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
 
@@ -36,10 +36,11 @@ export async function POST(request: Request) {
   const appSecret = whatsAppEnv.appSecret;
 
   if (!appSecret) {
-    // Sin secreto no hay forma de verificar el origen. En producción se
-    // rechaza (fail closed); en desarrollo se permite para poder usar túneles
-    // y payloads simulados, pero se deja constancia.
-    if (isProduction()) {
+    // Sin secreto no hay forma de verificar el origen. En producción (o con
+    // WEBHOOK_ENFORCE_SIGNATURES=true) se rechaza (fail closed); en desarrollo se
+    // permite para poder usar túneles y payloads simulados, pero se deja
+    // constancia.
+    if (isProduction() || enforceSignatures()) {
       logger.error("whatsapp.webhook.app_secret_missing", null, {
         detail: "WHATSAPP_APP_SECRET no configurado: se rechaza el webhook.",
       });
