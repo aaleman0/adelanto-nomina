@@ -180,10 +180,10 @@ Configuración:
 
 - [x] **RLS aplicada y verificada (2026-07-21).** Se descubrió (2026-07-20) que la anon key **pública** leía todas las tablas (504 empleados, 48 cuentas bancarias, 310 solicitudes, 347 logs) porque la migración nunca se había aplicado. Se aplicaron las tres migraciones y se verificó el cierre: la anon key sin sesión devuelve **0 filas** en las 18 tablas.
 - [x] Aplicadas, en orden: `20260720_enable_rls_deny_all.sql` (deny-all), `20260721_profiles_provisioning_and_roles.sql` (perfiles), `20260722_rls_policies_phase_b.sql` (políticas por rol)
-- [ ] **Al aprovisionar una base de producción separada, re-aplicar las tres migraciones en ese orden y re-verificar el count 0** (la verificación de arriba es sobre la base actual)
-- [ ] Añadir un test post-deploy que verifique el invariante de RLS (`rowsecurity`, políticas, `security_invoker`) — ver [Plan de endurecimiento H2](seguridad.md#plan-de-endurecimiento)
-- [ ] Restringir la política de lectura de `employee_bank_accounts` (CLABE) a `operaciones`+ **antes** de encender `RLS_SESSION_READS` — ver [M1](seguridad.md#plan-de-endurecimiento)
-- [ ] Tras M1, poner `RLS_SESSION_READS=on` para que las lecturas del backoffice usen el cliente de sesión
+- [ ] **Aplicar `20260723_restrict_sensitive_reads.sql`** (M1): restringe la lectura de `employee_bank_accounts` y `raw_import_rows` a `operaciones`+. Hacerlo **antes** de encender `RLS_SESSION_READS`.
+- [ ] **Al aprovisionar una base de producción separada, re-aplicar las migraciones en orden** (`20260720` → `20260721` → `20260722` → `20260723`) y re-verificar el count 0 (la verificación de arriba es sobre la base actual)
+- [x] Test automatizado del invariante de RLS (H2): `pnpm verify:rls` (`RUN_RLS_CHECK=1`) — verifica que la anon key devuelve 0 filas en las 18 tablas. Correrlo en CI/post-deploy.
+- [ ] Tras aplicar M1, poner `RLS_SESSION_READS=on` para que las lecturas del backoffice usen el cliente de sesión
 - [ ] Definir `BOOTSTRAP_ADMIN_EMAILS` **antes** de poner `RBAC_ENFORCEMENT=enforce`
 - [ ] Borrar de `settings` las filas antiguas con secretos en texto plano
 - [ ] **Generar y montar las credenciales de Google** — sin ellas no se genera ningún contrato. Descarga `google_oauth_client.json` (OAuth client tipo Desktop) de Google Cloud Console, corre `pnpm dlx tsx scripts/google-auth.ts` para generar `token.json`, y monta ambos en el contenedor
@@ -200,7 +200,7 @@ Ya resuelto en código (fase 1 de endurecimiento):
 
 Ya resuelto (fase 4):
 
-- [x] RBAC con `requireRole()` en las rutas de escritura — **con una excepción pendiente**: `POST /api/whatsapp/request-contract` no lo tiene (ver [Plan de endurecimiento H1](seguridad.md#plan-de-endurecimiento))
+- [x] RBAC con `requireRole()` en **todas** las rutas de escritura, incluida `POST /api/whatsapp/request-contract` (H1 resuelto 2026-07-23: `requireRole("operaciones")` + rate limit)
 - [x] Aprovisionamiento automático de `profiles` y función `current_user_role()`
 - [x] Secretos fuera de la tabla `settings`
 - [x] Módulo de auditoría compartido, con el operador registrado
@@ -214,6 +214,7 @@ Seguridad pendiente en el código:
 
 - [x] Fase B de RLS: políticas por rol aplicadas (`20260722`); primer camino de lectura migrado al cliente de sesión (`contract-control`)
 - [ ] Migrar el resto de lecturas al cliente de sesión y encender `RLS_SESSION_READS`
-- [ ] **Endurecimiento pendiente** — ver el [Plan de endurecimiento](seguridad.md#plan-de-endurecimiento) en el documento de seguridad, con los huecos priorizados (H1 `request-contract` sin `requireRole`, H2 test de invariante RLS, M1–M7, L1–L6)
+- [x] **Endurecimiento — resuelto H1, H2, M1** (2026-07-23): guard en `request-contract`, test de invariante RLS, migración de lectura sensible. Ver el [Plan de endurecimiento](seguridad.md#plan-de-endurecimiento)
+- [ ] **Endurecimiento pendiente**: M2–M7 y L1–L6 del [Plan de endurecimiento](seguridad.md#plan-de-endurecimiento)
 
 Ver también: [WhatsApp](whatsapp.md) · [EasyLex y contratos](easylex-contratos.md) · [Infraestructura](infraestructura.md)

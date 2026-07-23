@@ -88,6 +88,22 @@ Si `WHATSAPP_TEMPLATE_HEADER_IMAGE_URL` está definida **y** la plantilla es `ad
 
 El idioma está fijo en `es_MX` y la versión de la Graph API en `v18.0`, ambos hardcodeados en `src/lib/whatsapp/client.ts`.
 
+### Categoría de plantilla y entrega (importante)
+
+Meta **acepta** un envío (devuelve `message_status: accepted` y un `wamid`) pero puede **no entregarlo** sin dar error. La causa más común aquí:
+
+- **MARKETING** (`adelanto_nomina_v2`, `adelanto_nomina`) → a un contacto **frío** de un negocio **sin verificar**, Meta filtra la entrega en silencio. No llega y no hay error.
+- **UTILITY** (`adelanto_contrato_listo`) → entrega de forma fiable, aunque el negocio no esté verificado. Es la categoría correcta para lo transaccional (el link de firma).
+
+Dos formas de que un mensaje llegue sin depender de la verificación:
+
+1. **Ventana de 24 h.** Si el empleado le escribe primero al número del negocio, se abre una ventana de 24 h en la que hasta el marketing suele entregarse (y se puede enviar texto libre).
+2. **Usar una plantilla UTILITY.**
+
+**El pendiente de fondo para el outreach masivo en frío** es completar la **verificación del negocio** en Meta Business Settings (`business_verification_status: pending_submission` mientras no se haga). Eso destraba la entrega de marketing a contactos que nunca han escrito.
+
+Diagnóstico rápido de "no llega": consultar el estado del número/WABA/plantilla con la Graph API (`GET /{PHONE_NUMBER_ID}`, `GET /{WABA_ID}?fields=business_verification_status`, `GET /{WABA_ID}/message_templates`). Un token caducado da código 190; una entrega filtrada no da error.
+
 ## Elegibilidad
 
 Antes de enviar, `validateEligibility()` comprueba, en este orden, y devuelve la primera razón que falle:

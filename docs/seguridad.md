@@ -95,23 +95,30 @@ Estado en la base a 2026-07-21: **RLS activa y verificada.** La `anon key` públ
 
 ## Plan de endurecimiento
 
-Huecos reales encontrados en la auditoría del 2026-07-21, priorizados. Ninguno bloquea el funcionamiento; son mejoras de postura de seguridad. Los de **documentación** ya se corrigieron en esta pasada; los de **código** quedan como trabajo pendiente.
+Huecos reales encontrados en la auditoría del 2026-07-21, priorizados. Ninguno bloquea el funcionamiento; son mejoras de postura de seguridad.
 
-### Prioridad alta
+**Resuelto (2026-07-23):** H1, H2 y M1 ya están implementados — ver la sección de abajo. El resto sigue pendiente.
 
-| # | Pilar | Hueco | Recomendación |
-|---|---|---|---|
-| H1 | Autorización | **`POST /api/whatsapp/request-contract` no tiene `requireRole` ni auth de máquina.** Está tras el gate de sesión, así que cualquier sesión —incluida `solo_lectura`— puede dispararlo. Ejecuta escrituras reales y efectos externos (crea el contrato en EasyLex, envía el link). Es el **único endpoint de escritura de sesión sin guard**, y sobrevive incluso a `enforce`. | Añadir `requireRole("operaciones")` al inicio. Si un sistema externo debe llamarlo sin sesión, enrutarlo como webhook/tarea con su propia autenticación de máquina. Añadir también rate limit (ver M4). |
-| H2 | RLS | **Sin verificación automatizada del invariante de RLS.** Las migraciones se aplican a mano; el CI no comprueba `rowsecurity`, políticas ni `security_invoker`. Es la causa raíz exacta de la fuga original. | Test post-deploy que consulte `pg_tables.rowsecurity`, `pg_policies` y el `security_invoker` de las vistas, y falle si alguna de las 18 tablas o las 2 vistas no cumple. Convierte "aplicado" en verificable. |
+### Resuelto
+
+| # | Pilar | Qué se hizo |
+|---|---|---|
+| ✅ H1 | Autorización | `POST /api/whatsapp/request-contract` ahora exige `requireRole("operaciones")` + `enforceRateLimit(contractRequest)` (30/min). Era el único endpoint de escritura de sesión sin guard. |
+| ✅ H2 | RLS | Test automatizado del invariante en `src/lib/security/rls-invariant.test.ts` (`pnpm verify:rls`): con la anon key, las 18 tablas deben devolver 0 filas. Desactivado por defecto; corre en CI/post-deploy con `RUN_RLS_CHECK=1`. Verificado en vivo: 18/18 a 0. |
+| ✅ M1 | RLS | Migración `20260723_restrict_sensitive_reads.sql`: la lectura de `employee_bank_accounts` (CLABE) y `raw_import_rows` (PII cruda) pasa de "cualquier aprovisionado" a `operaciones`+. **Pendiente aplicarla** en el SQL Editor antes de encender `RLS_SESSION_READS`. |
+
+### Prioridad alta (pendiente)
+
+_H1 y H2 resueltos (ver arriba). Sin pendientes de prioridad alta._
 
 ### Prioridad media
 
 | # | Pilar | Hueco | Recomendación |
 |---|---|---|---|
-| M1 | RLS | **Política de lectura demasiado amplia en tablas muy sensibles.** `employee_bank_accounts` (CLABE), `raw_import_rows` (PII cruda), `whatsapp_contacts/messages`, `easylex_events` reciben la misma política operativa (`current_user_role() is not null`), legible por `solo_lectura`. `integration_logs` sí se restringió a admin. | Restringir `employee_bank_accounts` (y valorar las demás) a `operaciones`/`admin`, alineando la sensibilidad de la tabla con el rol. Hacerlo **antes** de encender `RLS_SESSION_READS`. |
+| ~~M1~~ | RLS | ✅ **Resuelto** (ver sección Resuelto): `employee_bank_accounts` y `raw_import_rows` restringidas a `operaciones`+ vía `20260723_restrict_sensitive_reads.sql`. Queda **valorar** si `whatsapp_contacts/messages` y `easylex_events` merecen el mismo trato (siguen operativas). | Aplicar la migración antes de encender `RLS_SESSION_READS`. |
 | M2 | RLS | **`security_invoker` de las vistas es frágil.** El `ALTER VIEW` va dentro de un `exception when others` que ante error solo emite `notice` y continúa (podría dejar la vista como `security_definer` = bypass), y el `CREATE VIEW` original no lleva el reloption, así que una redefinición futura lo revierte. | Verificarlo como invariante testeado (H2). Considerar `REVOKE SELECT … FROM anon` sobre las vistas como cinturón extra. Re-aplicar el reloption en cada migración que recree una vista. |
 | M3 | Autenticación | **El binding a la service account del OIDC de Cloud Tasks es opcional.** Sin `TASKS_INVOKER_SERVICE_ACCOUNT`, se acepta cualquier ID token firmado por Google con `audience` correcto. El `audience` además se deriva del `Host` entrante, no de la config. | Exigir `TASKS_INVOKER_SERVICE_ACCOUNT` en producción (rechazar si falta). Derivar el `audience` de `workerBaseUrl`. Añadir test del happy-path OIDC (hoy solo se testea el rechazo). |
-| M4 | Rate limiting | **Escrituras caras sin rate limit:** `request-contract` (genera PDF + EasyLex), `imports/[batchId]/apply` (aplica el CSV completo), y las acciones por-registro `backoffice/contracts/*/retry`+`/regenerate-link` (llaman a EasyLex). El equivalente en lote sí se limita. | Añadir `enforceRateLimit` a cada uno (`whatsappBulkSend` para los que tocan EasyLex; `importUpload` para apply). |
+| M4 | Rate limiting | **Escrituras caras sin rate limit** (parcial): `request-contract` ✅ ya lo tiene (`contractRequest`, 30/min). Faltan `imports/[batchId]/apply` (aplica el CSV completo) y las acciones por-registro `backoffice/contracts/*/retry`+`/regenerate-link` (llaman a EasyLex). | Añadir `enforceRateLimit` a los restantes (`whatsappBulkSend` para los que tocan EasyLex; `importUpload` para apply). |
 | M5 | Rate limiting | **`getClientIp` es evadible bajo Cloud Run.** Toma la **primera** entrada de `x-forwarded-for`, que el cliente controla; un atacante rota una IP falsa por petición y obtiene una clave distinta cada vez, evadiendo el límite por IP en los webhooks públicos. | Derivar la IP desde una posición de confianza (contada desde la derecha según el nº de proxies). Mitigante: la firma HMAC sigue rechazando lo no legítimo — degrada el anti-DoS, no la autenticación. |
 | M6 | Autenticación | **Sin allow-list de dominio en el código para el login de Google.** Quién puede autenticarse queda 100% delegado a la config de Supabase (permisiva por defecto). Combinado con RBAC en `warn`, un usuario de Google no autorizado que Supabase admita podría entrar y ejecutar escrituras. | Validar el dominio del email (`hd`) en el callback o en `getCurrentActor` y rechazar los no permitidos. Verificar además la restricción en Supabase Auth y planear el paso a `enforce`. |
 | M7 | Validación | **5 endpoints no validan IDs como UUID → `500` en vez de `400`:** `/whatsapp/messages/employee`, `/whatsapp/imports`, `/imports/[batchId]/apply`, y los dos de `backoffice/contracts/*`. Un ID mal formado revienta contra la columna `uuid`. | Validar cada ID con `uuidParam()` vía `parseQuery`, o un validador de path param antes de la primera consulta. |
