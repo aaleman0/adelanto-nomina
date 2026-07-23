@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getWhatsAppClient } from "@/lib/whatsapp/client";
 import { normalizePhoneForMeta } from "@/lib/whatsapp/phone-utils";
+import { formatDateForDisplay } from "@/lib/contracts/format-date";
 import { logger } from "@/lib/logger";
 
 /**
@@ -11,8 +12,14 @@ import { logger } from "@/lib/logger";
  * lo reenviaba. Esta función cierra ese hueco: la app manda el link ella misma.
  *
  * Se entrega como plantilla con botón URL (`sendTemplateWithButton`), que es lo
- * que Meta exige para un mensaje iniciado por el negocio. El link va en el
- * botón; el cuerpo lleva nombre y monto.
+ * que Meta exige para un mensaje iniciado por el negocio. El cuerpo lleva
+ * nombre, monto y fecha límite; el botón lleva el sufijo del link de firma.
+ *
+ * La plantilla por defecto (`adelanto_contrato_listo`, categoría UTILITY) tiene
+ * tres variables de cuerpo — `{{1}}` nombre, `{{2}}` monto, `{{3}}` fecha
+ * límite — y un botón URL dinámico cuya base está fija en la plantilla, con un
+ * único `{{1}}` de sufijo. Meta solo acepta ese sufijo (p. ej. el signerId), no
+ * una URL completa.
  *
  * NO es fatal: si el envío falla (WhatsApp mal configurado, plantilla no
  * aprobada, número inválido), el contrato ya está generado y el link sigue
@@ -22,7 +29,18 @@ import { logger } from "@/lib/logger";
 
 /** Plantilla aprobada en Meta, con un botón URL. Configurable por entorno. */
 function contractTemplateName(): string {
-  return process.env.WHATSAPP_CONTRACT_TEMPLATE || "contrato_listo";
+  return process.env.WHATSAPP_CONTRACT_TEMPLATE || "adelanto_contrato_listo";
+}
+
+/**
+ * El botón URL de la plantilla es dinámico: base fija + `{{1}}`. Meta solo
+ * acepta el sufijo que rellena `{{1}}`, no la URL completa. Se toma el último
+ * segmento del path del link de firma (el signerId / id de intento).
+ */
+function signingUrlSuffix(signingUrl: string): string {
+  const path = signingUrl.split("?")[0].split("#")[0];
+  const segments = path.split("/").filter(Boolean);
+  return segments[segments.length - 1] || signingUrl;
 }
 
 export type SendContractLinkInput = {
@@ -33,6 +51,8 @@ export type SendContractLinkInput = {
   telefonoNormalizado: string | null;
   monto: number | null;
   signingUrl: string | null;
+  /** Fecha límite de firma (ISO). Rellena la 3ª variable de la plantilla. */
+  expiresAt?: string | null;
   subscriberId?: string | null;
   correlationId: string;
 };
@@ -78,14 +98,16 @@ async function attemptSend(input: SendContractLinkInput): Promise<SendContractLi
   const variables: Record<string, string> = {
     "1": input.nombre || "Empleado",
     "2": formatMonto(input.monto),
+    // La plantilla nunca admite una variable vacía; si no hay fecha límite se
+    // usa un texto genérico en su lugar.
+    "3": input.expiresAt ? formatDateForDisplay(input.expiresAt) : "el plazo indicado",
   };
 
   const result = await client.sendTemplateWithButton(
     to,
     contractTemplateName(),
     variables,
-    "Firmar contrato",
-    input.signingUrl,
+    signingUrlSuffix(input.signingUrl),
   );
 
   if (!result.ok) {

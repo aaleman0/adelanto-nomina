@@ -18,6 +18,7 @@ const BASE = {
   telefonoNormalizado: "5218180188991",
   monto: 12500,
   signingUrl: "https://widgetsandbox.easylex.com/firmar/signer-123",
+  expiresAt: "2026-07-25T22:00:00.000Z",
   subscriberId: "sub-1",
   correlationId: "corr-1",
 };
@@ -36,17 +37,31 @@ beforeEach(() => {
 });
 
 describe("sendContractLinkWhatsApp", () => {
-  it("envía el link como botón URL y reporta éxito", async () => {
+  it("envía el sufijo del link en el botón y las 3 variables de cuerpo", async () => {
     sendTemplateWithButton.mockResolvedValue({ ok: true, messageId: "wamid.ABC" });
 
     const result = await sendContractLinkWhatsApp(BASE);
 
     expect(result).toEqual({ sent: true, messageId: "wamid.ABC" });
-    // El link viaja en el botón, no en el cuerpo.
-    const [, , variables, buttonText, buttonUrl] = sendTemplateWithButton.mock.calls[0];
-    expect(buttonUrl).toBe(BASE.signingUrl);
-    expect(buttonText).toBe("Firmar contrato");
+    const [, templateName, variables, urlButtonSuffix] = sendTemplateWithButton.mock.calls[0];
+    // La plantilla por defecto es la UTILITY aprobada.
+    expect(templateName).toBe("adelanto_contrato_listo");
+    // Meta solo acepta el sufijo que rellena {{1}} del botón, no la URL completa.
+    expect(urlButtonSuffix).toBe("signer-123");
+    // Tres variables de cuerpo: nombre, monto y fecha límite (no vacía).
     expect(variables["1"]).toBe("Juana");
+    expect(variables["2"]).toBe("12,500");
+    expect(variables["3"]).toMatch(/2026/);
+  });
+
+  it("usa un texto genérico en la 3ª variable si no hay fecha límite", async () => {
+    // La plantilla no admite una variable vacía; sin expiresAt debe ir un texto.
+    sendTemplateWithButton.mockResolvedValue({ ok: true, messageId: "wamid.NOEXP" });
+
+    await sendContractLinkWhatsApp({ ...BASE, expiresAt: null });
+
+    const [, , variables] = sendTemplateWithButton.mock.calls[0];
+    expect(variables["3"]).toBe("el plazo indicado");
   });
 
   it("registra la fila con message_type contract_link y el wa_message_id", async () => {

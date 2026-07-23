@@ -113,8 +113,7 @@ export class WhatsAppClient {
     to: string,
     templateName: string,
     variables: Record<string, string>,
-    buttonText?: string,
-    buttonUrl?: string,
+    urlButtonSuffix?: string,
   ): Promise<SendTemplateResult> {
     if (!this.accessToken || !this.phoneNumberId) {
       return { ok: false, error: "WhatsApp no configurado (token o phone_number_id faltante)." };
@@ -130,21 +129,15 @@ export class WhatsAppClient {
       },
     ];
 
-    // Agregar componente de botón si se proporciona
-    if (buttonText && buttonUrl) {
+    // Botón URL dinámico: la plantilla fija la base de la URL y deja un `{{1}}`
+    // de sufijo. Meta espera EXACTAMENTE ese sufijo como parámetro de texto (no
+    // una URL completa ni una acción `open_url`), en el índice 0 del botón.
+    if (urlButtonSuffix) {
       components.push({
         type: "button",
         sub_type: "url",
-        index: 0,
-        parameters: [
-          {
-            type: "action",
-            action: {
-              type: "open_url",
-              url: buttonUrl,
-            },
-          },
-        ],
+        index: "0",
+        parameters: [{ type: "text", text: urlButtonSuffix }],
       });
     }
 

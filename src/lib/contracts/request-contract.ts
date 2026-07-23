@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { normalizePhoneFromCsv } from "@/lib/whatsapp/phone-utils";
 import { createEasyLexAttempt } from "@/lib/contracts/create-easylex-attempt";
 import { sendContractLinkWhatsApp } from "@/lib/contracts/send-contract-link";
+import { formatDateForDisplay } from "@/lib/contracts/format-date";
 import { recordAuditEvent, recordIntegrationLog } from "@/lib/audit";
 import { easylexEnv } from "@/lib/env";
 
@@ -112,19 +113,6 @@ type RequestContractResult = {
 };
 
 const LINK_TTL_HOURS = 2;
-
-function formatDateForDisplay(isoDate: string): string {
-  const date = new Date(isoDate);
-  const options: Intl.DateTimeFormatOptions = {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/Mexico_City",
-  };
-  return date.toLocaleDateString("es-MX", options);
-}
 
 export function parseRequestContractPayload(
   payload: RequestContractPayload,
@@ -328,6 +316,7 @@ export async function requestContractFromWhatsApp(
     telefonoNormalizado: employee.telefono_normalizado,
     monto: offer.monto_prestamo_autorizado,
     signingUrl: attempt.signing_url,
+    expiresAt: attempt.expires_at,
     subscriberId: input.subscriberId,
     correlationId,
   });
