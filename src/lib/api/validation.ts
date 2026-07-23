@@ -113,3 +113,22 @@ export function parseQuery<T>(request: Request, schema: ZodType<T>): ParseResult
 export function escapePostgrestValue(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
+
+/**
+ * Forma de UUID que acepta el tipo `uuid` de Postgres (hex con guiones, sin
+ * exigir el nibble de versión). Un identificador que no la cumple reventaría al
+ * castearse contra una columna `uuid` y devolvería un 500 en vez de un 400.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: string | null | undefined): value is string {
+  return typeof value === "string" && UUID_RE.test(value);
+}
+
+/** Respuesta 400 uniforme para un path/query param que debe ser UUID. */
+export function invalidIdResponse(field: string): NextResponse {
+  return NextResponse.json(
+    { ok: false, error: `${field} debe ser un UUID válido.` },
+    { status: 400 },
+  );
+}

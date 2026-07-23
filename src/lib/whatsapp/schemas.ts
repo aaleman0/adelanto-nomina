@@ -64,7 +64,9 @@ export const BulkSendBodySchema = z
       message: "Es requerido y debe ser 'import', 'manual' o 'status'.",
     }),
     importId: uuidParam().optional(),
-    employeeIds: z.array(uuidParam()).optional(),
+    // Tope de abuso, alineado con PhoneAuditFixBodySchema. El envío corre inline,
+    // así que un arreglo absurdo no debe siquiera entrar al bucle.
+    employeeIds: z.array(uuidParam()).max(5000).optional(),
     status: z.enum(BULK_SEND_TARGET_STATUSES).optional(),
     templateName: z.string().trim().min(1).max(512).optional(),
     buttonConfig: z
@@ -167,6 +169,17 @@ export const WhatsAppConfigBodySchema = z.object({
 });
 
 export type WhatsAppConfigBody = z.infer<typeof WhatsAppConfigBodySchema>;
+
+// ---------------------------------------------------------------------------
+// POST /api/whatsapp/test
+// ---------------------------------------------------------------------------
+
+export const WhatsAppTestBodySchema = z.object({
+  access_token: z.string().trim().max(1024).optional(),
+  phone_number_id: z.string().trim().max(64).optional(),
+});
+
+export type WhatsAppTestBody = z.infer<typeof WhatsAppTestBodySchema>;
 
 // ---------------------------------------------------------------------------
 // POST /api/whatsapp/phone-audit/fix

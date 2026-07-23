@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/roles";
 import { enforceRateLimit } from "@/lib/security/rate-limit";
 import { RATE_LIMITS } from "@/lib/security/rate-limit-config";
+import { parseJsonBody } from "@/lib/api/validation";
+import { WhatsAppTestBodySchema } from "@/lib/whatsapp/schemas";
 import { WhatsAppClient } from "@/lib/whatsapp/client";
 import { logger } from "@/lib/logger";
 
@@ -14,13 +16,11 @@ export async function POST(request: Request) {
   const auth = await requireRole("admin");
   if (!auth.ok) return auth.response;
 
-  try {
-    const body = await request.json();
-    const { access_token, phone_number_id } = body as {
-      access_token?: string;
-      phone_number_id?: string;
-    };
+  const parsed = await parseJsonBody(request, WhatsAppTestBodySchema);
+  if (!parsed.success) return parsed.response;
+  const { access_token, phone_number_id } = parsed.data;
 
+  try {
     const client = new WhatsAppClient(access_token, phone_number_id);
     const result = await client.testConnection();
 

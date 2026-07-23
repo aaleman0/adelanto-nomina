@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/roles";
+import { isUuid, invalidIdResponse } from "@/lib/api/validation";
 import { applyImportBatch } from "@/lib/imports/apply";
 
 export const runtime = "nodejs";
@@ -8,8 +9,11 @@ export async function POST(request: Request) {
   const auth = await requireRole("operaciones");
   if (!auth.ok) return auth.response;
 
+  const batchId = getBatchId(request.url);
+  // Antes del cast a `uuid`: un batchId mal formado debe dar 400, no 500.
+  if (!isUuid(batchId)) return invalidIdResponse("batchId");
+
   try {
-    const batchId = getBatchId(request.url);
     const result = await applyImportBatch(batchId);
 
     return NextResponse.json(result);
@@ -28,13 +32,9 @@ export async function POST(request: Request) {
   }
 }
 
-function getBatchId(url: string) {
+function getBatchId(url: string): string {
   const segments = new URL(url).pathname.split("/").filter(Boolean);
-  const batchId = segments.at(-2);
-
-  if (!batchId) {
-    throw new Error("Batch ID requerido.");
-  }
-
-  return batchId;
+  // La ruta es /api/imports/[batchId]/apply → el id es el penúltimo segmento.
+  // Si faltara, devuelve "" y la validación de UUID lo rechaza con 400.
+  return segments.at(-2) ?? "";
 }

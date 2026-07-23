@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { isUuid, invalidIdResponse } from "@/lib/api/validation";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
@@ -11,6 +12,8 @@ export async function GET(request: Request) {
   if (!employeeId) {
     return NextResponse.json({ ok: false, error: "employeeId es requerido." }, { status: 400 });
   }
+  // Sin esto, un id mal formado revienta al castearse a `uuid` → 500 en vez de 400.
+  if (!isUuid(employeeId)) return invalidIdResponse("employeeId");
 
   try {
     const supabase = getSupabaseAdmin();

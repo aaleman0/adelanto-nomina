@@ -37,6 +37,14 @@ const TABLES = [
   "integration_logs",
 ] as const;
 
+// Vistas de backoffice: deben tener `security_invoker = on` para que la RLS de
+// las tablas base aplique al consultarlas. Si estuvieran como `security_definer`
+// (el default), harían bypass — así que la anon key también debe ver 0 filas.
+const VIEWS = [
+  "backoffice_contract_control_v1",
+  "backoffice_contract_timeline_v1",
+] as const;
+
 const url = process.env.SUPABASE_URL ?? "";
 const anon = process.env.SUPABASE_ANON_KEY ?? "";
 const enabled = process.env.RUN_RLS_CHECK === "1" && url !== "" && anon !== "";
@@ -64,13 +72,26 @@ async function anonReadableRows(table: string): Promise<number | "missing"> {
 
 describe.skipIf(!enabled)("Invariante de RLS (anon key = 0 filas)", () => {
   it.each(TABLES)(
-    "%s no expone filas a la anon key",
+    "tabla %s no expone filas a la anon key",
     async (table) => {
       const rows = await anonReadableRows(table);
       if (rows === "missing") return; // tabla ausente en este entorno
       expect(
         rows,
         `${table} expone filas a la anon key pública: RLS no está protegiéndola`,
+      ).toBe(0);
+    },
+    15_000,
+  );
+
+  it.each(VIEWS)(
+    "vista %s no expone filas a la anon key (security_invoker)",
+    async (view) => {
+      const rows = await anonReadableRows(view);
+      if (rows === "missing") return;
+      expect(
+        rows,
+        `${view} expone filas a la anon key: probablemente quedó como security_definer`,
       ).toBe(0);
     },
     15_000,
