@@ -98,6 +98,46 @@ Cuatro cosas que Cloud Run condiciona directamente:
 
 Costos: para un backoffice interno, Cloud Run suele ser económico; dependen de tráfico, concurrencia y tiempo de CPU.
 
+## Activar Cloud Tasks (envío masivo a escala)
+
+Para un operador que dispara lotes de **miles** de empleados, la cola no es
+opcional: el envío inline excede el timeout de Cloud Run y trunca el lote. El
+código ya está completo (`src/lib/queue/*`, worker en
+`/api/tasks/whatsapp/send-message`, una tarea por mensaje, OIDC, idempotente);
+sólo falta la infraestructura de GCP y 4 variables.
+
+**Script:** `scripts/setup-cloud-tasks.sh` crea la cola (con el throttle
+afinado), la service account invoker y los permisos IAM. Es idempotente.
+
+```bash
+GCP_PROJECT_ID=mi-proyecto RUN_RUNTIME_SA=svc@mi-proyecto.iam.gserviceaccount.com \
+  bash scripts/setup-cloud-tasks.sh
+```
+
+Luego define en el servicio de Cloud Run (Secret Manager para lo sensible):
+
+| Variable | Valor |
+|---|---|
+| `GCP_PROJECT_ID` | tu proyecto |
+| `CLOUD_TASKS_LOCATION` | región (p. ej. `us-central1`) |
+| `CLOUD_TASKS_QUEUE` | `whatsapp-bulk` |
+| `TASKS_WORKER_BASE_URL` | origen público del servicio |
+| `TASKS_INVOKER_SERVICE_ACCOUNT` | la SA invoker que creó el script |
+
+Con esas presentes, el driver pasa de `inline` a `cloud-tasks` solo. Verifica en
+logs: `queue.driver.selected { kind: 'cloud-tasks' }`.
+
+**El throttle es la cola, no el código.** `max-dispatches-per-second` y
+`max-concurrent-dispatches` limitan el ritmo hacia Meta con independencia de
+cuántas instancias levante Cloud Run. Arrancan conservadores (10/s, 20
+concurrentes) porque el límite real es tu **tier de mensajería de Meta**
+(recipients únicos/24h); súbelos conforme crece el tier y la calidad. Para
+subirlos no hace falta redeploy, sólo `gcloud tasks queues update`.
+
+**Nota:** la generación de contrato/PDF (`request-contract`) sigue inline; si
+también escala a miles, merece la misma cola con un worker y un throttle propios
+(afinado a la cuota de Google Docs), no la de WhatsApp.
+
 ## Alternativas descartadas
 
 - **Vercel** — más simple, menos control sobre el runtime y la imagen.
