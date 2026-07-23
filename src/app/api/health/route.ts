@@ -16,7 +16,11 @@ export async function GET() {
       .select("key", { count: "exact", head: true })
       .limit(1);
     supabaseOk = !error;
-    if (error) supabaseError = error.message;
+    // El detalle va solo a los logs (la respuesta pública es booleana).
+    if (error) {
+      supabaseError = error.message;
+      logger.warn("health.supabase.error", { error: supabaseError });
+    }
   } catch (err) {
     supabaseError = err instanceof Error ? err.message : "Error inesperado";
     logger.warn("health.supabase.error", { error: supabaseError });
@@ -70,16 +74,17 @@ export async function GET() {
     ok: supabaseOk,
     status,
     timestamp: new Date().toISOString(),
+    // Endpoint público: solo señales booleanas. El detalle (mensaje de error de
+    // Supabase, env vars faltantes) queda en los logs, no en la respuesta, para
+    // no exponer internals a cualquiera.
     services: {
       supabase: {
         ok: supabaseOk,
         configured: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
-        error: supabaseError,
       },
       whatsapp: {
         ok: whatsAppConfigured,
         configured: whatsAppConfigured,
-        errors: waValidation.ok ? [] : waValidation.errors,
         errorRate24h: errorRate,
         alerting: errorRate !== null && errorRate > 10,
       },
