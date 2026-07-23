@@ -38,6 +38,11 @@ async function verifyOidcToken(token: string, audience: string): Promise<WorkerA
     }
 
     const expectedAccount = cloudTasksEnv.invokerServiceAccount;
+    // En producción el binding a la service account es OBLIGATORIO: sin él se
+    // aceptaría cualquier token OIDC firmado por Google con el audience correcto.
+    if (!expectedAccount && isProduction()) {
+      return { ok: false, reason: "service_account_no_configurada_en_produccion" };
+    }
     if (expectedAccount && payload.email !== expectedAccount) {
       return { ok: false, reason: "service_account_inesperada" };
     }
@@ -62,13 +67,32 @@ async function verifyOidcToken(token: string, audience: string): Promise<WorkerA
  *
  * En producción, sin token válido no se pasa.
  */
+/**
+ * Audience esperado del token OIDC. Debe coincidir con la URL con que Cloud
+ * Tasks creó la tarea. Se usa el **origen configurado** (`TASKS_WORKER_BASE_URL`)
+ * más el path real de la petición, en vez del `Host` entrante —que un atacante
+ * controla— para que un token emitido para otro host no se acepte aquí. Sin
+ * base configurada, cae al comportamiento anterior (URL de la petición).
+ */
+function expectedAudience(request: Request): string {
+  const requestUrl = new URL(request.url);
+  const base = cloudTasksEnv.workerBaseUrl;
+  if (base) {
+    try {
+      return `${new URL(base).origin}${requestUrl.pathname}`;
+    } catch {
+      // Base mal formada: no degradar a algo peor, usar la URL de la petición.
+    }
+  }
+  return `${requestUrl.origin}${requestUrl.pathname}`;
+}
+
 export async function authenticateWorkerRequest(request: Request): Promise<WorkerAuthResult> {
   const authorization = request.headers.get("authorization");
   const bearer = authorization?.startsWith("Bearer ") ? authorization.slice(7) : null;
 
   if (bearer) {
-    const audience = new URL(request.url).toString().split("?")[0];
-    return verifyOidcToken(bearer, audience);
+    return verifyOidcToken(bearer, expectedAudience(request));
   }
 
   const sharedSecret = cloudTasksEnv.workerSecret;
