@@ -20,6 +20,10 @@ test-results
 playwright-report
 coverage
 vitest.config.ts
+# Ojo: tsconfig.json incluye los *.ts de la raíz, así que `next build` los
+# type-checkea. playwright.config.ts importa de ./tests/ (excluido arriba), de
+# modo que dejarlo aquí ROMPE el build en el contenedor.
+playwright.config.ts
 
 # Documentación y scripts operativos (no se necesitan en runtime)
 docs

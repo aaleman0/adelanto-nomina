@@ -56,13 +56,17 @@ Van primero porque tienen tiempos de espera ajenos.
 
 ## Fase 3 — Primer despliegue
 
-- [ ] **Smoke test local de la imagen** (aún sin probar — no había daemon de Docker
-      en el entorno de desarrollo):
+- [x] **Smoke test local de la imagen** — ✅ **verificado** (2026-07-23): build OK
+      (308 MB), `/api/health` 200, `/login` 200, `/` 307 a login, cabeceras de
+      seguridad presentes, proceso como **no-root** (`uid=1000 node`).
       ```bash
       docker build --build-arg NEXT_PUBLIC_APP_URL=https://tu-dominio.com -t adelantos-admin:test .
-      docker run --rm -p 8080:8080 -e SUPABASE_URL=… -e SUPABASE_SERVICE_ROLE_KEY=… adelantos-admin:test
+      docker run --rm -p 8099:8080 --env-file .env.local adelantos-admin:test
       ```
-      Vigila que la optimización de imágenes (`sharp`) funcione.
+      ⚠️ **Arquitectura:** en un Mac con Apple Silicon la imagen sale **arm64**, y
+      **Cloud Run sólo corre linux/amd64**. El job de CI construye en runners amd64,
+      así que el despliegue automático está bien; si alguna vez subes una imagen a
+      mano desde el Mac, usa `docker build --platform linux/amd64 …`.
 - [ ] Rellenar los marcadores de **`deploy/cloud-run-service.yaml`** (`PROJECT_ID`,
       `REGION`, `REPO`, `TU-DOMINIO`, `ALLOWED_EMAILS` con las personas autorizadas).
 - [ ] Crear el servicio: `gcloud run services replace deploy/cloud-run-service.yaml --region=REGION`
