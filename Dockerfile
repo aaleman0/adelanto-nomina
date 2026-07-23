@@ -48,6 +48,8 @@ ENV NODE_ENV=production \
 
 # El servidor standalone trae su propio node_modules podado. `public` y
 # `.next/static` NO se copian solos: hay que copiarlos a mano (docs de Next 16).
+# Verificado contra un build real: estos tres son exactamente los artefactos que
+# `server.js` necesita (no hace falta `sharp`; ver nota en next.config.ts).
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 COPY --from=builder --chown=node:node /app/public ./public

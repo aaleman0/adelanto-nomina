@@ -54,12 +54,12 @@ const nextConfig: NextConfig = {
   // La imagen final solo copia standalone + .next/static + public.
   output: "standalone",
 
-  // `next/image` optimiza el avatar remoto de Google con `sharp` en runtime.
-  // Se fuerza su inclusión en el trace del standalone para que el binario
-  // nativo (linux) viaje en la imagen y la optimización no falle.
-  outputFileTracingIncludes: {
-    "/**": ["node_modules/sharp/**", "node_modules/@img/**"],
-  },
+  // NOTA: no hace falta `sharp` en la imagen. El único uso de `next/image`
+  // (el avatar de Google en `user-controls.tsx`) va con `unoptimized`, así que
+  // Next no pasa la imagen por su optimizador. Si algún día se quita ese
+  // `unoptimized`, habrá que añadir `images.remotePatterns` **y** asegurar que
+  // `sharp` viaje en el standalone (con pnpm no basta un glob a
+  // `node_modules/sharp`: las transitivas no se hoistean a la raíz).
 
   // No revelar la versión de Next en las respuestas.
   poweredByHeader: false,
