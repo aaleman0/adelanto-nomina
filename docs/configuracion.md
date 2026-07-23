@@ -215,6 +215,6 @@ Seguridad pendiente en el código:
 - [x] Fase B de RLS: políticas por rol aplicadas (`20260722`); primer camino de lectura migrado al cliente de sesión (`contract-control`)
 - [ ] Migrar el resto de lecturas al cliente de sesión y encender `RLS_SESSION_READS`
 - [x] **Endurecimiento — resuelto H1, H2, M1** (2026-07-23): guard en `request-contract`, test de invariante RLS, migración de lectura sensible. Ver el [Plan de endurecimiento](seguridad.md#plan-de-endurecimiento)
-- [ ] **Endurecimiento pendiente**: M2–M7 y L1–L6 del [Plan de endurecimiento](seguridad.md#plan-de-endurecimiento)
+- [x] **Endurecimiento H1–H2, M1–M7, L1–L6 resuelto en código** (2026-07-23). Pendiente solo de despliegue: aplicar la migración `20260723` y definir las env vars opt-in (`ALLOWED_EMAIL_DOMAINS`, `TRUSTED_PROXY_COUNT`, `WEBHOOK_ENFORCE_SIGNATURES`, `TASKS_INVOKER_SERVICE_ACCOUNT`, `TASKS_WORKER_BASE_URL`). Ver [Plan de endurecimiento](seguridad.md#plan-de-endurecimiento)
 
 Ver también: [WhatsApp](whatsapp.md) · [EasyLex y contratos](easylex-contratos.md) · [Infraestructura](infraestructura.md)
