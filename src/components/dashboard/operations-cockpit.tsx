@@ -105,7 +105,10 @@ export function OperationsCockpit({ rows }: { rows: ContractControlRow[] }) {
         </div>
       </div>
 
-      <aside className="surface-panel min-h-[360px] rounded-xl p-5 xl:self-start">
+      {/* En xl se estira a la altura de la fila (igual que la cola) y hace scroll
+          interno si el contenido no cabe, en vez de sobresalir con `self-start`,
+          que dejaba el aside más alto que la cola y desalineaba las tarjetas. */}
+      <aside className="panel-scroll surface-panel min-h-[360px] rounded-xl p-5 xl:min-h-0 xl:overflow-y-auto">
         <p className="font-data text-[10px] uppercase tracking-[.16em] text-text-muted">Inspector</p>
         {selected ? <Inspector row={selected} /> : <p className="mt-8 text-sm text-text-muted">Pasa el cursor por un registro para inspeccionarlo.</p>}
       </aside>
