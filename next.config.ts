@@ -49,6 +49,18 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Salida autocontenida para Docker: produce `.next/standalone/server.js` con
+  // un node_modules podado, en vez de necesitar todo el árbol de dependencias.
+  // La imagen final solo copia standalone + .next/static + public.
+  output: "standalone",
+
+  // `next/image` optimiza el avatar remoto de Google con `sharp` en runtime.
+  // Se fuerza su inclusión en el trace del standalone para que el binario
+  // nativo (linux) viaje en la imagen y la optimización no falle.
+  outputFileTracingIncludes: {
+    "/**": ["node_modules/sharp/**", "node_modules/@img/**"],
+  },
+
   // No revelar la versión de Next en las respuestas.
   poweredByHeader: false,
 

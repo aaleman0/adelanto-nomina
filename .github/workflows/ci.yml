@@ -84,6 +84,63 @@ jobs:
         # pipeline no se bloquee por avisos de severidad baja.
         run: pnpm audit --audit-level high
 
+  deploy:
+    name: Build y deploy a Cloud Run
+    runs-on: ubuntu-latest
+    needs: [quality]
+    # Solo en push a main (producción) o develop (staging), y solo si GCP está
+    # configurado (Workload Identity Federation). Sin config, se omite en vez de
+    # fallar — mismo patrón que db-types. En un PR nunca corre.
+    if: >-
+      github.event_name == 'push'
+      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+      && vars.GCP_WIF_PROVIDER != ''
+    # main → production (con protección de entorno/aprobación en GitHub),
+    # develop → staging. Cada entorno tiene sus propias vars (proyecto, servicio).
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+    permissions:
+      contents: read
+      id-token: write # necesario para la federación de identidad con GCP (sin llaves)
+    env:
+      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPO }}/adelantos-admin
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Autenticar en GCP (Workload Identity Federation, sin llaves)
+        # Keyless: no hay JSON de service account en los secretos del repo. GitHub
+        # intercambia un token OIDC por credenciales de corta duración.
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - name: Configurar gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Autenticar Docker con Artifact Registry
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Build y push de la imagen (etiquetada con el SHA)
+        # NEXT_PUBLIC_APP_URL se inlinea en el bundle en build; se pasa el valor
+        # del entorno (distinto en prod/staging) como build-arg.
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_APP_URL="${{ vars.NEXT_PUBLIC_APP_URL }}" \
+            -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Deploy a Cloud Run
+        # Solo cambia la imagen; las env vars y los secretos se mantienen ligados
+        # al servicio (Secret Manager), no se pasan por CI. Cloud Run los conserva
+        # entre revisiones.
+        run: |
+          gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
+            --image "$IMAGE:${{ github.sha }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --platform managed \
+            --quiet
+
   db-types:
     name: Tipos de base de datos al día
     runs-on: ubuntu-latest

@@ -1,0 +1,33 @@
+# Dependencias e build: se reinstalan/regeneran dentro de la imagen. Copiar el
+# node_modules del host traería binarios de macOS (sharp-darwin) que rompen en
+# Linux.
+node_modules
+.next
+out
+
+# Secretos: NUNCA en la imagen. Se inyectan en runtime.
+.env
+.env.*
+
+# Control de versiones y CI
+.git
+.github
+.gitignore
+
+# Tests y reportes
+tests
+test-results
+playwright-report
+coverage
+vitest.config.ts
+
+# Documentación y scripts operativos (no se necesitan en runtime)
+docs
+scripts
+*.md
+
+# Basura del sistema / editor
+.DS_Store
+.vscode
+.idea
+npm-debug.log*

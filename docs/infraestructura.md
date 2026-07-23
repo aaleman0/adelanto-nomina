@@ -58,10 +58,35 @@ Escalado automático, HTTPS y TLS gestionados, dominios personalizados, health c
 Registro privado de imágenes, una por commit etiquetada con su SHA, con control de acceso vía IAM.
 
 ### GitHub Actions
-El workflow de calidad ya existe (descrito arriba). Falta añadirle los jobs de entrega:
+El workflow (`ci.yml`) ya incluye el job **`deploy`**: en push a `main`
+(producción) o `develop` (staging), construye la imagen, la sube a Artifact
+Registry etiquetada con el SHA, y despliega en Cloud Run. Se salta si GCP no está
+configurado (mismo patrón que `db-types`), así que no rompe hasta que lo actives.
 
-- Merge a `main`: build de la imagen, push al registro, despliegue en Cloud Run.
-- Merge a `develop`: despliegue a staging.
+**Autenticación sin llaves (Workload Identity Federation):** no hay JSON de
+service account en los secretos del repo; GitHub intercambia un token OIDC por
+credenciales de corta duración. Hay que crear un Workload Identity Pool + provider
+en GCP y darle a la SA de deploy los roles `roles/run.admin`,
+`roles/artifactregistry.writer` e `roles/iam.serviceAccountUser`.
+
+**Variables por entorno** (GitHub → Settings → Environments → `production` /
+`staging` → Variables). El job las lee con `vars.*`, así que cada entorno apunta
+a su propio proyecto/servicio:
+
+| Variable | Ejemplo |
+|---|---|
+| `GCP_WIF_PROVIDER` | `projects/123/locations/global/workloadIdentityPools/gh/providers/gh` |
+| `GCP_DEPLOY_SA` | `deployer@mi-proyecto.iam.gserviceaccount.com` |
+| `GCP_PROJECT_ID` | `mi-proyecto` |
+| `GCP_REGION` | `us-central1` |
+| `ARTIFACT_REGISTRY_REPO` | `contenedores` |
+| `CLOUD_RUN_SERVICE` | `adelantos-admin` |
+| `NEXT_PUBLIC_APP_URL` | `https://tu-dominio.com` (se **inlinea en build**, por eso es var de build, distinta por entorno) |
+
+El deploy **solo cambia la imagen**; las env vars y los secretos viven ligados al
+servicio de Cloud Run (Secret Manager) y se conservan entre revisiones. Protege
+el entorno `production` con *required reviewers* en GitHub para exigir aprobación
+antes de cada deploy.
 
 ### Cloud Monitoring y Logging
 Logs centralizados y métricas de latencia, tráfico y errores. Alertas sugeridas: caída del servicio, tasa de error sobre umbral, latencia p95 elevada.
