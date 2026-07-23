@@ -37,4 +37,10 @@ export const RATE_LIMITS = {
 
   /** Subida e importación de CSV: pesada, poco frecuente. */
   importUpload: { name: "import:upload", limit: 20, windowMs: 60_000 },
+
+  /**
+   * Acciones de backoffice por expediente (reintentar, regenerar link). Cada
+   * una llama a EasyLex, así que se limita como el resto de escrituras caras.
+   */
+  backofficeAction: { name: "backoffice:contract-action", limit: 30, windowMs: 60_000 },
 } satisfies Record<string, RateLimitConfig>;

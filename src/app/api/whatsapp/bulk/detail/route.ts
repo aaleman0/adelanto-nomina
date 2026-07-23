@@ -52,7 +52,22 @@ export async function GET(request: Request) {
 
     const { data: messages, count, error: msgError } = await msgQuery;
 
-    if (msgError) throw msgError;
+    if (msgError) {
+      // PGRST103: rango fuera de límites (página más allá de los datos). Igual
+      // que bulk/history, devolver una página vacía en vez de un 500.
+      if ((msgError as { code?: string }).code === "PGRST103") {
+        return NextResponse.json({
+          ok: true,
+          bulkSend,
+          messages: [],
+          total: 0,
+          page,
+          pageSize,
+          totalPages: 0,
+        });
+      }
+      throw msgError;
+    }
 
     // Log para diagnóstico: verificar consistencia entre bulk_send y messages
     if (bulkSend.sent_count > 0 && (!messages || messages.length === 0)) {

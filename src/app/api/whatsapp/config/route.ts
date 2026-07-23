@@ -9,6 +9,10 @@ import { requireRole } from "@/lib/auth/roles";
 export const runtime = "nodejs";
 
 export async function GET() {
+  // La respuesta incluye el webhook verify token: solo admin, igual que el POST.
+  const auth = await requireRole("admin");
+  if (!auth.ok) return auth.response;
+
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
