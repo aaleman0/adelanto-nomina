@@ -141,16 +141,23 @@ spec:
             #   callback_url, contract_template) — completa según docs/configuracion.md,
             #   con valueFrom para los secretos y value para lo no sensible.
           # --- Credenciales de Google (autollenado del contrato) --------------
-          # google_oauth_client.json y token.json son ARCHIVOS, no env vars. Se
-          # montan como volumen desde Secret Manager. Descomenta cuando los tengas:
+          # Son ARCHIVOS, no env vars: se montan desde Secret Manager. No se
+          # pueden montar dentro de /app (taparía la app), por eso van a
+          # /secrets/google y la app lee la ruta de estas env vars.
+          # Descomenta cuando tengas los secretos creados:
           # volumeMounts:
           #   - name: google-creds
           #     mountPath: /secrets/google
           #     readOnly: true
+          # ...y añade arriba, en `env`:
+          #   - name: GOOGLE_OAUTH_CLIENT_PATH
+          #     value: /secrets/google/google_oauth_client.json
+          #   - name: GOOGLE_TOKEN_PATH
+          #     value: /secrets/google/token.json
       # volumes:
       #   - name: google-creds
       #     secret:
-      #       secretName: google-token-json
+      #       secretName: google-credentials
       #       items:
       #         - key: latest
       #           path: token.json

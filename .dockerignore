@@ -8,6 +8,9 @@ out
 # Secretos: NUNCA en la imagen. Se inyectan en runtime.
 .env
 .env.*
+# Credenciales de Google: en producción llegan montadas desde Secret Manager.
+google_oauth_client.json
+token.json
 
 # Control de versiones y CI
 .git
