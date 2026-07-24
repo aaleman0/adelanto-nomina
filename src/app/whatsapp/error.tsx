@@ -47,13 +47,13 @@ export default function WhatsAppError({
       <div className="flex flex-wrap justify-center gap-3">
         <button
           onClick={unstable_retry}
-          className="rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-indigo-700 hover:to-violet-700"
+          className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary-hover"
         >
           Reintentar
         </button>
         <Link
           href="/whatsapp"
-          className="rounded-xl border border-border bg-surface px-5 py-2.5 text-sm font-semibold text-text-primary transition hover:bg-surface-muted"
+          className="rounded-lg border border-border bg-surface px-5 py-2.5 text-sm font-medium text-text-primary transition hover:bg-surface-muted"
         >
           Ir al Dashboard
         </Link>

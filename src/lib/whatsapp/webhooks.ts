@@ -1,5 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getWhatsAppClient } from "@/lib/whatsapp/client";
+import { safeEqual } from "@/lib/security/webhook-signatures";
+import { logger } from "@/lib/logger";
 
 export function verifyWebhook(
   mode: string,
@@ -7,9 +9,18 @@ export function verifyWebhook(
   challenge: string,
 ): string | null {
   const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
-  if (mode === "subscribe" && token === verifyToken) {
+
+  // Sin token configurado no se acepta ninguna verificación: de lo contrario
+  // `token === undefined` podría cumplirse con una cadena vacía.
+  if (!verifyToken) {
+    logger.warn("whatsapp.webhook.verify_token_missing");
+    return null;
+  }
+
+  if (mode === "subscribe" && safeEqual(token, verifyToken)) {
     return challenge;
   }
+
   return null;
 }
 
@@ -96,6 +107,13 @@ export async function handleWebhook(payload: {
       for (const status of value.statuses ?? []) {
         const deliveryStatus = status.status;
         const waMessageId = status.id;
+
+        logger.info("whatsapp.webhook.status", {
+          waMessageId,
+          recipientId: status.recipient_id,
+          status: deliveryStatus,
+          errors: status.errors ?? null,
+        });
 
         const updateFields: Record<string, unknown> = {
           delivery_status: deliveryStatus,

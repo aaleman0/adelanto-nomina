@@ -41,3 +41,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Sesión de pruebas E2E (contiene un token real)
+tests/e2e/.auth/
+
+# Credenciales de Google para el autollenado del contrato. Son SECRETOS:
+# google_oauth_client.json trae el client_secret y token.json el refresh token.
+# En producción se inyectan desde Secret Manager, nunca desde el repo.
+/google_oauth_client.json
+/token.json

@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   validateEligibility,
   getEmployeesEligibility,
-  type EligibilityResult,
 } from "./eligibility";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
@@ -237,7 +236,7 @@ describe("getEmployeesEligibility", () => {
     const mockFrom = vi.fn();
     let callCount = 0;
 
-    mockFrom.mockImplementation((table: string) => {
+    mockFrom.mockImplementation(() => {
       callCount++;
       if (callCount === 1) {
         // employees query
@@ -262,7 +261,7 @@ describe("getEmployeesEligibility", () => {
       }
     });
 
-    vi.mocked(getSupabaseAdmin).mockReturnValue({ from: mockFrom } as any);
+    vi.mocked(getSupabaseAdmin).mockReturnValue({ from: mockFrom } as unknown as ReturnType<typeof getSupabaseAdmin>);
 
     const result = await getEmployeesEligibility(["emp-1", "emp-2"]);
 

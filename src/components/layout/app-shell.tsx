@@ -1,157 +1,80 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { SidebarFrame } from "./sidebar-frame";
-import type { NavEntry } from "./sidebar-frame";
-import { NotificationsProvider, NotificationBell } from "@/components/ui/notifications";
+import { SidebarFrame, type NavEntry } from "./sidebar-frame";
+import { NotificationsProvider } from "@/components/ui/notifications";
+import { RoleProvider } from "@/components/auth/role-context";
+import { getCurrentActor, hasRole, type UserRole } from "@/lib/auth/roles";
 import { getUser } from "@/lib/supabase/session";
 
+// Navegación organizada por el flujo del empleado, no por herramientas: entra
+// (Importar), se le contacta (WhatsApp), avanza (Operación) y queda en el
+// archivo (Contratos). Las secciones reflejan ese recorrido.
 const navigation: NavEntry[] = [
-  { href: "/", label: "Dashboard", icon: "D" },
-  { href: "/imports", label: "Importaciones", icon: "I" },
-  { href: "/contracts", label: "Control de contratos", icon: "C" },
-  {
-    label: "WhatsApp",
-    icon: "W",
-    prefix: "/whatsapp",
-    items: [
-      { href: "/whatsapp", label: "Dashboard", icon: "W" },
-      { href: "/whatsapp/send", label: "Enviar mensajes", icon: "W" },
-      { href: "/whatsapp/history", label: "Historial de envíos", icon: "W" },
-      { href: "/settings/whatsapp/templates", label: "Templates", icon: "W" },
-      { href: "/settings/whatsapp", label: "Configuración", icon: "W" },
-    ],
-  },
-  { href: "/settings", label: "Configuración", icon: "S" },
+  { section: "Flujo" },
+  { href: "/", label: "Operación", icon: "D" },
+  { href: "/imports", label: "Importar", icon: "I" },
+  { href: "/contracts", label: "Contratos", icon: "C" },
+  { section: "Mensajería" },
+  { label: "WhatsApp", icon: "W", prefix: "/whatsapp", items: [
+    { href: "/whatsapp", label: "Resumen", icon: "W" },
+    { href: "/whatsapp/send", label: "Nuevo envío", icon: "W" },
+    { href: "/whatsapp/history", label: "Historial", icon: "W" },
+    // Plantillas y Conexión viven bajo /settings, que es admin-only: se
+    // filtran para no dejar enlaces que redirigen a la portada.
+    { href: "/settings/whatsapp/templates", label: "Plantillas", icon: "W", minimumRole: "admin" },
+    { href: "/settings/whatsapp", label: "Conexión", icon: "W", minimumRole: "admin" },
+  ] },
+  // La sección y su único ítem son admin: sin ese rol, ambos desaparecen y no
+  // queda un encabezado colgando.
+  { section: "Configuración", minimumRole: "admin" },
+  { href: "/settings", label: "Ajustes", icon: "S", minimumRole: "admin" },
 ];
 
 export async function AppShell({ children }: { children: ReactNode }) {
-  // getUser() puede fallar si SUPABASE_ANON_KEY no está configurada aún.
-  const user = await getUser().catch(() => null);
+  // El actor aporta el rol; getUser aporta los metadatos de perfil (nombre y
+  // avatar) que el actor no incluye.
+  const [actor, user] = await Promise.all([
+    getCurrentActor().catch(() => null),
+    getUser().catch(() => null),
+  ]);
+  const role = actor?.role ?? "solo_lectura";
   const displayName = user?.user_metadata?.full_name as string | undefined;
   const avatarUrl = user?.user_metadata?.avatar_url as string | undefined;
-  const email = user?.email ?? "";
+
+  // La barra lateral se filtra en el servidor: los enlaces admin-only no llegan
+  // al cliente si el rol no alcanza, así que no hay nada que ocultar por CSS.
+  // Se filtra en dos niveles (entradas de primer nivel y sub-ítems de grupo) y
+  // se descarta un grupo que se queda sin ítems visibles.
+  const allows = (minimumRole?: UserRole) => !minimumRole || hasRole(role, minimumRole);
+  const visibleNavigation = navigation
+    .filter((entry) => allows(entry.minimumRole))
+    .map((entry) =>
+      "items" in entry
+        ? { ...entry, items: entry.items.filter((item) => allows(item.minimumRole)) }
+        : entry,
+    )
+    .filter((entry) => !("items" in entry) || entry.items.length > 0);
 
   return (
-    <NotificationsProvider>
-      <SidebarFrame navigation={navigation}>
-        <main className="min-h-screen bg-background text-text-primary">
-          {/* Topbar: notificaciones + usuario */}
-          <div className="mx-auto flex w-full max-w-7xl items-center justify-end gap-3 px-4 py-3 sm:px-6 lg:px-8">
-            <NotificationBell />
-            <UserMenu displayName={displayName} email={email} avatarUrl={avatarUrl} />
-          </div>
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-6 sm:px-6 lg:px-8">
-            {children}
-          </div>
-        </main>
-      </SidebarFrame>
-    </NotificationsProvider>
-  );
-}
-
-function UserMenu({
-  displayName,
-  email,
-  avatarUrl,
-}: {
-  displayName?: string;
-  email: string;
-  avatarUrl?: string;
-}) {
-  const initials = displayName
-    ? displayName.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase()
-    : email.slice(0, 2).toUpperCase();
-
-  return (
-    <div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-sm shadow-sm">
-      {/* Avatar */}
-      {avatarUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={avatarUrl}
-          alt={displayName ?? email}
-          className="h-7 w-7 rounded-full object-cover ring-1 ring-[var(--border)]"
-          referrerPolicy="no-referrer"
-        />
-      ) : (
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-indigo-600 to-violet-600 text-[11px] font-bold text-white">
-          {initials}
-        </span>
-      )}
-
-      {/* Nombre / email */}
-      <span className="hidden font-medium text-[var(--text-primary)] sm:block max-w-[140px] truncate">
-        {displayName ?? email}
-      </span>
-
-      {/* Separador */}
-      <span className="hidden h-4 w-px bg-[var(--border)] sm:block" />
-
-      {/* Botón salir */}
-      <form action="/auth/logout" method="POST">
-        <button
-          type="submit"
-          className="flex items-center gap-1 text-xs text-[var(--text-muted)] transition hover:text-[var(--danger)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] rounded"
-          title="Cerrar sesión"
+    <RoleProvider role={role}>
+      <NotificationsProvider>
+        <SidebarFrame
+          navigation={visibleNavigation}
+          user={{ displayName, email: user?.email ?? "", avatarUrl, role }}
         >
-          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          <span className="hidden sm:inline">Salir</span>
-        </button>
-      </form>
-    </div>
+          <main className="flex min-h-0 flex-1 flex-col bg-transparent text-text-primary">
+            <div className="panel-scroll flex min-h-0 w-full flex-1 flex-col gap-5 px-4 py-4 sm:px-6 lg:px-7">{children}</div>
+          </main>
+        </SidebarFrame>
+      </NotificationsProvider>
+    </RoleProvider>
   );
 }
 
-export function PageHeader({
-  title = "Panel Operativo",
-  eyebrow = "Backoffice Adelantos",
-  description = "Control interno para importaciones, contratos y seguimiento operativo.",
-  action,
-}: {
-  title?: string;
-  eyebrow?: string;
-  description?: string;
-  action?: ReactNode;
-}) {
-  return (
-    <header className="flex flex-col gap-4 rounded-2xl border border-primary-border bg-white px-6 py-6 shadow-sm md:flex-row md:items-center md:justify-between">
-      <div>
-        <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary-light px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-          {eyebrow}
-        </span>
-        <h1 className="mt-3 text-2xl font-bold tracking-tight text-text-primary">
-          {title}
-        </h1>
-        <p className="mt-1.5 max-w-2xl text-[13px] text-text-muted">{description}</p>
-      </div>
-      {action ? <div className="flex shrink-0 items-center gap-2 w-full md:w-auto">{action}</div> : null}
-    </header>
-  );
+export function PageHeader({ title = "Panel operativo", action }: { title?: string; action?: ReactNode }) {
+  return <header className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between"><h1 className="font-display text-2xl font-semibold tracking-[-0.03em] text-text-primary">{title}</h1>{action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}</header>;
 }
 
 export function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <AppShell>
-      <PageHeader title={title} description="Módulo reservado para una siguiente fase." />
-      <section className="rounded-2xl border border-dashed border-primary-border bg-surface p-10 text-sm text-text-muted text-center">
-        <div className="mx-auto max-w-sm">
-          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-primary-light">
-            <svg className="h-7 w-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <p className="font-semibold text-text-primary">Próximamente</p>
-          <p className="mt-1 text-text-muted">Esta sección queda como placeholder; no se implementan usuarios, permisos ni configuración todavía.</p>
-          <div className="mt-5">
-            <Link className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-white shadow-sm shadow-primary/25 transition hover:bg-primary-hover" href="/">
-              Volver al dashboard
-            </Link>
-          </div>
-        </div>
-      </section>
-    </AppShell>
-  );
+  return <AppShell><PageHeader title={title} /><section className="surface-panel rounded-xl border-dashed py-12 text-center"><p className="text-text-muted">Módulo en desarrollo.</p><div className="mt-4"><Link className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-hover" href="/">Volver a operación</Link></div></section></AppShell>;
 }

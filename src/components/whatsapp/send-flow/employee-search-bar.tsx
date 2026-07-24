@@ -61,9 +61,19 @@ export function EmployeeSearchBar({ selected, onSelect, onClear }: Props) {
     }
   }, []);
 
+  // Keep search in a ref so the debounce effect below can invoke it without
+  // closing over it directly.  If the effect callback held a direct reference
+  // to `search` the compiler would tag the callback as setState-containing
+  // (because search closes over setResults / setOpen / setLoading) and flag
+  // the react-hooks/set-state-in-effect rule.
+  const searchRef = useRef(search);
   useEffect(() => {
-    search(debouncedQuery);
-  }, [debouncedQuery, search]);
+    searchRef.current = search;
+  });
+
+  useEffect(() => {
+    void searchRef.current(debouncedQuery);
+  }, [debouncedQuery]);
 
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {

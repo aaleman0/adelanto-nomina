@@ -11,6 +11,7 @@ export async function GET() {
     env: {
       accessToken: Boolean(whatsAppEnv.accessToken),
       phoneNumberId: Boolean(whatsAppEnv.phoneNumberId),
+      businessAccountId: Boolean(whatsAppEnv.businessAccountId),
       webhookVerifyToken: Boolean(whatsAppEnv.webhookVerifyToken),
       appSecret: Boolean(whatsAppEnv.appSecret),
     },
@@ -42,9 +43,9 @@ export async function GET() {
 
   // Check environment variables
   const missingEnv = Object.entries(checks.env)
-    .filter(([_, value]) => !value)
+    .filter(([, value]) => !value)
     .map(([key]) => key);
-  
+
   if (missingEnv.length > 0) {
     errors.push(`Missing env vars: ${missingEnv.join(", ")}`);
     // Don't fail health check for missing env - WhatsApp might not be configured yet
@@ -70,11 +71,11 @@ export async function GET() {
           } else {
             errors.push(`Table ${table.name} error: ${error.message}`);
           }
-        } catch (err) {
+        } catch {
           errors.push(`Table ${table.name} check failed`);
         }
       }
-    } catch (err) {
+    } catch {
       errors.push("Table checks failed");
     }
   }
@@ -91,12 +92,14 @@ export async function GET() {
     errors: errors.length > 0 ? errors : undefined,
   });
 
+  // La respuesta pública no incluye `errors`: llevaban `error.message` crudo de
+  // Supabase, que expone internals. El detalle queda en el log de arriba; la
+  // respuesta se queda con los booleanos de `checks`.
   return NextResponse.json(
     {
       ok: status === 200 && checks.supabase && allTablesOk,
       status: status === 200 ? "healthy" : "unhealthy",
       checks,
-      errors: errors.length > 0 ? errors : undefined,
       whatsappConfigured: isConfigured,
     },
     { status }

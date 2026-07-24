@@ -1,578 +1,279 @@
-import { expect, test } from "@playwright/test";
-import { randomUUID } from "node:crypto";
-import { getSupabaseTestClient } from "../helpers/supabase";
+import { expect, test, type Page } from "@playwright/test";
 
 // ---------------------------------------------------------------------------
-// Flow E2E: Flujo completo de envío masivo WhatsApp
+// Flow E2E: Asistente de envío masivo WhatsApp (/whatsapp/send)
 //
-// Cubre el rediseño de BulkSendForm:
-//   1. Página carga correctamente
-//   2. Selector de importación y validación de elegibilidad
-//   3. Tabla de empleados con checkboxes y controles de selección
-//   4. Barra de acción sticky (siempre visible, botón "Enviar N mensajes")
-//   5. Modal de confirmación con wording correcto
-//   6. Pantalla de éxito/resultado tras el envío
-//   7. Flujo de "Nuevo envío" desde la pantalla de éxito
+// Reescrito para la UI actual tras el rediseño por flujo. La UI vieja (tabs
+// "Por Importación / Por Selección Manual", barra sticky, botón
+// "Seleccionar elegibles", modal de confirmación) YA NO EXISTE. Ahora el envío
+// es un asistente guiado de 4 pasos (GuidedSendFlow):
 //
-// Tests que no requieren Supabase: comprueban estructura DOM estática.
-// Tests que requieren Supabase: crean un import_batch real y empleados elegibles,
-// luego ejercen el flujo completo de UI.
+//   Paso 1 — Destinatarios (RecipientStep): modos "Importación" / "Manual".
+//   Paso 2 — Mensaje (MessageTemplateStep): plantilla + botón de acción opcional.
+//   Paso 3 — Revisión (EligibilitySummary): valida elegibilidad y selecciona.
+//   Paso 4 — Confirmación (SendConfirmation): botón "Enviar mensajes".
+//   Paso 5 — Resultado (SendResult): "Nuevo envío" / "Ver historial".
+//
+// La autenticación es automática (proyecto "setup" -> storageState admin), así
+// que nunca hacemos login manual. Los selectores se apoyan en roles, encabezados
+// y placeholders estables, no en datos concretos.
+//
+// SEGURIDAD: no confirmamos ningún envío masivo real. Los tests de estructura no
+// dependen de datos; el test de extremo a extremo llega hasta el paso de
+// Confirmación y verifica el botón "Enviar mensajes" SIN pulsarlo, para no
+// disparar un envío con efectos (mensajes reales / registros de envío). La
+// pantalla de Resultado (paso 5) solo es alcanzable tras un envío real, por lo
+// que se documenta pero no se ejercita en vivo.
 // ---------------------------------------------------------------------------
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+const DUMMY_EMPLOYEE_ID = "00000000-0000-0000-0000-000000000000";
 
 /**
- * Crea un import_batch aplicado con un empleado elegible vinculado vía
- * advance_offers.source_batch_id. Retorna el importId o null si Supabase
- * no está disponible.
- *
- * Orden de creación necesario para respetar FK:
- *   1. import_batch (status = 'aplicada')
- *   2. employee
- *   3. advance_offer con source_batch_id = batch.id
+ * Avanza el asistente hasta el Paso 2 (Mensaje) por la ruta Manual con un ID
+ * ficticio. No depende de datos del entorno: solo necesita que el textarea
+ * acepte un ID para habilitar "Siguiente". No llega a validar elegibilidad
+ * (eso ocurre en el paso 3), por lo que no produce efectos.
  */
-async function createImportFixture(): Promise<{
-  importId: string;
-  employeeId: string;
-} | null> {
-  const supabase = getSupabaseTestClient();
-  if (!supabase) return null;
+async function irAlPaso2PorManual(page: Page): Promise<void> {
+  await page.goto("/whatsapp/send");
 
-  const unique = randomUUID().replace(/-/g, "");
-  // RFC formato estándar: 4 letras + 6 dígitos fecha + 3 alfanuméricos = 13 chars
-  const letters = unique.replace(/[^a-f]/g, "").padEnd(4, "a").slice(0, 4).toUpperCase();
-  const suffix = unique.replace(/[^a-z0-9]/gi, "").padEnd(3, "0").slice(-3).toUpperCase();
-  const rfc = `${letters}010101${suffix}`;
-  const telefono = `52${unique.replace(/\D/g, "").padEnd(10, "1").slice(0, 10)}`;
+  await page.getByRole("button", { name: "Manual", exact: true }).click();
+  const textarea = page.getByPlaceholder("uuid-empleado-1, uuid-empleado-2");
+  await expect(textarea).toBeVisible();
+  await textarea.fill(DUMMY_EMPLOYEE_ID);
 
-  // 1. Crear import_batch en estado 'aplicada' (valor exacto del enum import_status)
-  const { data: batch, error: batchErr } = await supabase
-    .from("import_batches")
-    .insert({
-      filename: "e2e-send-flow-test.csv",
-      total_rows: 1,
-      valid_rows: 1,
-      invalid_rows: 0,
-      duplicate_rows: 0,
-      status: "aplicada",
-      applied_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
+  const siguiente = page.getByRole("button", { name: "Siguiente", exact: true });
+  await expect(siguiente).toBeEnabled();
+  await siguiente.click();
 
-  if (batchErr || !batch) {
-    console.error("createImportFixture: batch insert error", batchErr?.message);
-    return null;
-  }
-
-  // 2. Crear empleado elegible
-  const { data: emp, error: empErr } = await supabase
-    .from("employees")
-    .insert({
-      rfc,
-      nombre: "E2E Send",
-      apellidos: "Flow Test",
-      cp_csf: "64000",
-      telefono,
-      telefono_normalizado: telefono,
-      email: `e2e-send-${unique.slice(0, 8)}@example.test`,
-      empleador: "E2E Empleador",
-    })
-    .select("id")
-    .single();
-
-  if (empErr || !emp) {
-    console.error("createImportFixture: employee insert error", empErr?.message);
-    return null;
-  }
-
-  // 3. Crear cuenta bancaria activa (requerida por getEmployeesEligibility)
-  //    CLABE debe ser exactamente 18 dígitos numéricos
-  const clabeDigits = unique.replace(/\D/g, "").padEnd(18, "0").slice(0, 18);
-  const { error: bankErr } = await supabase.from("employee_bank_accounts").insert({
-    employee_id: emp.id,
-    clabe: clabeDigits,
-    banco: "E2E Banco",
-    is_active: true,
-  });
-
-  if (bankErr) {
-    console.error("createImportFixture: bank account insert error", bankErr?.message);
-    return null;
-  }
-
-  // 4. Crear oferta elegible vinculada al batch (source_batch_id es el vínculo
-  //    que usa getEmployeesFromImport para asociar employees con una importación)
-  const { error: offerErr } = await supabase.from("advance_offers").insert({
-    employee_id: emp.id,
-    monto_prestamo_autorizado: 3000,
-    estatus_p_esta_q: "E2E",
-    estatus_conversion: "aceptada",
-    estatus_cliente: "E2E",
-    is_current: true,
-    status: "vigente",
-    source_hash: `e2e-send-${randomUUID()}`,
-    source_batch_id: batch.id,
-  });
-
-  if (offerErr) {
-    console.error("createImportFixture: offer insert error", offerErr?.message);
-    return null;
-  }
-
-  return { importId: batch.id, employeeId: emp.id };
+  await expect(page.getByText(/Paso 2 de 4/)).toBeVisible();
+  await expect(page.getByText("Mensaje a enviar")).toBeVisible();
 }
 
-// ── Tests de estructura estática (sin Supabase) ──────────────────────────────
+// ── Estructura y navegación (sin dependencia de datos) ───────────────────────
 
-test("página /whatsapp/send carga sin errores de React", async ({ page }) => {
+test("la página /whatsapp/send carga sin errores", async ({ page }) => {
+  // Señal fiable de un fallo real: una excepción JS sin capturar.
+  const uncaughtErrors: string[] = [];
+  page.on("pageerror", (error) => uncaughtErrors.push(error.message));
+
   await page.goto("/whatsapp/send");
 
-  // No debe activar el ErrorBoundary
-  await expect(page.getByText(/algo salió mal/i)).not.toBeVisible();
-
-  // Heading principal
+  // El título de página lo pinta PageHeader como <h1>.
   await expect(
-    page.getByRole("heading", { name: /Envío Masivo WhatsApp/i }),
+    page.getByRole("heading", { name: "Enviar mensajes", exact: true }),
+  ).toBeVisible();
+
+  // El error boundary de la sección (app/whatsapp/error.tsx) no debe activarse.
+  await expect(
+    page.getByText(/Error en la sección de WhatsApp/i),
+  ).toHaveCount(0);
+  expect(uncaughtErrors).toEqual([]);
+});
+
+test("muestra el indicador de 4 pasos y arranca en Destinatarios", async ({
+  page,
+}) => {
+  await page.goto("/whatsapp/send");
+
+  // El contador del asistente refleja los 4 pasos y arranca en el 1.
+  await expect(page.getByText(/Paso 1 de 4/)).toBeVisible();
+  // La cabecera de sección del paso activo.
+  await expect(
+    page.getByRole("heading", { name: "Destinatarios" }),
   ).toBeVisible();
 });
 
-test("formulario muestra tabs Por Importación y Por Selección Manual", async ({
+test("paso 1 arranca en modo Importación con Siguiente deshabilitado", async ({
+  page,
+}) => {
+  await page.goto("/whatsapp/send");
+
+  // Ambos modos disponibles como botones.
+  await expect(
+    page.getByRole("button", { name: "Importación", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Manual", exact: true }),
+  ).toBeVisible();
+
+  // El modo Importación está activo por defecto: se ve su selector.
+  await expect(
+    page.getByRole("heading", { name: "Selecciona una importación" }),
+  ).toBeVisible();
+
+  // Sin ninguna importación seleccionada no se puede continuar.
+  await expect(
+    page.getByRole("button", { name: "Siguiente", exact: true }),
+  ).toBeDisabled();
+});
+
+test("paso 1 (Importación): lista importaciones con fecha o estado vacío y habilita Siguiente al seleccionar", async ({
   page,
 }) => {
   await page.goto("/whatsapp/send");
 
   await expect(
-    page.getByRole("button", { name: /Por Importación/i }),
+    page.getByRole("heading", { name: "Selecciona una importación" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /Por Selección Manual/i }),
-  ).toBeVisible();
+
+  // Esperamos a que resuelva el fetch de importaciones antes de contar filas.
+  await page.waitForLoadState("networkidle");
+
+  // Cada fila de importación es un <button> que muestra "N empleados".
+  const importRows = page.getByRole("button").filter({ hasText: /empleados/ });
+  const rowCount = await importRows.count();
+
+  // Si no hay importaciones aplicadas se pinta el estado vacío; es un render
+  // correcto, pero no podemos ejercer la selección.
+  test.skip(rowCount === 0, "Sin importaciones aplicadas en el entorno");
+
+  const siguiente = page.getByRole("button", { name: "Siguiente", exact: true });
+  await expect(siguiente).toBeDisabled();
+
+  // Cada fila incluye la fecha de aplicación (dd mmm aaaa …).
+  await expect(importRows.first()).toContainText(
+    /\d{1,2}\s+\w{3,}\.?\s+\d{4}|sin fecha/i,
+  );
+
+  // El buscador por nombre de archivo solo aparece con más de 4 importaciones.
+  const filtro = page.getByPlaceholder("Filtrar por nombre de archivo…");
+  if (await filtro.count()) {
+    await filtro.fill("archivo-que-no-existe-zzz");
+    await expect(
+      page.getByText(/Ninguna importación coincide/i),
+    ).toBeVisible();
+    await filtro.fill("");
+  }
+
+  // Seleccionar una importación habilita "Siguiente".
+  await importRows.first().click();
+  await expect(siguiente).toBeEnabled();
 });
 
-test("formulario muestra card de template con campo editable", async ({
+test("paso 1 (Manual): textarea y buscador de prueba; Siguiente se habilita al ingresar IDs", async ({
   page,
 }) => {
   await page.goto("/whatsapp/send");
 
-  const templateInput = page.locator("#templateName");
-  await expect(templateInput).toBeVisible();
-  await expect(templateInput).toHaveValue("adelanto_contrato");
-});
+  await page.getByRole("button", { name: "Manual", exact: true }).click();
 
-test("tab Por Importación muestra selector de importación", async ({ page }) => {
-  await page.goto("/whatsapp/send");
-
-  // El tab está activo por defecto
-  await expect(
-    page.getByRole("button", { name: /Por Importación/i }),
-  ).toBeVisible();
-
-  // Debe haber un <select> para elegir la importación
-  const importSelect = page.locator("select");
-  await expect(importSelect.first()).toBeVisible();
-  const firstOption = importSelect.locator("option").first();
-  await expect(firstOption).toHaveText(/Selecciona una importación/i);
-});
-
-test("tab Por Selección Manual muestra textarea para IDs", async ({ page }) => {
-  await page.goto("/whatsapp/send");
-
-  await page.getByRole("button", { name: /Por Selección Manual/i }).click();
-
-  // Debe aparecer el textarea para pegar IDs
-  const textarea = page.locator("textarea");
+  const textarea = page.getByPlaceholder("uuid-empleado-1, uuid-empleado-2");
   await expect(textarea).toBeVisible();
 
-  // Y el botón de validar elegibilidad
+  // Sección de envío de prueba con su buscador de empleados.
+  await expect(page.getByText("Envío de prueba")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /Validar elegibilidad/i }),
+    page.getByPlaceholder("Buscar por nombre, RFC o teléfono..."),
+  ).toBeVisible();
+
+  // Sin IDs no se puede continuar; al pegar uno, "Siguiente" se habilita.
+  const siguiente = page.getByRole("button", { name: "Siguiente", exact: true });
+  await expect(siguiente).toBeDisabled();
+  await textarea.fill(DUMMY_EMPLOYEE_ID);
+  await expect(siguiente).toBeEnabled();
+});
+
+test("paso 2 (Mensaje): muestra la plantilla y permite volver al paso 1", async ({
+  page,
+}) => {
+  await irAlPaso2PorManual(page);
+
+  // La plantilla activa se muestra (por defecto adelanto_nomina_v2).
+  await expect(page.getByText(/Plantilla:/).first()).toBeVisible();
+  await expect(page.getByText(/adelanto/i).first()).toBeVisible();
+
+  // Navegación del paso: "Volver" regresa al paso 1.
+  await page.getByRole("button", { name: "Volver", exact: true }).click();
+  await expect(page.getByText(/Paso 1 de 4/)).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Destinatarios" }),
   ).toBeVisible();
 });
 
-test("barra de acción sticky NO aparece en estado idle (sin importación)", async ({
+test("paso 2 (Mensaje): permite añadir un botón de acción con URL", async ({
   page,
 }) => {
-  await page.goto("/whatsapp/send");
+  await irAlPaso2PorManual(page);
 
-  // La barra sticky solo aparece cuando sendState === 'ready' | 'sending'
-  // En estado idle (sin selección) no debe mostrar el botón de enviar
-  const sendBtn = page.getByRole("button", { name: /Enviar \d+ mensaje/i });
-  await expect(sendBtn).not.toBeVisible();
+  // Activar el botón de acción revela los campos de texto y URL.
+  await page.getByLabel("Incluir botón de acción").check();
+  await expect(page.getByPlaceholder("https://...")).toBeVisible();
+
+  // Desactivarlo los oculta de nuevo.
+  await page.getByLabel("Incluir botón de acción").uncheck();
+  await expect(page.getByPlaceholder("https://...")).toHaveCount(0);
 });
 
-test("cambiar el nombre del template actualiza el valor del campo", async ({
+// ── Flujo de extremo a extremo (depende de datos; sin envío real) ────────────
+
+test("flujo (Importación) llega hasta Confirmación sin disparar el envío", async ({
   page,
 }) => {
   await page.goto("/whatsapp/send");
-
-  const templateInput = page.locator("#templateName");
-  await templateInput.clear();
-  await templateInput.fill("mi_template_custom");
-  await expect(templateInput).toHaveValue("mi_template_custom");
-});
-
-// ── Tests con Supabase (requieren credenciales en .env.local) ────────────────
-
-test("al seleccionar importación válida aparece tabla de empleados", async ({
-  page,
-}) => {
-  const fixture = await createImportFixture();
-
-  if (!fixture) {
-    test.skip(true, "Supabase no configurado para E2E — test omitido.");
-    return;
-  }
-
-  await page.goto("/whatsapp/send");
-
-  // Seleccionar la importación creada
-  const importSelect = page.locator("select").first();
-  await importSelect.selectOption(fixture.importId);
-
-  // Esperar a que cargue la tabla de empleados
   await expect(
-    page.getByRole("heading", { name: /Empleados/i }),
-  ).toBeVisible({ timeout: 10_000 });
-
-  // Debe aparecer al menos 1 fila en la tabla
-  const rows = page.locator("tbody tr");
-  await expect(rows).toHaveCount(1);
-});
-
-test("al cargar empleados elegibles aparece la barra sticky con botón Enviar", async ({
-  page,
-}) => {
-  const fixture = await createImportFixture();
-
-  if (!fixture) {
-    test.skip(true, "Supabase no configurado para E2E — test omitido.");
-    return;
-  }
-
-  await page.goto("/whatsapp/send");
-
-  const importSelect = page.locator("select").first();
-  await importSelect.selectOption(fixture.importId);
-
-  // Esperar a que cargue la lista
-  await expect(
-    page.getByRole("heading", { name: /Empleados/i }),
-  ).toBeVisible({ timeout: 10_000 });
-
-  // La barra sticky debe mostrar el botón de enviar
-  const sendBtn = page.getByRole("button", { name: /Enviar \d+ mensaje/i });
-  await expect(sendBtn).toBeVisible();
-  await expect(sendBtn).toBeEnabled();
-});
-
-test("barra sticky muestra resumen: nombre del template y cuenta de seleccionados", async ({
-  page,
-}) => {
-  const fixture = await createImportFixture();
-
-  if (!fixture) {
-    test.skip(true, "Supabase no configurado para E2E — test omitido.");
-    return;
-  }
-
-  await page.goto("/whatsapp/send");
-
-  const importSelect = page.locator("select").first();
-  await importSelect.selectOption(fixture.importId);
-
-  await expect(
-    page.getByRole("heading", { name: /Empleados/i }),
-  ).toBeVisible({ timeout: 10_000 });
-
-  // El resumen en la barra debe mencionar el template y la cuenta
-  // La barra es el contenedor sticky al fondo (z-30)
-  const stickyBar = page.locator(".sticky.bottom-6");
-  await expect(stickyBar).toBeVisible();
-  await expect(stickyBar).toContainText(/adelanto_contrato/i);
-  await expect(stickyBar).toContainText(/seleccionado/i);
-});
-
-test("botón Limpiar deselecciona todos los empleados y deshabilita el botón Enviar", async ({
-  page,
-}) => {
-  const fixture = await createImportFixture();
-
-  if (!fixture) {
-    test.skip(true, "Supabase no configurado para E2E — test omitido.");
-    return;
-  }
-
-  await page.goto("/whatsapp/send");
-
-  const importSelect = page.locator("select").first();
-  await importSelect.selectOption(fixture.importId);
-
-  await expect(
-    page.getByRole("heading", { name: /Empleados/i }),
-  ).toBeVisible({ timeout: 10_000 });
-
-  // Clic en "Limpiar" para deseleccionar
-  await page.getByRole("button", { name: /Limpiar/i }).click();
-
-  // El botón enviar debe quedar deshabilitado
-  const sendBtn = page.getByRole("button", { name: /Selecciona empleados/i });
-  await expect(sendBtn).toBeVisible();
-  await expect(sendBtn).toBeDisabled();
-});
-
-test("botón Seleccionar elegibles reactiva el botón Enviar", async ({
-  page,
-}) => {
-  const fixture = await createImportFixture();
-
-  if (!fixture) {
-    test.skip(true, "Supabase no configurado para E2E — test omitido.");
-    return;
-  }
-
-  await page.goto("/whatsapp/send");
-
-  const importSelect = page.locator("select").first();
-  await importSelect.selectOption(fixture.importId);
-
-  await expect(
-    page.getByRole("heading", { name: /Empleados/i }),
-  ).toBeVisible({ timeout: 10_000 });
-
-  // Primero limpiar
-  await page.getByRole("button", { name: /Limpiar/i }).click();
-
-  // Luego seleccionar elegibles
-  await page.getByRole("button", { name: /Seleccionar elegibles/i }).click();
-
-  // El botón enviar debe volver a estar habilitado
-  const sendBtn = page.getByRole("button", { name: /Enviar \d+ mensaje/i });
-  await expect(sendBtn).toBeEnabled();
-});
-
-test("clic en Enviar abre el modal de confirmación con datos correctos", async ({
-  page,
-}) => {
-  const fixture = await createImportFixture();
-
-  if (!fixture) {
-    test.skip(true, "Supabase no configurado para E2E — test omitido.");
-    return;
-  }
-
-  await page.goto("/whatsapp/send");
-
-  const importSelect = page.locator("select").first();
-  await importSelect.selectOption(fixture.importId);
-
-  await expect(
-    page.getByRole("heading", { name: /Empleados/i }),
-  ).toBeVisible({ timeout: 10_000 });
-
-  // Clic en el botón de la barra sticky (el primero, no el del modal)
-  await page.getByRole("button", { name: /Enviar \d+ mensaje/i }).first().click();
-
-  // El modal debe aparecer
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText(/Confirmar envío masivo/i);
-  await expect(dialog).toContainText(/adelanto_contrato/i);
-
-  // Debe tener el botón de confirmar (dentro del dialog) y cancelar
-  await expect(
-    dialog.getByRole("button", { name: /Cancelar/i }),
+    page.getByRole("heading", { name: "Selecciona una importación" }),
   ).toBeVisible();
+  await page.waitForLoadState("networkidle");
+
+  // Requiere al menos una importación aplicada para seleccionar destinatarios.
+  const importRows = page.getByRole("button").filter({ hasText: /empleados/ });
+  test.skip(
+    (await importRows.count()) === 0,
+    "Sin importaciones aplicadas en el entorno",
+  );
+
+  // Paso 1 -> Paso 2
+  await importRows.first().click();
+  await page.getByRole("button", { name: "Siguiente", exact: true }).click();
+  await expect(page.getByText(/Paso 2 de 4/)).toBeVisible();
+  await expect(page.getByText("Mensaje a enviar")).toBeVisible();
+
+  // Paso 2 -> Paso 3. Si la plantilla por defecto no está aprobada, "Siguiente"
+  // queda deshabilitado y no podemos avanzar.
+  const siguientePaso2 = page.getByRole("button", {
+    name: "Siguiente",
+    exact: true,
+  });
+  test.skip(
+    !(await siguientePaso2.isEnabled()),
+    "La plantilla por defecto no está aprobada para envío",
+  );
+  await siguientePaso2.click();
+
+  // Paso 3: valida elegibilidad automáticamente.
+  await expect(page.getByText(/Paso 3 de 4/)).toBeVisible();
   await expect(
-    dialog.getByRole("button", { name: /Enviar \d+ mensaje/i }),
+    page.getByText("Verificando destinatarios..."),
+  ).toBeHidden({ timeout: 15_000 });
+
+  // Si la validación falló, aparece "Reintentar" en lugar del resumen.
+  test.skip(
+    (await page.getByRole("button", { name: "Reintentar", exact: true }).count()) >
+      0,
+    "La validación de elegibilidad falló en el entorno",
+  );
+
+  // El botón "Confirmar (N)" solo se habilita con empleados elegibles.
+  const confirmar = page.getByRole("button", { name: /^Confirmar \(\d+\)$/ });
+  await expect(confirmar).toBeVisible();
+  test.skip(
+    !(await confirmar.isEnabled()),
+    "La importación seleccionada no tiene empleados elegibles",
+  );
+
+  // Paso 3 -> Paso 4 (Confirmación).
+  await confirmar.click();
+  await expect(page.getByText(/Paso 4 de 4/)).toBeVisible();
+
+  // Verificamos el resumen y el botón de envío, pero NO lo pulsamos: confirmarlo
+  // dispararía un envío masivo real con efectos.
+  await expect(page.getByText("Plantilla").first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Enviar mensajes" }),
   ).toBeVisible();
-});
 
-test("cancelar el modal cierra el diálogo sin enviar", async ({ page }) => {
-  const fixture = await createImportFixture();
-
-  if (!fixture) {
-    test.skip(true, "Supabase no configurado para E2E — test omitido.");
-    return;
-  }
-
-  await page.goto("/whatsapp/send");
-
-  const importSelect = page.locator("select").first();
-  await importSelect.selectOption(fixture.importId);
-
-  await expect(
-    page.getByRole("heading", { name: /Empleados/i }),
-  ).toBeVisible({ timeout: 10_000 });
-
-  await page.getByRole("button", { name: /Enviar \d+ mensaje/i }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-
-  await page.getByRole("button", { name: /Cancelar/i }).click();
-
-  // El modal cierra y el formulario sigue en estado ready
-  await expect(page.getByRole("dialog")).not.toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: /Empleados/i }),
-  ).toBeVisible();
-});
-
-test("confirmar envío muestra pantalla de éxito o resultado con los contadores", async ({
-  page,
-}) => {
-  const fixture = await createImportFixture();
-
-  if (!fixture) {
-    test.skip(true, "Supabase no configurado para E2E — test omitido.");
-    return;
-  }
-
-  await page.goto("/whatsapp/send");
-
-  const importSelect = page.locator("select").first();
-  await importSelect.selectOption(fixture.importId);
-
-  await expect(
-    page.getByRole("heading", { name: /Empleados/i }),
-  ).toBeVisible({ timeout: 10_000 });
-
-  // Abrir modal y confirmar
-  await page.getByRole("button", { name: /Enviar \d+ mensaje/i }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-
-  // Confirmar — puede fallar si no hay WHATSAPP_ACCESS_TOKEN, pero la
-  // pantalla de resultado siempre debe aparecer (con 0 enviados si no hay token)
-  const confirmBtn = page.getByRole("dialog").getByRole("button", {
-    name: /Enviar \d+ mensaje/i,
-  });
-  await confirmBtn.click();
-
-  // Esperar a que desaparezca el modal y aparezca el resultado
-  await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 15_000 });
-
-  // La pantalla de éxito/resultado debe estar visible
-  // Puede ser "¡Mensajes enviados!" o "Envío completado con errores"
-  const successOrError = page.locator("h2").filter({
-    hasText: /mensajes enviados|envío completado/i,
-  });
-  await expect(successOrError).toBeVisible({ timeout: 15_000 });
-
-  // Los contadores deben estar presentes
-  await expect(page.getByText(/Enviados/i).first()).toBeVisible();
-  await expect(page.getByText(/Elegibles/i).first()).toBeVisible();
-  await expect(page.getByText(/Errores/i).first()).toBeVisible();
-});
-
-test("pantalla de resultado muestra template utilizado", async ({ page }) => {
-  const fixture = await createImportFixture();
-
-  if (!fixture) {
-    test.skip(true, "Supabase no configurado para E2E — test omitido.");
-    return;
-  }
-
-  await page.goto("/whatsapp/send");
-
-  const importSelect = page.locator("select").first();
-  await importSelect.selectOption(fixture.importId);
-
-  await expect(
-    page.getByRole("heading", { name: /Empleados/i }),
-  ).toBeVisible({ timeout: 10_000 });
-
-  await page.getByRole("button", { name: /Enviar \d+ mensaje/i }).click();
-  const confirmBtn = page.getByRole("dialog").getByRole("button", {
-    name: /Enviar \d+ mensaje/i,
-  });
-  await confirmBtn.click();
-
-  await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 15_000 });
-
-  // El nombre del template debe aparecer en la pantalla de resultado
-  const successOrError = page.locator("h2").filter({
-    hasText: /mensajes enviados|envío completado/i,
-  });
-  await expect(successOrError).toBeVisible({ timeout: 15_000 });
-
-  await expect(page.getByText(/adelanto_contrato/i).first()).toBeVisible();
-});
-
-test("pantalla de resultado tiene botón Nuevo envío que regresa al formulario", async ({
-  page,
-}) => {
-  const fixture = await createImportFixture();
-
-  if (!fixture) {
-    test.skip(true, "Supabase no configurado para E2E — test omitido.");
-    return;
-  }
-
-  await page.goto("/whatsapp/send");
-
-  const importSelect = page.locator("select").first();
-  await importSelect.selectOption(fixture.importId);
-
-  await expect(
-    page.getByRole("heading", { name: /Empleados/i }),
-  ).toBeVisible({ timeout: 10_000 });
-
-  await page.getByRole("button", { name: /Enviar \d+ mensaje/i }).click();
-  const confirmBtn = page.getByRole("dialog").getByRole("button", {
-    name: /Enviar \d+ mensaje/i,
-  });
-  await confirmBtn.click();
-
-  await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 15_000 });
-
-  const successOrError = page.locator("h2").filter({
-    hasText: /mensajes enviados|envío completado/i,
-  });
-  await expect(successOrError).toBeVisible({ timeout: 15_000 });
-
-  // El botón "Nuevo envío" debe estar presente
-  const nuevoEnvioBtn = page.getByRole("button", { name: /Nuevo envío/i });
-  await expect(nuevoEnvioBtn).toBeVisible();
-
-  // Al hacer clic, debe regresar al formulario con la tabla de empleados
-  await nuevoEnvioBtn.click();
-  await expect(
-    page.getByRole("heading", { name: /Empleados/i }),
-  ).toBeVisible();
-});
-
-test("pantalla de resultado tiene enlace al historial de envíos", async ({
-  page,
-}) => {
-  const fixture = await createImportFixture();
-
-  if (!fixture) {
-    test.skip(true, "Supabase no configurado para E2E — test omitido.");
-    return;
-  }
-
-  await page.goto("/whatsapp/send");
-
-  const importSelect = page.locator("select").first();
-  await importSelect.selectOption(fixture.importId);
-
-  await expect(
-    page.getByRole("heading", { name: /Empleados/i }),
-  ).toBeVisible({ timeout: 10_000 });
-
-  await page.getByRole("button", { name: /Enviar \d+ mensaje/i }).click();
-  const confirmBtn = page.getByRole("dialog").getByRole("button", {
-    name: /Enviar \d+ mensaje/i,
-  });
-  await confirmBtn.click();
-
-  await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 15_000 });
-
-  const successOrError = page.locator("h2").filter({
-    hasText: /mensajes enviados|envío completado/i,
-  });
-  await expect(successOrError).toBeVisible({ timeout: 15_000 });
-
-  // Debe haber un enlace al historial
-  const historialLink = page.getByRole("button", { name: /Ver historial/i });
-  await expect(historialLink).toBeVisible();
+  // "Volver" regresa a la revisión sin enviar nada.
+  await page.getByRole("button", { name: "Volver", exact: true }).click();
+  await expect(page.getByText(/Paso 3 de 4/)).toBeVisible();
 });

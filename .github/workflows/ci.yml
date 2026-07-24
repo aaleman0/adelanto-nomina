@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+# Cancela ejecuciones anteriores de la misma rama: no tiene sentido validar un
+# commit que ya fue reemplazado.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  quality:
+    name: Lint, tipos, tests y build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Tests unitarios
+        # `pnpm test` arranca vitest en modo watch y colgaría el runner.
+        run: pnpm test:unit
+
+      - name: Build
+        # Valores ficticios: el build no se conecta a ningún servicio, pero
+        # algunos módulos leen las variables al importarse.
+        env:
+          SUPABASE_URL: https://ci.supabase.co/rest/v1/
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+          SUPABASE_ANON_KEY: ci-placeholder
+          NEXT_PUBLIC_APP_URL: https://ci.example.com
+        run: pnpm build
+
+  secrets:
+    name: Escaneo de secretos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Gitleaks necesita el historial completo para escanear commits.
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  audit:
+    name: Auditoría de dependencias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm audit
+        # Solo falla ante vulnerabilidades altas o críticas, para que el
+        # pipeline no se bloquee por avisos de severidad baja.
+        run: pnpm audit --audit-level high
+
+  deploy:
+    name: Build y deploy a Cloud Run
+    runs-on: ubuntu-latest
+    needs: [quality]
+    # Solo en push a main (producción) o develop (staging), y solo si GCP está
+    # configurado (Workload Identity Federation). Sin config, se omite en vez de
+    # fallar — mismo patrón que db-types. En un PR nunca corre.
+    if: >-
+      github.event_name == 'push'
+      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+      && vars.GCP_WIF_PROVIDER != ''
+    # main → production (con protección de entorno/aprobación en GitHub),
+    # develop → staging. Cada entorno tiene sus propias vars (proyecto, servicio).
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+    permissions:
+      contents: read
+      id-token: write # necesario para la federación de identidad con GCP (sin llaves)
+    env:
+      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPO }}/adelantos-admin
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Autenticar en GCP (Workload Identity Federation, sin llaves)
+        # Keyless: no hay JSON de service account en los secretos del repo. GitHub
+        # intercambia un token OIDC por credenciales de corta duración.
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - name: Configurar gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Autenticar Docker con Artifact Registry
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Build y push de la imagen (etiquetada con el SHA)
+        # NEXT_PUBLIC_APP_URL se inlinea en el bundle en build; se pasa el valor
+        # del entorno (distinto en prod/staging) como build-arg.
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_APP_URL="${{ vars.NEXT_PUBLIC_APP_URL }}" \
+            -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Deploy a Cloud Run
+        # Solo cambia la imagen; las env vars y los secretos se mantienen ligados
+        # al servicio (Secret Manager), no se pasan por CI. Cloud Run los conserva
+        # entre revisiones.
+        run: |
+          gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
+            --image "$IMAGE:${{ github.sha }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --platform managed \
+            --quiet
+
+  db-types:
+    name: Tipos de base de datos al día
+    runs-on: ubuntu-latest
+    # Solo corre si el repositorio tiene configuradas las credenciales de
+    # Supabase. Sin ellas el paso se omite en vez de fallar.
+    if: ${{ vars.SUPABASE_PROJECT_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Instalar Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Comprobar deriva de tipos
+        # Falla si el esquema real difiere de src/types/database.types.ts.
+        # Es lo que impide que un cambio de esquema pase inadvertido, porque
+        # los tipos se mantienen a mano y el compilador no lo detecta.
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ vars.SUPABASE_PROJECT_ID }}
+        run: pnpm db:types:check

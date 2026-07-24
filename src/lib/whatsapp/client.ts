@@ -3,8 +3,13 @@ const BASE_URL = "https://graph.facebook.com/v18.0";
 export type TemplateComponent = {
   type: "body" | "header" | "button";
   sub_type?: "url" | "quick_reply";
-  index?: number;
-  parameters: Array<{ type: "text"; text: string } | { type: "payload"; payload: string }>;
+  index?: number | string;
+  parameters: Array<
+    | { type: "text"; text: string }
+    | { type: "payload"; payload: string }
+    | { type: "action"; action: { type: string; url?: string } }
+    | { type: "image"; image: { link: string } }
+  >;
 };
 
 export type SendTemplateResult = {
@@ -19,6 +24,22 @@ export type TestConnectionResult = {
   displayName?: string;
   error?: string;
 };
+
+/**
+ * Traduce el error de la Graph API a un mensaje accionable.
+ *
+ * Meta devuelve mensajes poco útiles en el endpoint de mensajes: un token
+ * caducado llega como "Authentication Error" a secas, sin pista de qué hacer.
+ * El código 190 (OAuthException) siempre significa token inválido o expirado,
+ * así que se reemplaza por una instrucción concreta. El resto se pasa tal cual.
+ */
+export function describeMetaError(json: unknown, status: number): string {
+  const error = (json as { error?: { message?: string; code?: number } } | null)?.error;
+  if (error?.code === 190) {
+    return "Token de WhatsApp expirado o inválido (código 190 de Meta). Genera uno nuevo y actualiza WHATSAPP_ACCESS_TOKEN.";
+  }
+  return error?.message ?? `HTTP ${status}`;
+}
 
 export class WhatsAppClient {
   private accessToken: string;
@@ -73,7 +94,78 @@ export class WhatsAppClient {
       const json = await res.json();
 
       if (!res.ok) {
-        const errMsg = json?.error?.message ?? `HTTP ${res.status}`;
+        const errMsg = describeMetaError(json, res.status);
+        console.error("[WhatsApp] send failed", JSON.stringify(json));
+        return { ok: false, error: errMsg };
+      }
+
+      const messageId = json?.messages?.[0]?.id as string | undefined;
+      const waId = json?.contacts?.[0]?.wa_id as string | undefined;
+      const inputPhone = json?.contacts?.[0]?.input as string | undefined;
+      console.log("[WhatsApp] send ok", JSON.stringify({ messageId, waId, inputPhone, to }));
+      return { ok: true, messageId };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Error de red." };
+    }
+  }
+
+  async sendTemplateWithButton(
+    to: string,
+    templateName: string,
+    variables: Record<string, string>,
+    urlButtonSuffix?: string,
+  ): Promise<SendTemplateResult> {
+    if (!this.accessToken || !this.phoneNumberId) {
+      return { ok: false, error: "WhatsApp no configurado (token o phone_number_id faltante)." };
+    }
+
+    const components: TemplateComponent[] = [
+      {
+        type: "body",
+        parameters: Object.entries(variables).map(([, value]) => ({
+          type: "text" as const,
+          text: value,
+        })),
+      },
+    ];
+
+    // Botón URL dinámico: la plantilla fija la base de la URL y deja un `{{1}}`
+    // de sufijo. Meta espera EXACTAMENTE ese sufijo como parámetro de texto (no
+    // una URL completa ni una acción `open_url`), en el índice 0 del botón.
+    if (urlButtonSuffix) {
+      components.push({
+        type: "button",
+        sub_type: "url",
+        index: "0",
+        parameters: [{ type: "text", text: urlButtonSuffix }],
+      });
+    }
+
+    const body = {
+      messaging_product: "whatsapp",
+      to,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: "es_MX" },
+        components,
+      },
+    };
+
+    try {
+      const res = await fetch(`${BASE_URL}/${this.phoneNumberId}/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        const errMsg = describeMetaError(json, res.status);
         return { ok: false, error: errMsg };
       }
 
@@ -113,7 +205,7 @@ export class WhatsAppClient {
       const json = await res.json();
 
       if (!res.ok) {
-        const errMsg = json?.error?.message ?? `HTTP ${res.status}`;
+        const errMsg = describeMetaError(json, res.status);
         return { ok: false, error: errMsg };
       }
 
@@ -140,7 +232,7 @@ export class WhatsAppClient {
       const json = await res.json();
 
       if (!res.ok) {
-        const errMsg = json?.error?.message ?? `HTTP ${res.status}`;
+        const errMsg = describeMetaError(json, res.status);
         return { ok: false, error: errMsg };
       }
 

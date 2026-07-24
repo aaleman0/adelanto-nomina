@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { createEasyLexAttempt, type ContractAttempt } from "@/lib/contracts/create-easylex-attempt";
+import { easylexEnv } from "@/lib/env";
+import { recordAuditEvent } from "@/lib/audit";
+import type { Actor } from "@/lib/auth/roles";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -11,17 +15,42 @@ type ContractRequest = {
   signed_at: string | null;
 };
 
-type ContractAttempt = {
+type Employee = {
   id: string;
-  contract_request_id: string;
-  attempt_number: number;
-  easylex_contract_id: string | null;
-  signing_url: string | null;
-  status: "generando" | "generado" | "expirado" | "firmado" | "error";
-  expires_at: string | null;
-  generated_at: string | null;
-  signed_at: string | null;
-  error_message: string | null;
+  rfc: string;
+  curp: string | null;
+  nombre: string;
+  apellido_paterno: string | null;
+  apellido_materno: string | null;
+  apellidos: string | null;
+  cp_csf: string | null;
+  telefono: string;
+  telefono_normalizado: string;
+  email: string | null;
+  empleador: string | null;
+  estado_civil: string | null;
+  nacionalidad: string | null;
+  lugar_origen: string | null;
+  fecha_nacimiento: string | null;
+  domicilio: string | null;
+};
+
+type AdvanceOffer = {
+  id: string;
+  employee_id: string;
+  monto_prestamo_autorizado: number;
+  estatus_p_esta_q: string | null;
+  estatus_conversion: string;
+  estatus_cliente: string | null;
+  is_eligible: boolean;
+  status: string;
+  source_batch_id: string | null;
+  source_row_id: string | null;
+};
+
+type BankAccount = {
+  clabe: string;
+  banco: string;
 };
 
 export type BackofficeContractAction = "regenerate_expired" | "retry";
@@ -42,9 +71,109 @@ export type BackofficeContractActionResult = {
 
 const LINK_TTL_HOURS = 2;
 
+/**
+ * Tope de expedientes que procesa una sola invocación en lote.
+ *
+ * Cada acción llama a EasyLex (crear documento), que es lento y externo. Sin
+ * tope, "regenerar los 165 vencidos" excedería el timeout del request. Se
+ * procesa una tanda y el operador vuelve a pulsar para seguir; la respuesta
+ * dice cuántos quedan, así que no hay truncado silencioso.
+ */
+export const MAX_BATCH_ACTIONS = 25;
+
+/** Estado operativo → acción de backoffice que lo resuelve. */
+const BATCH_ACTION_BY_STATUS: Record<string, BackofficeContractAction> = {
+  link_expirado: "regenerate_expired",
+  error: "retry",
+};
+
+export type BatchActionSummary = {
+  status: string;
+  action: BackofficeContractAction;
+  /** Total de expedientes en ese estado (antes del tope). */
+  totalInStatus: number;
+  /** Cuántos se intentaron en esta tanda (≤ MAX_BATCH_ACTIONS). */
+  processed: number;
+  /** Acciones que hicieron algo (ok: true). */
+  succeeded: number;
+  /** Omitidos sin error (ya firmados, no encontrados). */
+  skipped: number;
+  /** Fallaron con excepción. */
+  failed: number;
+  /** Cuántos quedan por procesar tras esta tanda. */
+  remaining: number;
+};
+
+/**
+ * Ejecuta una acción de backoffice sobre todos los expedientes de un estado,
+ * en tandas acotadas y tolerante a fallos individuales: un error en uno no
+ * detiene el resto.
+ */
+export async function runBatchBackofficeAction(input: {
+  status: string;
+  actor?: Actor | null;
+}): Promise<BatchActionSummary> {
+  const action = BATCH_ACTION_BY_STATUS[input.status];
+  if (!action) {
+    throw new Error(`No hay acción en lote para el estado "${input.status}".`);
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data, error, count } = await supabase
+    .from("backoffice_contract_control_v1")
+    .select("contract_request_id", { count: "exact" })
+    .eq("operational_status", input.status)
+    .not("contract_request_id", "is", null)
+    .order("last_movement_at", { ascending: false })
+    .limit(MAX_BATCH_ACTIONS);
+
+  if (error) throw error;
+
+  const ids = (data ?? [])
+    .map((row) => row.contract_request_id as string | null)
+    .filter((id): id is string => Boolean(id));
+
+  let succeeded = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const contractRequestId of ids) {
+    try {
+      const result = await runBackofficeContractAction({
+        contractRequestId,
+        action,
+        actor: input.actor ?? null,
+      });
+      if (result.ok) succeeded += 1;
+      else skipped += 1;
+    } catch {
+      // Un fallo individual (p. ej. EasyLex caído para ese expediente) no debe
+      // abortar la tanda; ya queda registrado por runBackofficeContractAction.
+      failed += 1;
+    }
+  }
+
+  const totalInStatus = count ?? ids.length;
+  return {
+    status: input.status,
+    action,
+    totalInStatus,
+    processed: ids.length,
+    succeeded,
+    skipped,
+    failed,
+    remaining: Math.max(0, totalInStatus - succeeded),
+  };
+}
+
 export async function runBackofficeContractAction(input: {
   contractRequestId: string;
   action: BackofficeContractAction;
+  /**
+   * Operador que ejecuta la acción. Se propaga a la auditoría: sin él no se
+   * puede saber quién regeneró un link o reintentó un contrato.
+   */
+  actor?: Actor | null;
 }): Promise<BackofficeContractActionResult> {
   const correlationId = randomUUID();
   const contractRequest = await getContractRequest(input.contractRequestId);
@@ -109,6 +238,7 @@ export async function runBackofficeContractAction(input: {
     await createAuditEvent({
       contractRequest,
       action: input.action,
+      actor: input.actor ?? null,
       correlationId,
       previousState: contractRequest.status,
       newState: "link_generado",
@@ -130,13 +260,47 @@ export async function runBackofficeContractAction(input: {
   }
 
   await expireLatestAttemptIfNeeded(latestAttempt);
-  const newAttempt = await createMockAttempt(contractRequest, latestAttempt);
+
+  let newAttempt: ContractAttempt;
+  let isEasyLex = false;
+
+  if (easylexEnv.isConfigured) {
+    const [employee, offer, bankAccount] = await Promise.all([
+      getEmployee(contractRequest.employee_id),
+      getOffer(contractRequest.offer_id),
+      getBankAccount(contractRequest.employee_id),
+    ]);
+
+    if (!employee || !offer) {
+      const result: BackofficeContractActionResult = {
+        ok: false,
+        status: "not_found",
+        message: "No se encontro el empleado u oferta asociados al contrato.",
+        request_id: contractRequest.id,
+      };
+      await createIntegrationLog({
+        action: input.action,
+        correlationId,
+        requestPayload: { contract_request_id: input.contractRequestId },
+        responsePayload: result,
+        success: false,
+        entityId: contractRequest.id,
+      });
+      return result;
+    }
+
+    newAttempt = await createEasyLexAttempt(contractRequest, employee, offer, bankAccount, latestAttempt, correlationId);
+    isEasyLex = true;
+  } else {
+    newAttempt = await createMockAttempt(contractRequest, latestAttempt);
+  }
+
   await markContractRequestLinkGenerated(contractRequest);
 
   const result: BackofficeContractActionResult = {
     ok: true,
     status: "link_regenerated",
-    message: "Link mock regenerado correctamente.",
+    message: isEasyLex ? "Link de EasyLex regenerado correctamente." : "Link mock regenerado correctamente.",
     request_id: contractRequest.id,
     attempt_id: newAttempt.id,
     link_easylex: newAttempt.signing_url ?? undefined,
@@ -146,11 +310,15 @@ export async function runBackofficeContractAction(input: {
   await createAuditEvent({
     contractRequest,
     action: input.action,
+    actor: input.actor ?? null,
     correlationId,
     previousState: contractRequest.status,
     newState: "link_generado",
-    summary:
-      input.action === "retry"
+    summary: isEasyLex
+      ? input.action === "retry"
+        ? "Reintento de EasyLex ejecutado desde backoffice."
+        : "Link de EasyLex regenerado desde backoffice."
+      : input.action === "retry"
         ? "Reintento mock ejecutado desde backoffice."
         : "Link mock regenerado desde backoffice.",
     metadata: {
@@ -158,6 +326,7 @@ export async function runBackofficeContractAction(input: {
       previous_attempt_status: latestAttempt?.status ?? null,
       new_attempt_id: newAttempt.id,
       expires_at: newAttempt.expires_at,
+      provider: isEasyLex ? "easylex" : "mock",
     },
   });
   await createIntegrationLog({
@@ -326,36 +495,37 @@ async function markContractRequestLinkGenerated(
   }
 }
 
+/**
+ * Delega en el módulo compartido de auditoría, aplicando los campos fijos de
+ * las acciones de backoffice.
+ */
 async function createAuditEvent(input: {
   contractRequest: ContractRequest;
   action: BackofficeContractAction;
+  actor?: Actor | null;
   correlationId: string;
   previousState: string;
   newState: string;
   summary: string;
   metadata: JsonRecord;
 }) {
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("audit_events").insert({
-    event_name:
+  await recordAuditEvent({
+    eventName:
       input.action === "retry"
         ? "contract.retry_backoffice"
         : "contract.link_regenerated_backoffice",
-    entity_type: "contract_requests",
-    entity_id: input.contractRequest.id,
-    employee_id: input.contractRequest.employee_id,
-    correlation_id: input.correlationId,
+    entityType: "contract_requests",
+    entityId: input.contractRequest.id,
+    employeeId: input.contractRequest.employee_id,
+    correlationId: input.correlationId,
     source: "backoffice",
-    previous_state: input.previousState,
-    new_state: input.newState,
+    previousState: input.previousState,
+    newState: input.newState,
     summary: input.summary,
     metadata: input.metadata,
-    actor_type: "internal_operator",
+    actor: input.actor ?? null,
+    actorType: "internal_operator",
   });
-
-  if (error) {
-    throw error;
-  }
 }
 
 async function createIntegrationLog(input: {
@@ -388,4 +558,45 @@ async function createIntegrationLog(input: {
   if (error) {
     throw error;
   }
+}
+
+async function getEmployee(employeeId: string): Promise<Employee | null> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("employees")
+    .select(
+      "id, rfc, curp, nombre, apellido_paterno, apellido_materno, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador, estado_civil, nacionalidad, lugar_origen, fecha_nacimiento, domicilio",
+    )
+    .eq("id", employeeId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as Employee | null;
+}
+
+async function getOffer(offerId: string): Promise<AdvanceOffer | null> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("advance_offers")
+    .select(
+      "id, employee_id, monto_prestamo_autorizado, estatus_p_esta_q, estatus_conversion, estatus_cliente, is_eligible, status, source_batch_id, source_row_id",
+    )
+    .eq("id", offerId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as AdvanceOffer | null;
+}
+
+async function getBankAccount(employeeId: string): Promise<BankAccount | null> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("employee_bank_accounts")
+    .select("clabe, banco")
+    .eq("employee_id", employeeId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as BankAccount | null;
 }

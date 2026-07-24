@@ -1,72 +1,61 @@
 ---
 name: adelantos-testing
-description: Planear, implementar y ejecutar pruebas unitarias (Vitest) y E2E (Playwright) del sistema de adelantos, confirmando importaciones, backoffice de control, endpoint de contratos, modulo WhatsApp, evidencia en Supabase, idempotencia y estados operativos antes de avanzar fases.
+description: Planear, implementar y ejecutar pruebas unitarias (Vitest) y E2E (Playwright) del sistema de adelantos, confirmando importaciones, backoffice, endpoint de contratos, módulo WhatsApp, evidencia en Supabase, idempotencia y estados operativos.
 ---
 
 # Adelantos Testing
 
-## Proposito
+## Lee primero
 
-Usar esta skill para validar que cada fase del sistema funciona de punta a punta antes de seguir construyendo. Las pruebas deben confirmar comportamiento observable en API, Supabase y backoffice, sin exponer secretos ni datos sensibles.
+`docs/testing.md` — configuración, cobertura actual, huecos y comandos.
 
-## Herramientas
+Los comandos están en `docs/testing.md`. Una sola nota al ejecutarlos: **usa `pnpm exec vitest run`, no `pnpm test`**, que corre en modo watch y deja el proceso colgado.
 
-- **Vitest**: pruebas unitarias para logica de negocio (`src/lib/`). Configurado en `vitest.config.ts`.
-- **Playwright**: pruebas E2E para flujos de UI y API contra servidor local.
+## Autenticación
 
-## Flujo De Validacion
+Las pruebas E2E corren autenticadas mediante el proyecto `setup` de Playwright (`tests/e2e/auth.setup.ts`), que crea un usuario de prueba con rol `admin` y guarda el `storageState`. **No lo eludas** añadiendo excepciones al gate de `src/proxy.ts`: la protección es el comportamiento correcto.
 
-1. Ejecutar validaciones estaticas: `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm build`.
-2. Ejecutar unit tests con Vitest: `pnpm test`.
-3. Elegir el compartimento de pruebas E2E segun el riesgo: `smoke`, `api`, `flows` o `all`.
-4. Ejecutar pruebas Playwright contra servidor local usando `webServer`.
-5. Probar endpoints con datos controlados y respuestas esperadas.
-6. Confirmar que el backoffice muestra los cambios relevantes cuando sea una prueba de flujo.
-7. Verificar idempotencia: repetir la accion no debe duplicar contratos activos.
-8. Reportar resultados con evidencia concreta: comandos, rutas probadas y estados esperados.
+Al probar el webhook de Meta, usa `postSignedWebhook` de `helpers/meta-signature.ts`: sin firma, el endpoint devuelve `401`.
 
-## Compartimentos E2E
+## Tres advertencias que cambian cómo lees un resultado
 
-- `smoke`: pruebas rapidas de carga visual y estructura basica del backoffice.
-- `api`: pruebas de endpoints aislados que no necesitan confirmar UI.
-- `flows`: pruebas completas que cruzan API, Supabase y backoffice.
-- `whatsapp`: pruebas especificas del modulo WhatsApp (dashboard, historial, envio masivo).
-- `all`: corrida completa solo antes de cerrar una fase o preparar entrega.
+1. **La suite corre contra `pnpm dev` con `retries: 1`.** El dev server compila cada ruta en el primer acceso; el reintento y los timeouts holgados absorben ese arranque en frío. No cambies a un build de producción: la suite `api` depende del comportamiento de desarrollo (`mock-sign` habilitado, webhook laxo sin secreto).
 
-## Cobertura Minima
+2. **Sin Supabase configurado, parte de la suite se salta en silencio.** **Antes de declarar que algo pasa, comprueba cuántos tests se ejecutaron**, no solo que no haya fallos.
 
-### Contratos
+3. **Los tests escriben en la base real.** No hay base de prueba separada. Nunca apuntes la suite a producción.
 
-- Backoffice carga y muestra `Control de contratos`.
-- `POST /api/manychat/request-contract` rechaza payload invalido.
-- El endpoint responde `not_found` para RFC inexistente.
-- Con un RFC elegible real, genera o reutiliza un link mock por 2 horas.
-- La vista de control refleja `contrato_generado`, `link_expirado`, `firmado` o `error` segun aplique.
-- Repetir la solicitud para la misma oferta reutiliza el link vigente o la solicitud existente.
+CI (`.github/workflows/ci.yml`) corre lint, tipos, tests unitarios, build, Gitleaks y `pnpm audit`. **No corre E2E** hasta que `flows` esté reescrita.
 
-### WhatsApp
+## Cómo validar bien
 
-- Dashboard `/whatsapp` carga con stats y sin errores.
-- Formulario de envio `/whatsapp/send` valida elegibilidad antes de enviar.
-- Historial `/whatsapp/history` muestra lista paginada de envios.
-- Health check `/api/health/whatsapp` responde con estado de configuracion.
-- Validacion de elegibilidad (`POST /api/whatsapp/bulk?action=validate`) retorna conteo correcto.
+Una prueba funcional debe confirmar **dos capas**: que la API responde lo esperado **y** que Supabase o el backoffice reflejan el estado resultante. Un test que solo mira el código HTTP no detecta que el estado no cambió.
 
-### Unit Tests (Vitest)
+Verifica idempotencia cuando aplique: repetir la solicitud del mismo contrato no debe crear una segunda solicitud activa ni un intento redundante.
 
-- `src/lib/whatsapp/eligibility.test.ts`: reglas de elegibilidad para envio masivo.
-- `src/lib/contracts/request-contract.test.ts`: logica de solicitud, idempotencia y estados.
+## Compartimentos
+
+- `smoke` — rápido, estable, **no crea datos**.
+- `api` — endpoints aislados, sin abrir página.
+- `flows` — recorridos completos que cruzan API, Supabase y backoffice; pueden crear datos.
+- `helpers` — utilidades compartidas, **sin assertions de negocio**.
+
+Mantén las pruebas E2E fuera de `src`. No mezcles pruebas lentas de flujo con smoke o API.
+
+## Dónde falta cobertura
+
+Los huecos más relevantes hoy, por si el trabajo justifica cerrarlos:
+
+- **No hay ni un test de componente**, pese a que jsdom, Testing Library y `msw` están instalados.
+- **`src/lib/imports/` no tiene tests unitarios.** Normalización, duplicados y versionado de ofertas concentran reglas de negocio y solo se validan indirectamente por E2E.
+- **`src/lib/backoffice/` tampoco.** Los modelos de lectura y la traducción de filtros no están cubiertos.
+
+Los tests unitarios existentes cubren elegibilidad, parseo del payload de contrato, normalización de teléfonos y monto en letra.
 
 ## Reglas
 
-- No imprimir `.env.local`, service role key ni payloads sensibles completos.
-- Usar RFCs de prueba o datos ya presentes en la BD local/Supabase del proyecto.
-- Si no hay empleado elegible, la prueba E2E debe saltar con explicacion, no fallar con falso negativo.
-- No borrar datos de Supabase como parte de las pruebas salvo instruccion explicita.
-- Las pruebas deben ser repetibles y seguras para entorno de desarrollo.
-- Mantener pruebas E2E fuera de `src`; usar `tests/e2e/<compartimento>`.
-- No mezclar pruebas lentas de flujo completo con pruebas smoke/API.
-
-## Referencias
-
-Leer `references/playwright-e2e.md` antes de crear o modificar pruebas Playwright.
+- No imprimir `.env.local`, la service role key ni payloads sensibles completos.
+- Usar RFCs de prueba o datos ya presentes en la base de desarrollo.
+- Si una prueba se salta por falta de datos elegibles, **el reporte debe decirlo con claridad** — un falso verde es peor que un fallo.
+- No borrar datos de Supabase como parte de las pruebas salvo instrucción explícita.
+- No dejar servidores extra corriendo al terminar.

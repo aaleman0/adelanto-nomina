@@ -7,7 +7,7 @@ import {
 
 // ---------------------------------------------------------------------------
 // POST /api/whatsapp/request-contract
-// Endpoint central del flujo WhatsApp: reemplaza /api/manychat/request-contract
+// Endpoint central del flujo WhatsApp para solicitud de contratos
 // ---------------------------------------------------------------------------
 
 test("rechaza payload sin subscriber_id", async ({ request }) => {

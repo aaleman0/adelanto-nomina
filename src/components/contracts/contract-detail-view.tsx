@@ -3,8 +3,10 @@ import {
   regenerateContractLinkAction,
   retryContractFlowAction,
 } from "@/app/contracts/actions";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import { RoleGate } from "@/components/auth/role-gate";
+import { SendWhatsAppButton } from "@/components/whatsapp/send-whatsapp-button";
 import { CopyLinkButton } from "@/components/ui/copy-link-button";
 import { Metric } from "@/components/ui/metric";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -13,10 +15,7 @@ import type { ContractControlRow } from "@/lib/backoffice/contract-control";
 import type { ContractTimelineRow } from "@/lib/backoffice/contract-detail";
 import { MessageHistory } from "@/components/contracts/message-history";
 
-const dateFormatter = new Intl.DateTimeFormat("es-MX", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
+const dateFormatter = new Intl.DateTimeFormat("es-MX", { dateStyle: "short" });
 
 export function ContractDetailView({
   control,
@@ -33,69 +32,42 @@ export function ContractDetailView({
   return (
     <div className="flex flex-col gap-6">
       {actionFeedback ? (
-        <div
-          className={[
-            "rounded-base border px-4 py-3 text-sm font-semibold",
-            getFeedbackClasses(actionFeedback.tone),
-          ].join(" ")}
-        >
+        <div className={["rounded-xl border px-4 py-3 text-sm", getFeedbackClasses(actionFeedback.tone)].join(" ")}>
           {actionFeedback.message}
         </div>
       ) : null}
 
-      <Card>
-        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <Card className="p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase text-primary">
-              Detalle operativo
-            </p>
-            <h2 className="mt-1 text-h2 font-semibold text-text-primary">
+            <h2 className="text-xl font-semibold text-text-primary">
               {control.empleado || "Empleado sin nombre"}
             </h2>
-            <p className="mt-1 text-sm text-text-muted">
-              RFC {control.rfc || "-"} · Telefono{" "}
-              {control.telefono_normalizado || "-"}
+            <p className="text-sm text-text-muted">
+              {control.rfc || "-"} · {control.telefono_normalizado || "-"}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <StatusBadge
-              status={formatStatus(control.operational_status)}
-              tone={getOperationalStatusTone(control.operational_status)}
-            />
-            <Link
-              className="inline-flex h-8 items-center rounded-base border border-border px-3 text-sm font-semibold text-text-primary hover:bg-surface-muted"
-              href="/contracts"
-            >
-              Volver a contratos
+          <div className="flex flex-wrap items-center gap-3">
+            <StatusBadge status={formatStatus(control.operational_status)} tone={getOperationalStatusTone(control.operational_status)} />
+            <Link className="text-sm font-medium text-text-muted hover:text-text-primary" href="/contracts">
+              Volver
             </Link>
           </div>
-        </CardHeader>
+        </div>
 
-        <CardBody>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="Empleador" value={control.empleador || "-"} />
-            <Metric
-              label="Monto"
-              value={formatMoney(control.monto_prestamo_autorizado)}
-              tone="success"
-            />
-            <Metric
-              label="Ultimo movimiento"
-              value={formatDate(control.last_movement_at)}
-            />
-            <Metric
-              label="WhatsApp ID"
-              value={control.whatsapp_subscriber_id || "-"}
-            />
-          </div>
-        </CardBody>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Empleador" value={control.empleador || "-"} />
+          <Metric label="Monto" value={formatMoney(control.monto_prestamo_autorizado)} />
+          <Metric label="Último movimiento" value={formatDate(control.last_movement_at)} />
+          <Metric label="WhatsApp ID" value={control.whatsapp_subscriber_id || "-"} />
+        </div>
       </Card>
 
       <ProgressFlow control={control} />
 
       <ActionsCard control={control} />
 
-      <section className="grid gap-6 lg:grid-cols-2">
+      <section className="grid gap-4 lg:grid-cols-2">
         <StatusCard
           title="Mensaje WhatsApp"
           status={control.message_status || "pendiente_envio"}
@@ -112,7 +84,7 @@ export function ContractDetailView({
           tone={getOperationalStatusTone(control.operational_status)}
           rows={[
             ["Solicitud", formatDate(control.contract_requested_at)],
-            ["Contract ID", control.easylex_contract_id || "-"],
+            ["ID", control.easylex_contract_id || "-"],
             ["Error", control.contract_error || control.attempt_error || "-"],
           ]}
         />
@@ -128,21 +100,10 @@ export function ContractDetailView({
         />
         <StatusCard
           title="Firma"
-          status={
-            control.contract_signed_at || control.attempt_signed_at
-              ? "firmado"
-              : "pendiente"
-          }
-          tone={
-            control.contract_signed_at || control.attempt_signed_at
-              ? "success"
-              : "warning"
-          }
+          status={control.contract_signed_at || control.attempt_signed_at ? "firmado" : "pendiente"}
+          tone={control.contract_signed_at || control.attempt_signed_at ? "success" : "warning"}
           rows={[
-            [
-              "Firmado",
-              formatDate(control.contract_signed_at || control.attempt_signed_at),
-            ],
+            ["Firmado", formatDate(control.contract_signed_at || control.attempt_signed_at)],
             ["Request ID", control.contract_request_id || "-"],
             ["Attempt ID", control.contract_attempt_id || "-"],
           ]}
@@ -166,22 +127,22 @@ function ProgressFlow({ control }: { control: ContractControlRow }) {
   ] as const;
 
   return (
-    <Card>
-      <CardHeader>
-        <h3 className="text-h2 font-semibold text-text-primary">Progreso operativo</h3>
-        <p className="text-sm text-text-muted">Importado → Mensaje → Click → Contrato → Firma</p>
-      </CardHeader>
-      <CardBody>
-        <div className="grid gap-3 md:grid-cols-5">
-          {steps.map(([label, done], index) => (
-            <div className={["rounded-base border px-4 py-3 transition", done ? "border-primary bg-primary/5" : "border-border bg-surface-muted"].join(" ")} key={label}>
-              <p className="text-xs font-semibold uppercase text-text-muted">Paso {index + 1}</p>
-              <p className="mt-1 font-semibold text-text-primary">{label}</p>
-              <p className={done ? "mt-1 text-sm text-primary" : "mt-1 text-sm text-text-muted"}>{done ? "Completado" : "Pendiente"}</p>
-            </div>
-          ))}
-        </div>
-      </CardBody>
+    <Card className="p-5">
+      <h3 className="text-sm font-medium text-text-muted">Progreso</h3>
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        {steps.map(([label, done]) => (
+          <div
+            key={label}
+            className={[
+              "flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm",
+              done ? "border-primary bg-primary-light text-primary" : "border-border bg-surface-muted text-text-muted",
+            ].join(" ")}
+          >
+            <span className={["h-2 w-2 rounded-full", done ? "bg-primary" : "bg-text-muted"].join(" ")} />
+            {label}
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }
@@ -192,47 +153,42 @@ function isLinkVigente(linkExpiresAt: string | null): boolean {
 }
 
 function ActionsCard({ control }: { control: ContractControlRow }) {
-  const isSigned =
-    control.operational_status === "firmado" ||
-    Boolean(control.contract_signed_at || control.attempt_signed_at);
+  const isSigned = control.operational_status === "firmado" || Boolean(control.contract_signed_at || control.attempt_signed_at);
   const hasRequest = Boolean(control.contract_request_id);
   const actionsDisabled = !hasRequest || isSigned;
   const linkVigente = isLinkVigente(control.link_expires_at);
 
   return (
-    <Card>
-      <CardHeader>
-        <h3 className="text-h2 font-semibold text-text-primary">
-          Acciones operativas
-        </h3>
-        <p className="text-sm text-text-muted">
-          Acciones internas para operar links mock antes de conectar EasyLex real.
-        </p>
-      </CardHeader>
-      <CardBody className="flex flex-col gap-4">
-        <div className="flex flex-wrap gap-3">
-          <form action={regenerateContractLinkAction}>
-            <input
-              name="contract_request_id"
-              type="hidden"
-              value={control.contract_request_id ?? ""}
-            />
-            <input name="employee_id" type="hidden" value={control.employee_id} />
+    <Card className="p-5">
+      <h3 className="text-sm font-medium text-text-muted">Acciones</h3>
+      <div className="mt-3 flex flex-wrap items-start gap-2">
+        {/* Enviar el mensaje inicial: es el paso que ARRANCA el flujo, así que
+            se ofrece mientras el contrato no esté firmado, sin depender de que
+            el empleado ya haya solicitado. */}
+        {!isSigned && (
+          <SendWhatsAppButton
+            employeeId={control.employee_id}
+            employeeName={control.empleado ?? control.nombre}
+          />
+        )}
+
+        <form action={regenerateContractLinkAction}>
+          <input name="contract_request_id" type="hidden" value={control.contract_request_id ?? ""} />
+          <input name="employee_id" type="hidden" value={control.employee_id} />
+          <RoleGate minimum="operaciones" mode="disable">
             <ConfirmSubmitButton
               confirmMessage="Se generará o reutilizará un link vigente para este contrato. ¿Continuar?"
               disabled={actionsDisabled}
             >
               Regenerar link
             </ConfirmSubmitButton>
-          </form>
+          </RoleGate>
+        </form>
 
-          <form action={retryContractFlowAction}>
-            <input
-              name="contract_request_id"
-              type="hidden"
-              value={control.contract_request_id ?? ""}
-            />
-            <input name="employee_id" type="hidden" value={control.employee_id} />
+        <form action={retryContractFlowAction}>
+          <input name="contract_request_id" type="hidden" value={control.contract_request_id ?? ""} />
+          <input name="employee_id" type="hidden" value={control.employee_id} />
+          <RoleGate minimum="operaciones" mode="disable">
             <ConfirmSubmitButton
               confirmMessage="Se reintentará el flujo operativo y quedará evidencia en el timeline. ¿Continuar?"
               disabled={actionsDisabled}
@@ -240,39 +196,38 @@ function ActionsCard({ control }: { control: ContractControlRow }) {
             >
               Reintentar flujo
             </ConfirmSubmitButton>
-          </form>
+          </RoleGate>
+        </form>
 
-          {control.signing_url ? (
-            <>
-              {linkVigente ? (
-                <Link
-                  className="inline-flex h-10 items-center justify-center rounded-base border border-border bg-surface px-4 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted"
-                  href={control.signing_url}
-                  target="_blank"
-                >
-                  Abrir link
-                </Link>
-              ) : (
-                <span
-                  className="inline-flex h-10 cursor-not-allowed items-center justify-center rounded-base border border-border bg-surface-muted px-4 text-sm font-semibold text-text-muted"
-                  title={`Link expirado${control.link_expires_at ? ` el ${new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(control.link_expires_at))}` : ""}`}
-                >
-                  Link expirado
-                </span>
-              )}
-              <CopyLinkButton value={control.signing_url} />
-            </>
-          ) : null}
-        </div>
-
-        <div className="rounded-base border border-border bg-surface-muted px-4 py-3 text-sm text-text-muted">
-          {!hasRequest
-            ? "Las acciones se habilitan cuando el empleado solicita desde WhatsApp."
-            : isSigned
-              ? "Este contrato ya esta firmado; no se debe regenerar ni reintentar."
-              : "Si el link sigue vigente, el sistema lo reutiliza. Si vencio o hubo error, crea un nuevo intento y deja evidencia en timeline."}
-        </div>
-      </CardBody>
+        {control.signing_url ? (
+          <>
+            {linkVigente ? (
+              <Link
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-text-primary transition hover:bg-surface-muted"
+                href={control.signing_url}
+                target="_blank"
+              >
+                Abrir link
+              </Link>
+            ) : (
+              <span
+                className="inline-flex h-9 cursor-not-allowed items-center justify-center rounded-lg border border-border bg-surface-muted px-4 text-sm font-medium text-text-muted"
+                title={`Link expirado${control.link_expires_at ? ` el ${formatDate(control.link_expires_at)}` : ""}`}
+              >
+                Link expirado
+              </span>
+            )}
+            <CopyLinkButton value={control.signing_url} />
+          </>
+        ) : null}
+      </div>
+      <p className="mt-3 text-sm text-text-muted">
+        {!hasRequest
+          ? "Las acciones se habilitan cuando el empleado solicita desde WhatsApp."
+          : isSigned
+            ? "Este contrato ya está firmado; no se debe regenerar ni reintentar."
+            : "Si el link sigue vigente, el sistema lo reutiliza. Si venció o hubo error, crea un nuevo intento."}
+      </p>
     </Card>
   );
 }
@@ -289,186 +244,96 @@ function StatusCard({
   rows: Array<[string, string]>;
 }) {
   return (
-    <Card>
-      <CardHeader className="flex items-center justify-between gap-3">
-        <h3 className="text-h2 font-semibold text-text-primary">{title}</h3>
+    <Card className="p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-medium text-text-primary">{title}</h3>
         <StatusBadge status={formatStatus(status)} tone={tone} />
-      </CardHeader>
-      <CardBody className="flex flex-col gap-3 text-sm">
+      </div>
+      <dl className="mt-3 space-y-2 text-sm">
         {rows.map(([label, value]) => (
-          <div className="grid gap-1 sm:grid-cols-[140px_1fr]" key={label}>
-            <span className="font-semibold text-text-muted">{label}</span>
-            <span className="break-all text-text-primary">{value}</span>
+          <div key={label} className="grid gap-1 sm:grid-cols-[120px_1fr]">
+            <dt className="text-text-muted">{label}</dt>
+            <dd className="break-all text-text-primary">{value}</dd>
           </div>
         ))}
-      </CardBody>
+      </dl>
     </Card>
   );
 }
 
 function TimelineCard({ timeline }: { timeline: ContractTimelineRow[] }) {
   return (
-    <Card>
-      <CardHeader>
-        <h3 className="text-h2 font-semibold text-text-primary">
-          Timeline operativo
-        </h3>
-        <p className="text-sm text-text-muted">
-          Evidencia ordenada por fecha para explicar que paso con este contrato.
-        </p>
-      </CardHeader>
-      <CardBody className="p-0">
+    <Card className="p-4">
+      <h3 className="text-sm font-medium text-text-muted">Timeline</h3>
+      <div className="mt-3 divide-y divide-border">
         {timeline.length > 0 ? (
-          <div className="divide-y divide-border">
-            {timeline.map((item, index) => (
-              <article
-                className="grid gap-3 px-6 py-4 md:grid-cols-[180px_180px_1fr]"
-                key={`${item.entity_type}-${item.entity_id}-${item.event_type}-${index}`}
-              >
-                <div>
-                  <p className="text-sm font-semibold text-text-primary">
-                    {formatDate(item.occurred_at)}
-                  </p>
-                  <p className="text-xs uppercase text-text-muted">
-                    {item.source}
-                  </p>
-                </div>
-                <div className="flex flex-col items-start gap-2">
-                  <StatusBadge
-                    status={formatStatus(item.status || item.event_type)}
-                    tone={getTimelineTone(item.status, item.event_type)}
-                  />
-                  <span className="text-xs text-text-muted">
-                    {formatStatus(item.event_type)}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm text-text-primary">{item.summary}</p>
-                  <p className="mt-1 text-xs text-text-muted">
-                    {item.entity_type || "-"} · {shortId(item.entity_id)}
-                  </p>
-                </div>
-              </article>
-            ))}
-          </div>
+          timeline.map((item, index) => (
+            <article className="grid gap-2 py-3 md:grid-cols-[160px_140px_1fr]" key={`${item.entity_type}-${item.entity_id}-${item.event_type}-${index}`}>
+              <div>
+                <p className="text-sm font-medium text-text-primary">{formatDate(item.occurred_at)}</p>
+                <p className="text-xs text-text-muted">{item.source}</p>
+              </div>
+              <StatusBadge status={formatStatus(item.status || item.event_type)} tone={getTimelineTone(item.status, item.event_type)} />
+              <div>
+                <p className="text-sm text-text-primary">{item.summary}</p>
+                <p className="mt-0.5 text-xs text-text-muted">{item.entity_type || "-"}</p>
+              </div>
+            </article>
+          ))
         ) : (
-          <p className="px-6 py-8 text-sm text-text-muted">
-            Todavia no hay eventos de timeline para este empleado.
-          </p>
+          <p className="py-4 text-sm text-text-muted">Sin eventos para este empleado.</p>
         )}
-      </CardBody>
+      </div>
     </Card>
   );
 }
 
 function formatMoney(value: number | null) {
-  if (value === null) {
-    return "-";
-  }
-
-  return new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN",
-    maximumFractionDigits: 2,
-  }).format(value);
+  if (value === null) return "-";
+  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(value);
 }
 
 function formatDate(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-
+  if (!value) return "-";
   return dateFormatter.format(new Date(value));
 }
 
-function formatStatus(value: string) {
+function formatStatus(value: string | null) {
+  if (!value) return "pendiente";
   return value.replaceAll("_", " ");
 }
 
-function shortId(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-
-  return value.length > 12 ? `${value.slice(0, 8)}...` : value;
-}
-
 function getMessageStatusTone(status: string | null): StatusTone {
-  if (status === "error") {
-    return "danger";
-  }
-
-  if (status === "click" || status === "enviado" || status === "entregado") {
-    return "success";
-  }
-
-  if (status === "pendiente_envio") {
-    return "warning";
-  }
-
+  if (status === "error") return "danger";
+  if (status === "click" || status === "enviado" || status === "entregado") return "success";
+  if (status === "pendiente_envio") return "warning";
   return "neutral";
 }
 
 function getOperationalStatusTone(status: string): StatusTone {
-  if (status === "error") {
-    return "danger";
-  }
-
-  if (status === "firmado" || status === "contrato_generado") {
-    return "success";
-  }
-
-  if (status === "link_expirado" || status === "pendiente_envio") {
-    return "warning";
-  }
-
+  if (status === "error") return "danger";
+  if (status === "firmado" || status === "contrato_generado") return "success";
+  if (status === "link_expirado" || status === "pendiente_envio") return "warning";
   return "neutral";
 }
 
 function getAttemptStatusTone(status: string | null): StatusTone {
-  if (status === "error") {
-    return "danger";
-  }
-
-  if (status === "firmado" || status === "generado") {
-    return "success";
-  }
-
-  if (status === "expirado" || status === null) {
-    return "warning";
-  }
-
+  if (status === "error") return "danger";
+  if (status === "firmado" || status === "generado") return "success";
+  if (status === "expirado" || status === null) return "warning";
   return "neutral";
 }
 
 function getTimelineTone(status: string | null, eventType: string): StatusTone {
-  if (status === "error" || eventType.includes("error")) {
-    return "danger";
-  }
-
-  if (status === "firmado" || eventType.includes("signed")) {
-    return "success";
-  }
-
-  if (status === "expirado" || eventType.includes("expired")) {
-    return "warning";
-  }
-
+  if (status === "error" || eventType.includes("error")) return "danger";
+  if (status === "firmado" || eventType.includes("signed")) return "success";
+  if (status === "expirado" || eventType.includes("expired")) return "warning";
   return "neutral";
 }
 
 function getFeedbackClasses(tone: StatusTone) {
-  if (tone === "success") {
-    return "border-green-200 bg-green-50 text-green-900";
-  }
-
-  if (tone === "warning") {
-    return "border-yellow-200 bg-yellow-50 text-yellow-900";
-  }
-
-  if (tone === "danger") {
-    return "border-red-200 bg-red-50 text-red-900";
-  }
-
+  if (tone === "success") return "border-green-200 bg-green-50 text-green-900";
+  if (tone === "warning") return "border-amber-200 bg-amber-50 text-amber-900";
+  if (tone === "danger") return "border-red-200 bg-red-50 text-red-900";
   return "border-border bg-surface-muted text-text-primary";
 }

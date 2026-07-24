@@ -10,7 +10,9 @@
  *   logger.error("whatsapp.send_failed", err, { employeeId, templateName });
  */
 
-type LogLevel = "info" | "warn" | "error" | "debug";
+import { captureException } from "@/lib/observability";
+
+type LogLevel = "info" | "warn" | "error" | "debug" | "critical";
 
 type LogContext = Record<string, unknown>;
 
@@ -39,6 +41,13 @@ function formatLog(level: LogLevel, message: string, context?: LogContext, error
 
 function log(level: LogLevel, message: string, context?: LogContext, error?: unknown) {
   const entry = formatLog(level, message, context, error);
+
+  // Los errores y eventos críticos se reportan a observabilidad. Es un no-op si
+  // Sentry no está configurado. Se incluye el `message` (el identificador del
+  // evento) en el contexto para poder agrupar por él en Sentry.
+  if (level === "error" || level === "critical") {
+    captureException(error ?? new Error(message), { ...(context ?? {}), event: message, level });
+  }
 
   if (process.env.NODE_ENV === "development") {
     // En desarrollo: formato legible

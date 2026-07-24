@@ -1,7 +1,6 @@
 import Link from "next/link";
 import Form from "next/form";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
 import { SearchInput } from "@/components/contracts/search-input";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import type {
@@ -26,13 +25,12 @@ const statusOptions: Array<{
 ];
 
 const selectCls =
-  "h-10 w-full rounded-xl border border-border bg-surface px-3 text-[13px] font-normal text-text-primary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20";
+  "h-10 w-full rounded-lg border border-border bg-white/70 px-3 text-sm text-text-primary outline-none transition focus:border-primary focus:bg-white";
 
 export function ContractControlFilters({
   filters,
   empleadores,
   total,
-  visible,
   limit,
   page,
   totalPages,
@@ -40,91 +38,70 @@ export function ContractControlFilters({
   filters: ContractControlFilters;
   empleadores: string[];
   total: number;
-  visible: number;
   limit: number;
   page: number;
   totalPages: number;
 }) {
-  // Params activos sin `page` — se pasan a PaginationControls para que cada
-  // link de página preserve los filtros actuales.
   const activeParams: Record<string, string> = {};
   if (filters.q) activeParams.q = filters.q;
   if (filters.status && filters.status !== "all") activeParams.status = filters.status;
   if (filters.empleador) activeParams.empleador = filters.empleador;
 
   return (
-    <Card>
-      <CardBody className="flex flex-col gap-4">
-        {/* Usar next/form para client-side navigation con prefetch automático */}
-        <Form action="/contracts" className="grid gap-3 lg:grid-cols-[1fr_200px_200px_auto_auto]">
-          <label className="flex flex-col gap-1.5 text-[12px] font-bold text-text-muted uppercase tracking-[0.1em]">
-            Buscar
-            <SearchInput defaultValue={filters.q} />
-          </label>
+    <div className="surface-panel shrink-0 rounded-xl p-4 sm:p-5">
+      <div className="mb-4 flex items-center justify-between gap-3"><div><h2 className="font-display text-base font-semibold text-text-primary">Buscar contratos</h2><p className="text-xs text-text-muted">Encuentra por nombre, teléfono o RFC.</p></div>{Object.keys(activeParams).length > 0 ? <Link className="text-xs font-semibold text-primary hover:text-primary-hover" href="/contracts">Quitar filtros</Link> : null}</div>
+      {/* key ligado a los filtros activos: en navegación de cliente (Aplicar /
+          Restablecer) los inputs no controlados no resetean su defaultValue al
+          reconciliar; remontar el formulario al cambiar los filtros hace que el
+          select y el buscador reflejen de verdad la URL. */}
+      <Form key={JSON.stringify(activeParams)} action="/contracts" className="flex flex-col gap-3 lg:flex-row lg:items-end">
+        <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium text-text-muted">
+          Buscar
+          <SearchInput defaultValue={filters.q} />
+        </label>
 
-          <label className="flex flex-col gap-1.5 text-[12px] font-bold text-text-muted uppercase tracking-[0.1em]">
-            Estado
-            <select
-              className={selectCls}
-              defaultValue={filters.status ?? "all"}
-              name="status"
-            >
-              {statusOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium text-text-muted lg:w-44">
+          Estado
+          <select className={selectCls} defaultValue={filters.status ?? "all"} name="status">
+            {statusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
-          <label className="flex flex-col gap-1.5 text-[12px] font-bold text-text-muted uppercase tracking-[0.1em]">
-            Empleador
-            <select
-              className={selectCls}
-              defaultValue={filters.empleador ?? ""}
-              name="empleador"
-            >
-              <option value="">Todos</option>
-              {empleadores.map((empleador) => (
-                <option key={empleador} value={empleador}>
-                  {empleador}
-                </option>
-              ))}
-            </select>
-          </label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium text-text-muted lg:w-52">
+          Empleador
+          <select className={selectCls} defaultValue={filters.empleador ?? ""} name="empleador">
+            <option value="">Todos</option>
+            {empleadores.map((empleador) => (
+              <option key={empleador} value={empleador}>
+                {empleador}
+              </option>
+            ))}
+          </select>
+        </label>
 
-          <div className="flex items-end">
-            <Button type="submit">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              Filtrar
-            </Button>
-          </div>
+        <div className="flex gap-2">
+          <Button type="submit">Aplicar filtros</Button>
+          <Link
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-text-muted transition hover:bg-surface-muted hover:text-text-primary"
+            href="/contracts"
+          >
+            Restablecer
+          </Link>
+        </div>
+      </Form>
 
-          <div className="flex items-end">
-            <Link
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-text-muted transition hover:bg-surface-muted hover:text-text-primary"
-              href="/contracts"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              Limpiar
-            </Link>
-          </div>
-        </Form>
-
-        <PaginationControls
-          page={page}
-          totalPages={totalPages}
-          total={total}
-          visible={visible}
-          limit={limit}
-          baseHref="/contracts"
-          currentParams={activeParams}
-        />
-      </CardBody>
-    </Card>
+      <div className="mt-4 border-t border-border pt-4"><PaginationControls
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        limit={limit}
+        baseHref="/contracts"
+        currentParams={activeParams}
+      /></div>
+    </div>
   );
 }

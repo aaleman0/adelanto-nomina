@@ -1,65 +1,83 @@
 ---
 name: adelantos-backend
-description: Implementar o revisar el backend operativo del sistema de adelantos, incluyendo endpoints para WhatsApp Cloud API, webhooks de EasyLex, reglas de negocio, estados, colas, jobs, logs, reintentos, seguridad e idempotencia. Use cuando Codex deba crear APIs, modelos, servicios, workers, state machines o integraciones entre WhatsApp API, EasyLex, base de datos y front interno.
+description: Implementar o revisar el backend operativo del sistema de adelantos: endpoints para WhatsApp Cloud API, webhooks de EasyLex y Meta, reglas de negocio, estados, jobs, logs, reintentos, seguridad e idempotencia. Use cuando haya que crear o modificar API routes, servicios, máquinas de estado o integraciones entre WhatsApp, EasyLex, Supabase y el frontend interno.
 ---
 
 # Adelantos Backend
 
-## Proposito
+## Lee primero
 
-Usar esta skill para construir el cerebro del sistema con Next.js + Supabase como stack preferido para v1. El backend debe validar, decidir, persistir en Supabase Postgres, integrar y exponer evidencia mediante rutas server-side/API routes. Si EasyLex requiere procesos largos o limites estrictos, agregar worker/cola despues.
+- `docs/api.md` — inventario completo de endpoints y sus contratos. **No inventes rutas: verifícalas ahí.**
+- `docs/base-de-datos.md` — tablas, enums e índices que imponen las reglas.
 
-## Endpoints Implementados
+## Convenciones que debes respetar
 
-- `POST /api/manychat/request-contract`: solicitud de contrato (compatible con WhatsApp y mock)
-- `GET/POST /api/webhooks/whatsapp`: verificacion y recepcion de eventos Meta (entrega, lectura)
-- `POST /api/webhooks/easylex/mock-sign`: webhook mock de firma EasyLex para pruebas
-- `POST /api/imports`: subida y validacion de CSV
-- `POST /api/imports/[batchId]/apply`: aplicar lote validado a tablas operativas
-- `POST /api/whatsapp/bulk`: iniciar envio masivo (`?action=send` o `?action=validate`)
-- `GET /api/whatsapp/bulk/history`: historial paginado de envios masivos
-- `GET /api/whatsapp/bulk/detail`: detalle de un envio masivo
-- `GET/POST /api/whatsapp/config`: obtener o guardar configuracion de WhatsApp
-- `GET /api/whatsapp/stats`: estadisticas para dashboard
-- `GET /api/whatsapp/templates`: listar plantillas
-- `POST /api/whatsapp/templates/sync`: sincronizar plantillas desde Meta
-- `GET /api/health/whatsapp`: health check de configuracion y conectividad WhatsApp
-- `GET /api/health`: health check general (Supabase + WhatsApp)
+Son consistentes en todo el código; romperlas crea inconsistencia visible para quien consume la API.
 
-## Endpoints Pendientes (Fase 8-9)
+- **El estado de negocio va en el body, no en el HTTP.** `request-contract` devuelve `200` incluso con `not_found`. El `400` se reserva a fallos de parseo.
+- **Los webhooks siempre responden `200`**, incluso ante error capturado, para evitar reintentos del proveedor. El fallo se registra en `integration_logs`.
+- **Los mensajes de error van en español**, orientados al operador.
+- **`export const runtime = "nodejs"`** en todo route handler.
 
-- `POST /api/webhooks/easylex`: webhook real de firma EasyLex
+## Realidades del código que sorprenden
 
-## Reglas De Negocio
+- **La validación va con Zod en el borde.** Usa `parseJsonBody` / `parseQuery` de `src/lib/api/validation.ts` y define el esquema en `src/lib/whatsapp/schemas.ts`. Colócala **antes** del `try/catch`: un `400` de validación no debe salir del bloque que captura errores de servidor.
+- **`request-contract` es la excepción**: conserva su parser propio porque acepta alias snake/camelCase y tiene 11 tests que fijan ese comportamiento. No lo migres sin actualizarlos.
+- **No hay módulo de auditoría.** Seis archivos declaran su propio `createAuditEvent` privado, y lo mismo ocurre con `createIntegrationLog`. Antes de copiar el helper una séptima vez, considera extraerlo.
+- **El gate de auth es `src/proxy.ts`**, convención de Next.js 16. `src/middleware.ts` no existe.
+- **Hay cola, pero está desactivada por defecto.** `getQueueDriver()` devuelve `inline` salvo que Cloud Tasks esté configurado. Si añades trabajo que pueda tardar, encólalo con el mismo patrón en vez de meterlo en el request.
+- **Todo worker de cola debe ser idempotente.** Cloud Tasks entrega *al menos una vez*. El patrón usado es reclamar la fila con un `UPDATE ... WHERE status = 'queued'` antes de actuar; cópialo, no inventes otro.
+- **Los códigos de respuesta de un worker son semánticos**: `200` completa la tarea, `4xx` la descarta, `5xx` la reintenta. Devolver `500` ante un rechazo permanente provoca reintentos infinitos.
 
-- Validar empleado activo antes de crear solicitud.
-- Verificar oferta vigente y monto aprobado.
-- Evitar contratos duplicados para la misma oferta.
-- Usar idempotency key para solicitudes de contrato.
-- Manejar EasyLex de forma asincrona cuando haya volumen alto.
-- Persistir estado antes de llamar servicios externos cuando sea util para reintentar.
-- Devolver respuestas pequenas y estables al empleado por WhatsApp.
-- Para envios masivos de WhatsApp: validar elegibilidad, enviar en lotes de 100 con pausa de 1s entre lotes.
-- Guardar `wamid` de cada mensaje enviado para rastreo de entrega.
-- Monitorear tasa de error en envios masivos; alertar si supera el 10%.
+## Reglas de negocio
 
-## Colas Y Workers
+- Validar oferta vigente, elegible y cuenta bancaria activa antes de crear una solicitud.
+- Una solicitud por oferta; una sola solicitud activa por empleado. Ambas garantizadas por constraints.
+- Reutilizar el link vigente; regenerar como **nuevo intento** si expiró (TTL 2 h).
+- Persistir estado antes de llamar a un servicio externo cuando sirva para reintentar.
+- Devolver respuestas pequeñas y estables a quien consume desde WhatsApp.
+- Guardar el `wamid` de cada mensaje para rastrear entrega.
 
-- Crear job para generar contrato si la llamada puede tardar.
-- Crear job para actualizar estado en WhatsApp despues de EasyLex.
-- Crear job para procesar importaciones grandes.
-- Registrar reintentos con limite y razon.
-- Mover fallas permanentes a estado visible en backoffice.
+Detalle en `docs/easylex-contratos.md` y `docs/whatsapp.md`.
 
-## Seguridad
+## Seguridad — lo que ya está resuelto
 
-- Validar `WHATSAPP_APP_SECRET` en webhooks de Meta usando firma HMAC.
-- Validar tokens o secretos de EasyLex en su webhook.
-- Separar credenciales por ambiente.
-- No registrar datos sensibles completos en logs visibles.
-- En v1 el backoffice puede operar sin login; dejar estructura preparada para proteger endpoints con Supabase Auth y roles despues.
+No lo deshagas por accidente:
 
-## Referencias
+- Los webhooks de Meta y EasyLex verifican su firma con `src/lib/security/webhook-signatures.ts`, **siempre en tiempo constante**. Si añades un webhook nuevo, usa ese módulo; no compares secretos con `===`.
+- El webhook de Meta lee `await request.text()` y parsea después. **Cambiarlo a `request.json()` rompe la verificación HMAC**, porque la firma es sobre los bytes crudos.
+- Ambos webhooks fallan *cerrados* en producción cuando falta el secreto.
+- `mock-sign` responde `404` en producción.
+- RLS está activada en deny-all; la app funciona porque `service_role` la bypassa.
 
-Leer `references/endpoints-estados.md` para contratos API iniciales y estados operativos.
-Leer `../adelantos-arquitectura/references/fases-v1.md` antes de implementar endpoints para respetar el orden por fases.
+## RBAC
+
+Toda ruta de escritura empieza con `requireRole()`:
+
+```ts
+const auth = await requireRole("operaciones");
+if (!auth.ok) return auth.response;
+// auth.actor disponible para auditoría
+```
+
+Roles acumulativos: `solo_lectura` < `operaciones` < `admin`. El reparto por endpoint está en `docs/api.md`.
+
+Dos cosas fáciles de olvidar:
+- **Las server actions no pasan por `src/proxy.ts`**: comprueban el rol por su cuenta.
+- Por defecto RBAC está en modo `warn` y **no bloquea**. No asumas que un rol insuficiente devuelve 403 salvo con `RBAC_ENFORCEMENT=enforce`.
+
+## Auditoría
+
+Usa `recordAuditEvent` / `recordIntegrationLog` de `src/lib/audit/`. **Pasa siempre `actor` cuando la acción venga del backoffice**, o se pierde quién la ejecutó.
+
+`audit_events.entity_id` es de tipo **uuid**: pasar una cadena arbitraria hace fallar el insert.
+
+Toda la auditoría pasa ya por el módulo compartido; no quedan helpers privados por migrar.
+
+## Seguridad — pendientes reales
+
+- **Rate limiting** con `enforceRateLimit(request, RATE_LIMITS.x)` al inicio del handler (`src/lib/security/`). Límites en `rate-limit-config.ts`. Es en memoria y por instancia: frena abuso trivial, no vale como límite global exacto (haría falta Redis). Ponlo **antes** de la verificación de firma en webhooks, para que el martilleo no llegue ni a verificarse.
+- **Fase B de RLS** pendiente: políticas por rol y lecturas con el cliente de sesión.
+- Los secretos ya no se guardan en `settings`, pero **pueden quedar filas antiguas**: conviene borrarlas.
+
+No registres datos sensibles completos en logs visibles.

@@ -1,78 +1,82 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { PhoneAuditFixBodySchema, PhoneFixEntrySchema } from "@/lib/whatsapp/schemas";
+import { parseJsonBody } from "@/lib/api/validation";
+import { requireRole } from "@/lib/auth/roles";
+import { recordAuditEvent } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
-type FixEntry = {
-  employee_id: string;
-  telefono_normalizado: string;
-};
-
 /**
  * POST /api/whatsapp/phone-audit/fix
  *
- * Aplica correcciones automáticas de teléfono a los empleados indicados.
- * Solo acepta correcciones sugeridas por el auditor (no permite valores arbitrarios).
+ * Aplica correcciones de teléfono a los empleados indicados.
+ *
+ * El sobre se valida con Zod; cada entrada se valida por separado para que una
+ * corrección inválida no invalide el lote completo. El teléfono llega ya
+ * normalizado a dígitos por el esquema.
  */
 export async function POST(request: Request) {
+  const auth = await requireRole("admin");
+  if (!auth.ok) return auth.response;
+
+  const parsed = await parseJsonBody(request, PhoneAuditFixBodySchema);
+  if (!parsed.success) return parsed.response;
+  const { fixes } = parsed.data;
+
   try {
-    const body = await request.json();
-    const fixes: FixEntry[] = body?.fixes ?? [];
-
-    if (!Array.isArray(fixes) || fixes.length === 0) {
-      return NextResponse.json({ ok: false, error: "No se enviaron correcciones." }, { status: 400 });
-    }
-
     const supabase = getSupabaseAdmin();
     let fixed = 0;
     let errors = 0;
+    const appliedEmployeeIds: string[] = [];
 
-    for (const fix of fixes) {
-      if (!fix.employee_id || !fix.telefono_normalizado) {
-        errors += 1;
-        continue;
-      }
+    for (const rawFix of fixes) {
+      const entry = PhoneFixEntrySchema.safeParse(rawFix);
 
-      // Validar que el valor propuesto tiene un formato razonable (solo dígitos, 10–15 chars)
-      const digits = fix.telefono_normalizado.replace(/\D/g, "");
-      if (digits.length < 10 || digits.length > 15) {
+      if (!entry.success) {
         logger.warn("whatsapp.phone_audit.fix.invalid", {
-          employee_id: fix.employee_id,
-          proposed: fix.telefono_normalizado,
+          issues: entry.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
         });
         errors += 1;
         continue;
       }
+
+      const { employee_id, telefono_normalizado } = entry.data;
 
       const { error } = await supabase
         .from("employees")
-        .update({ telefono_normalizado: digits })
-        .eq("id", fix.employee_id);
+        .update({ telefono_normalizado })
+        .eq("id", employee_id);
 
       if (error) {
-        logger.error("whatsapp.phone_audit.fix.error", error, { employee_id: fix.employee_id });
+        logger.error("whatsapp.phone_audit.fix.error", error, { employee_id });
         errors += 1;
-      } else {
-        fixed += 1;
-        logger.info("whatsapp.phone_audit.fix.applied", {
-          employee_id: fix.employee_id,
-          telefono_normalizado: digits,
-        });
+        continue;
       }
+
+      fixed += 1;
+      appliedEmployeeIds.push(employee_id);
+      logger.info("whatsapp.phone_audit.fix.applied", { employee_id, telefono_normalizado });
     }
 
-    // Registro de auditoría global
     if (fixed > 0) {
-      await supabase.from("audit_events").insert({
-        event_name: "phone_audit.bulk_fix",
-        entity_type: "employees",
-        entity_id: "bulk",
-        source: "backend",
-        summary: `Corrección masiva de teléfonos: ${fixed} corregido${fixed !== 1 ? "s" : ""}, ${errors} error${errors !== 1 ? "es" : ""}.`,
-        metadata: { fixed, errors, employee_ids: fixes.map((f) => f.employee_id) },
-        actor_type: "operator",
-      });
+      // `entity_id` es uuid: antes se insertaba la cadena "bulk", lo que hacía
+      // fallar el insert en silencio y dejaba la corrección sin rastro. Ahora
+      // va null y el detalle en metadata, con el operador que la ejecutó.
+      try {
+        await recordAuditEvent({
+          eventName: "phone_audit.bulk_fix",
+          entityType: "employees",
+          entityId: null,
+          source: "backoffice",
+          summary: `Corrección masiva de teléfonos: ${fixed} corregido${fixed !== 1 ? "s" : ""}, ${errors} error${errors !== 1 ? "es" : ""}.`,
+          metadata: { fixed, errors, employee_ids: appliedEmployeeIds },
+          actor: auth.actor,
+        });
+      } catch (auditError) {
+        logger.error("whatsapp.phone_audit.fix.audit_failed", auditError, { fixed, errors });
+      }
     }
 
     return NextResponse.json({ ok: true, fixed, errors });

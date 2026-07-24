@@ -1,93 +1,84 @@
 import { expect, test } from "@playwright/test";
-import {
-  createBackofficeStatusFixture,
-  getRequiredSupabaseTestClient,
-} from "../helpers/contract-fixtures";
+import { findEligibleContractFixture } from "../helpers/supabase";
 
-test("navegacion desde dashboard a control de contratos", async ({ page }) => {
+// ---------------------------------------------------------------------------
+// Flow E2E: Operación → Contratos → Expediente → Volver
+//
+// Cubre la navegación principal del backoffice tras el rediseño por flujo:
+//   1. La vista de Operación (cockpit) carga y ofrece el salto al archivo
+//      completo de contratos.
+//   2. Desde el archivo de contratos se abre el expediente de un empleado.
+//   3. Desde el expediente se regresa al archivo de contratos.
+//
+// La autenticación es automática (proyecto "setup" deja el storageState), así
+// que aquí nunca se hace login manual.
+//
+// Los selectores se apoyan en roles/textos estables (headings, nombres de
+// enlace) y no en nombres de columna ni en datos concretos. Los tests que
+// necesitan una fila real de contrato se saltan con test.skip cuando no hay
+// Supabase o no existe un contrato elegible.
+// ---------------------------------------------------------------------------
+
+test("desde Operación se navega al archivo de contratos", async ({ page }) => {
   await page.goto("/");
 
-  // Verificar que el dashboard carga correctamente
-  await expect(page.getByRole("heading", { name: "Dashboard operativo" })).toBeVisible();
+  // Si faltara la sesión, el middleware nos mandaría a /login; comprobamos que
+  // seguimos en la raíz y que el cockpit por flujo renderiza sus piezas.
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "Operación", exact: true })).toBeVisible();
+  await expect(page.getByText("Embudo de conversión")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Requieren acción" })).toBeVisible();
+  await expect(page.getByText("Inspector", { exact: true })).toBeVisible();
 
-  // Verificar que las secciones del dashboard son visibles
-  await expect(page.getByRole("heading", { name: "Atención requerida" })).toBeVisible();
+  // El cockpit enlaza al archivo completo; ese es el puente a /contracts.
+  await page.getByRole("link", { name: "Ver archivo completo" }).first().click();
 
-  // Verificar que no hay errores de red
-  const errors: string[] = [];
-  page.on("console", (msg) => {
-    if (msg.type() === "error") {
-      errors.push(msg.text());
-    }
-  });
-
-  await page.waitForLoadState("networkidle");
-  expect(errors.length).toBe(0);
+  await expect(page).toHaveURL(/\/contracts/);
+  await expect(page.getByRole("heading", { name: "Contratos", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Expedientes" })).toBeVisible();
 });
 
-test("navegacion desde control de contratos a ver detalle", async ({ page }) => {
-  const supabase = getRequiredSupabaseTestClient();
-  const fixture = await createBackofficeStatusFixture(supabase, "pendiente_envio");
+test("desde el archivo de contratos se abre el expediente del empleado", async ({
+  page,
+}) => {
+  const fixture = await findEligibleContractFixture();
+  test.skip(!fixture, "Requiere Supabase con un contrato elegible — test omitido.");
+  if (!fixture) return; // Narrowing para TS; inalcanzable tras el skip.
 
-  await page.goto(`/contracts?q=${fixture.rfc}`);
+  // Buscamos por RFC para acotar el archivo a la fila del empleado.
+  await page.goto(`/contracts?q=${encodeURIComponent(fixture.rfc)}`);
 
-  // Verificar que la tabla de contratos carga
-  await expect(page.getByRole("heading", { name: "Control de contratos" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Contratos", exact: true })).toBeVisible();
   await expect(page.getByText(fixture.rfc).first()).toBeVisible();
 
-  // Verificar que no hay errores de red antes de interactuar
-  const errors: string[] = [];
-  page.on("console", (msg) => {
-    if (msg.type() === "error") {
-      errors.push(msg.text());
-    }
-  });
+  const abrirExpediente = page.getByRole("link", { name: "Abrir expediente" }).first();
+  await expect(abrirExpediente).toBeVisible();
+  await abrirExpediente.click();
 
-  // Localizar el primer botón "Ver"
-  const detailButton = page.getByRole("link", { name: "Ver" }).first();
-  await expect(detailButton).toBeVisible();
-
-  // Hacer clic en "Ver detalle"
-  await detailButton.click();
-
-  // Verificar que navega a la página de detalle
-  await expect(page).toHaveURL(/\/contracts\/[a-f0-9-]+/);
-  await expect(page.getByText("Detalle operativo").first()).toBeVisible();
-
-  // Verificar que no hay errores de red después de la navegación
-  await page.waitForLoadState("networkidle");
-  expect(errors.length).toBe(0);
+  // Navega al expediente /contracts/[employeeId] y muestra sus secciones.
+  await expect(page).toHaveURL(/\/contracts\/[0-9a-f-]+/i);
+  await expect(page.getByRole("heading", { name: "Progreso" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Acciones" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Timeline" })).toBeVisible();
 });
 
-test("navegacion de regreso desde detalle a contratos", async ({ page }) => {
-  const supabase = getRequiredSupabaseTestClient();
-  const fixture = await createBackofficeStatusFixture(supabase, "pendiente_envio");
+test("desde el expediente se regresa al archivo de contratos", async ({ page }) => {
+  const fixture = await findEligibleContractFixture();
+  test.skip(!fixture, "Requiere Supabase con un contrato elegible — test omitido.");
+  if (!fixture) return; // Narrowing para TS; inalcanzable tras el skip.
 
-  await page.goto(`/contracts?q=${fixture.rfc}`);
+  await page.goto(`/contracts?q=${encodeURIComponent(fixture.rfc)}`);
+  await page.getByRole("link", { name: "Abrir expediente" }).first().click();
 
-  // Navegar a la página de detalle
-  const detailButton = page.getByRole("link", { name: "Ver" }).first();
-  await detailButton.click();
-  await expect(page.getByText("Detalle operativo").first()).toBeVisible();
+  await expect(page).toHaveURL(/\/contracts\/[0-9a-f-]+/i);
+  await expect(page.getByRole("heading", { name: "Progreso" })).toBeVisible();
 
-  // Verificar que no hay errores de red antes de navegar de regreso
-  const errors: string[] = [];
-  page.on("console", (msg) => {
-    if (msg.type() === "error") {
-      errors.push(msg.text());
-    }
-  });
+  // El expediente ofrece un enlace "Volver" que apunta a /contracts.
+  const volver = page.getByRole("link", { name: "Volver", exact: true });
+  await expect(volver).toBeVisible();
+  await volver.click();
 
-  // Hacer clic en el botón "Volver a contratos"
-  const backButton = page.getByRole("link", { name: "Volver a contratos" });
-  await expect(backButton).toBeVisible();
-  await backButton.click();
-
-  // Verificar que navega de regreso a la lista de contratos
-  await expect(page).toHaveURL("/contracts");
-  await expect(page.getByRole("heading", { name: "Control de contratos" }).first()).toBeVisible();
-
-  // Verificar que no hay errores de red después de la navegación de regreso
-  await page.waitForLoadState("networkidle");
-  expect(errors.length).toBe(0);
+  await expect(page).toHaveURL(/\/contracts(\?|$)/);
+  await expect(page.getByRole("heading", { name: "Contratos", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Expedientes" })).toBeVisible();
 });

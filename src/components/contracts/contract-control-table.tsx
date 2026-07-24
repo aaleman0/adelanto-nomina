@@ -1,5 +1,10 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
-import { Card, CardHeader } from "@/components/ui/card";
+import { useRouter } from "next/navigation";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   DataTableCell,
@@ -9,106 +14,147 @@ import {
 } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { StatusTone } from "@/components/ui/status-badge";
+import { useHasRole } from "@/components/auth/role-context";
 import type { ContractControlRow } from "@/lib/backoffice/contract-control";
 
 const dateFormatter = new Intl.DateTimeFormat("es-MX", {
-  dateStyle: "medium",
-  timeStyle: "short",
+  dateStyle: "short",
 });
 
+type BulkState =
+  | { status: "idle" }
+  | { status: "sending" }
+  | { status: "done"; sent: number; failed: number }
+  | { status: "error"; message: string };
+
 export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
+  const router = useRouter();
+  const canSend = useHasRole("operaciones");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulk, setBulk] = useState<BulkState>({ status: "idle" });
+
+  // Solo tiene sentido enviar a quien no ha firmado. El "seleccionar todos"
+  // opera sobre este subconjunto para no ofrecer acciones imposibles.
+  const selectableRows = rows.filter((r) => r.operational_status !== "firmado");
+  const allSelected = selectableRows.length > 0 && selectableRows.every((r) => selected.has(r.employee_id));
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setBulk({ status: "idle" });
+  }
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(selectableRows.map((r) => r.employee_id)));
+    setBulk({ status: "idle" });
+  }
+
+  async function sendSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!window.confirm(`Se enviará el mensaje de WhatsApp a ${ids.length} empleado${ids.length !== 1 ? "s" : ""} con la plantilla por defecto. ¿Continuar?`)) return;
+
+    setBulk({ status: "sending" });
+    try {
+      const res = await fetch("/api/whatsapp/bulk?action=send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "manual", employeeIds: ids }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setBulk({ status: "error", message: data.error ?? `Error ${res.status}` });
+        return;
+      }
+      setBulk({ status: "done", sent: data.sent ?? 0, failed: data.failed ?? 0 });
+      setSelected(new Set());
+      router.refresh();
+    } catch (error) {
+      setBulk({ status: "error", message: error instanceof Error ? error.message : "Error de red." });
+    }
+  }
+
+  const selectedCount = selected.size;
+
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h2 className="text-[16px] font-bold text-text-primary">
-            Control de contratos
-          </h2>
-          <p className="text-[12px] text-text-muted mt-0.5">
-            Evidencia operativa de mensaje, solicitud, link, firma y tiempos.
-          </p>
-        </div>
-        <span className="inline-flex items-center rounded-lg bg-surface-muted px-3 py-1 text-[11px] font-bold text-text-muted border border-border/60">
-          {rows.length} registros visibles
-        </span>
-      </CardHeader>
+    <Card className="surface-panel flex min-h-[360px] flex-1 flex-col overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h2 className="font-display text-base font-semibold text-text-primary">Expedientes</h2><p className="text-xs text-text-muted">Abre un registro para revisar contrato, mensajes y evidencia.</p></div><span className="font-data text-xs text-text-muted">{rows.length} visibles</span></div>
 
       {/* Desktop table */}
-      <div className="hidden lg:block">
+      <div className="panel-scroll hidden min-h-0 flex-1 lg:block">
         <DataTable className="w-full">
           <DataTableHead>
             <tr>
+              <DataTableHeaderCell>
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  disabled={selectableRows.length === 0}
+                  aria-label="Seleccionar todos"
+                  className="h-4 w-4 cursor-pointer accent-[var(--color-5)]"
+                />
+              </DataTableHeaderCell>
               <DataTableHeaderCell>Empleado</DataTableHeaderCell>
-              <DataTableHeaderCell>RFC</DataTableHeaderCell>
-              <DataTableHeaderCell>Empleador</DataTableHeaderCell>
+              <DataTableHeaderCell>Contacto</DataTableHeaderCell>
               <DataTableHeaderCell>Monto</DataTableHeaderCell>
-              <DataTableHeaderCell>Mensaje</DataTableHeaderCell>
-              <DataTableHeaderCell>Contrato</DataTableHeaderCell>
-              <DataTableHeaderCell>Vence link</DataTableHeaderCell>
-              <DataTableHeaderCell>Firmado</DataTableHeaderCell>
-              <DataTableHeaderCell>Detalle</DataTableHeaderCell>
+              <DataTableHeaderCell>Estado</DataTableHeaderCell>
+              <DataTableHeaderCell>Último movimiento</DataTableHeaderCell>
+              <DataTableHeaderCell />
             </tr>
           </DataTableHead>
           <tbody>
             {rows.length > 0 ? (
-              rows.map((row, i) => (
-                <tr
-                  className={[
-                    "border-t border-border/40 transition-colors hover:bg-primary-light/40",
-                    i % 2 === 1 ? "bg-surface-muted/30" : "",
-                  ].join(" ")}
-                  key={row.employee_id}
-                >
-                  <DataTableCell className="font-bold text-text-primary">
-                    {row.empleado || "-"}
-                  </DataTableCell>
-                  <DataTableCell className="text-text-muted">{row.rfc || "-"}</DataTableCell>
-                  <DataTableCell className="text-text-muted">{row.empleador || "-"}</DataTableCell>
-                  <DataTableCell className="font-semibold text-text-primary">{formatMoney(row.monto_prestamo_autorizado)}</DataTableCell>
+              rows.map((row) => {
+                const seleccionable = row.operational_status !== "firmado";
+                const marcado = selected.has(row.employee_id);
+                return (
+                <tr key={row.employee_id} className={`border-l-2 border-t border-border transition hover:bg-surface-muted/70 ${marcado ? "bg-primary-light/40" : ""} ${getPriorityBorder(row.operational_status)}`}>
                   <DataTableCell>
-                    <div className="flex flex-col gap-1">
-                      <StatusBadge
-                        status={formatStatus(row.message_status)}
-                        tone={getMessageStatusTone(row.message_status)}
-                      />
-                      <span className="text-[11px] text-text-muted">
-                        {formatDate(row.message_sent_at || row.message_clicked_at)}
-                      </span>
-                    </div>
+                    <input
+                      type="checkbox"
+                      checked={marcado}
+                      onChange={() => toggle(row.employee_id)}
+                      disabled={!seleccionable}
+                      aria-label={`Seleccionar ${row.empleado ?? "empleado"}`}
+                      className="h-4 w-4 cursor-pointer accent-[var(--color-5)] disabled:cursor-not-allowed disabled:opacity-30"
+                    />
                   </DataTableCell>
                   <DataTableCell>
-                    <div className="flex flex-col gap-1">
-                      <StatusBadge
-                        status={formatStatus(row.operational_status)}
-                        tone={getOperationalStatusTone(row.operational_status)}
-                      />
-                      {row.easylex_contract_id ? (
-                        <span className="text-[11px] text-text-muted">
-                          {row.easylex_contract_id}
-                        </span>
-                      ) : null}
+                    <div>
+                      <p className="font-semibold text-text-primary">{row.empleado || "Empleado sin nombre"}</p>
+                      <p className="text-xs text-text-muted">{row.empleador || "Sin empleador"}</p>
                     </div>
                   </DataTableCell>
-                  <DataTableCell className="text-[12px] text-text-muted">{formatDate(row.link_expires_at)}</DataTableCell>
-                  <DataTableCell className="text-[12px] text-text-muted">
-                    {formatDate(row.contract_signed_at || row.attempt_signed_at)}
+                  <DataTableCell><p className="text-sm text-text-secondary">{row.telefono_normalizado || "Sin teléfono"}</p><p className="font-data text-xs text-text-muted">{row.rfc || "Sin RFC"}</p></DataTableCell>
+                  <DataTableCell className="font-medium text-text-primary">{formatMoney(row.monto_prestamo_autorizado)}</DataTableCell>
+                  <DataTableCell>
+                    <StatusBadge
+                      status={formatStatus(row.operational_status)}
+                      tone={getOperationalStatusTone(row.operational_status)}
+                    />
+                  </DataTableCell>
+                  <DataTableCell className="text-sm text-text-muted">
+                    {formatDate(row.last_movement_at)}
                   </DataTableCell>
                   <DataTableCell>
                     <Link
-                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-primary-border bg-primary-light px-3 text-[11px] font-bold text-primary transition hover:bg-primary hover:text-white"
+                      className="inline-flex h-8 items-center rounded-lg border border-primary-border bg-primary-light px-3 text-xs font-semibold text-primary transition hover:border-primary hover:bg-white hover:text-primary-hover"
                       href={`/contracts/${row.employee_id}`}
                     >
-                      Ver
-                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                      </svg>
+                      Abrir expediente
                     </Link>
                   </DataTableCell>
                 </tr>
-              ))
+                );
+              })
             ) : (
-              <DataTableEmpty colSpan={9}>
-                Todavía no hay empleados/ofertas para control de contratos.
+              <DataTableEmpty colSpan={7}>
+                Sin contratos para mostrar.
               </DataTableEmpty>
             )}
           </tbody>
@@ -119,31 +165,47 @@ export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
       <div className="grid gap-3 p-4 lg:hidden">
         {rows.length > 0 ? rows.map((row) => (
           <Link
-            className="group rounded-xl border border-border bg-surface p-4 transition-all hover:border-primary hover:shadow-md hover:-translate-y-0.5"
+            className={`rounded-lg border border-border border-l-4 bg-surface p-4 text-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-sm ${getPriorityBorder(row.operational_status)}`}
             href={`/contracts/${row.employee_id}`}
             key={row.employee_id}
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-bold text-text-primary group-hover:text-primary transition-colors">
-                  {row.empleado || "Empleado sin nombre"}
-                </p>
-                <p className="text-[12px] text-text-muted">{row.rfc || "Sin RFC"} · {formatMoney(row.monto_prestamo_autorizado)}</p>
+                <p className="font-medium text-text-primary">{row.empleado || "Empleado sin nombre"}</p>
+                <p className="text-text-muted">{row.empleador || "Sin empleador"}</p><p className="font-data mt-2 font-medium text-text-primary">{formatMoney(row.monto_prestamo_autorizado)}</p>
               </div>
-              <StatusBadge status={getPriorityLabel(row.operational_status)} tone={getPriorityTone(row.operational_status)} />
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <StatusBadge status={formatStatus(row.message_status)} tone={getMessageStatusTone(row.message_status)} />
               <StatusBadge status={formatStatus(row.operational_status)} tone={getOperationalStatusTone(row.operational_status)} />
             </div>
           </Link>
         )) : (
-          <div className="rounded-xl border border-dashed border-border p-8 text-center text-[13px] text-text-muted">
-            Todavía no hay empleados/ofertas para control de contratos.
-          </div>
+          <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-text-muted">
+            Sin contratos para mostrar.
+          </p>
         )}
       </div>
 
+      {/* Barra de acción en lote: aparece al seleccionar */}
+      {selectedCount > 0 && (
+        <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-surface px-5 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-text-primary">{selectedCount} seleccionado{selectedCount !== 1 ? "s" : ""}</span>
+            <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-text-muted underline hover:text-text-primary">Limpiar</button>
+            {bulk.status === "done" && (
+              <span className={["text-xs", bulk.sent > 0 ? "text-emerald-600" : "text-amber-700"].join(" ")}>
+                {bulk.sent > 0 ? `Enviado a ${bulk.sent}${bulk.failed > 0 ? ` · ${bulk.failed} con error` : ""}.` : "No se pudo enviar."}
+              </span>
+            )}
+            {bulk.status === "error" && <span className="text-xs text-red-600">{bulk.message}</span>}
+          </div>
+          <Button
+            onClick={sendSelected}
+            disabled={bulk.status === "sending" || !canSend}
+            title={canSend ? undefined : "Requiere rol operaciones."}
+          >
+            {bulk.status === "sending" ? "Enviando…" : `Enviar WhatsApp a ${selectedCount}`}
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }
@@ -167,13 +229,6 @@ function formatStatus(value: string | null) {
   return value.replaceAll("_", " ");
 }
 
-function getMessageStatusTone(status: string | null): StatusTone {
-  if (status === "error") return "danger";
-  if (status === "click" || status === "enviado" || status === "entregado") return "success";
-  if (status === "pendiente_envio") return "warning";
-  return "neutral";
-}
-
 function getOperationalStatusTone(status: string): StatusTone {
   if (status === "error") return "danger";
   if (status === "firmado" || status === "contrato_generado") return "success";
@@ -181,16 +236,9 @@ function getOperationalStatusTone(status: string): StatusTone {
   return "neutral";
 }
 
-function getPriorityLabel(status: string) {
-  if (status === "error") return "Alta";
-  if (status === "link_expirado" || status === "contrato_en_proceso" || status === "pendiente_envio") return "Media";
-  if (status === "firmado" || status === "contrato_generado" || status === "mensaje_enviado") return "OK";
-  return "Neutra";
-}
-
-function getPriorityTone(status: string): StatusTone {
-  if (status === "error") return "danger";
-  if (status === "link_expirado" || status === "contrato_en_proceso" || status === "pendiente_envio") return "warning";
-  if (status === "firmado" || status === "contrato_generado" || status === "mensaje_enviado") return "success";
-  return "neutral";
+function getPriorityBorder(status: string) {
+  if (status === "error") return "border-l-danger";
+  if (status === "link_expirado" || status === "pendiente_envio") return "border-l-warning";
+  if (status === "firmado" || status === "contrato_generado") return "border-l-success";
+  return "border-l-[var(--color-3)]";
 }

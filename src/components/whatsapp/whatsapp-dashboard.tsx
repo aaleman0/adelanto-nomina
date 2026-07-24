@@ -1,74 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { StatusBadge } from "@/components/ui/status-badge";
 
-type Stats = {
-  sentToday: number;
-  deliveryRate: number;
-  errorsToday: number;
-  totalDelivered: number;
-};
+type Stats = { sentToday: number; deliveryRate: number; errorsToday: number; totalDelivered: number };
+type RecentMessage = { id: string; employee_id: string; nombre: string | null; apellidos: string | null; message_type: string; delivery_status: string | null; created_at: string | null };
 
-type RecentMessage = {
-  id: string;
-  employee_id: string;
-  nombre: string | null;
-  apellidos: string | null;
-  rfc: string | null;
-  message_type: string;
-  delivery_status: string | null;
-  created_at: string | null;
-  error_message: string | null;
-};
-
-const fmtDate = (d: string | null) =>
-  d ? new Intl.DateTimeFormat("es-MX", { dateStyle: "short", timeStyle: "short" }).format(new Date(d)) : "-";
-
-function DeliveryChip({ status }: { status: string | null }) {
-  const map: Record<string, string> = {
-    sent: "bg-blue-50 text-blue-700 ring-blue-200",
-    delivered: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    read: "bg-indigo-50 text-indigo-700 ring-indigo-200",
-    failed: "bg-red-50 text-red-700 ring-red-200",
-    click: "bg-violet-50 text-violet-700 ring-violet-200",
-  };
-  const s = status ?? "sent";
-  const cls = map[s] ?? "bg-surface-muted text-text-muted ring-border";
-  const labels: Record<string, string> = {
-    sent: "Enviado", delivered: "Entregado", read: "Leído", failed: "Error", click: "Click",
-  };
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${cls}`}>
-      {labels[s] ?? s}
-    </span>
-  );
-}
-
-function StatCard({
-  label, value, sub, color,
-}: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">{label}</p>
-      <p className={`mt-2 text-3xl font-bold ${color ?? "text-text-primary"}`}>{value}</p>
-      {sub && <p className="mt-1 text-xs text-text-muted">{sub}</p>}
-    </div>
-  );
-}
-
-function SkeletonCard() {
-  return <div className="h-24 animate-pulse rounded-2xl bg-surface-muted" />;
-}
+const dateFormatter = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" });
 
 export function WhatsAppDashboard() {
-  return (
-    <ErrorBoundary section="WhatsApp Dashboard">
-      <WhatsAppDashboardInner />
-    </ErrorBoundary>
-  );
+  return <ErrorBoundary section="WhatsApp Dashboard"><WhatsAppDashboardInner /></ErrorBoundary>;
 }
 
 function WhatsAppDashboardInner() {
@@ -77,165 +20,63 @@ function WhatsAppDashboardInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch("/api/whatsapp/stats")
-      .then((r) => r.json())
-      .then((json) => {
-        if (!json.ok) throw new Error(json.error ?? "Error al cargar métricas.");
-        setStats(json.stats);
-        setRecent(json.recent ?? []);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
+  const loadStats = useCallback(() => fetch("/api/whatsapp/stats").then((response) => response.json()).then((json) => {
+    if (!json.ok) throw new Error(json.error ?? "Error al cargar el resumen.");
+    setStats(json.stats);
+    setRecent(json.recent ?? []);
+  }), []);
 
-  if (error) {
-    return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
-        <p className="font-semibold text-red-800">{error}</p>
-        <button onClick={() => window.location.reload()} className="mt-2 text-sm font-semibold text-red-600 underline">
-          Reintentar
-        </button>
-      </div>
-    );
+  useEffect(() => {
+    let cancelled = false;
+    loadStats().catch((reason) => { if (!cancelled) setError(reason.message); }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [loadStats]);
+
+  function retry() {
+    setLoading(true);
+    setError(null);
+    loadStats().catch((reason) => setError(reason.message)).finally(() => setLoading(false));
   }
 
+  if (error) return <div className="border-y border-danger-border py-5 text-sm text-danger"><p>No pudimos actualizar el resumen de WhatsApp.</p><button type="button" onClick={retry} className="mt-2 font-semibold underline underline-offset-4">Reintentar</button></div>;
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* Métricas rápidas */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {loading ? (
-          <>
-            <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
-          </>
-        ) : (
-          <>
-            <StatCard
-              label="Enviados hoy"
-              value={stats?.sentToday ?? 0}
-              sub="mensajes en el día"
-              color="text-primary"
-            />
-            <StatCard
-              label="Tasa de entrega"
-              value={`${stats?.deliveryRate ?? 0}%`}
-              sub="del total enviado"
-              color={
-                (stats?.deliveryRate ?? 0) >= 80
-                  ? "text-emerald-600"
-                  : (stats?.deliveryRate ?? 0) >= 50
-                    ? "text-amber-600"
-                    : "text-red-600"
-              }
-            />
-            <StatCard
-              label="Total entregados"
-              value={stats?.totalDelivered ?? 0}
-              sub="confirmados por Meta"
-              color="text-emerald-600"
-            />
-            <StatCard
-              label="Errores hoy"
-              value={stats?.errorsToday ?? 0}
-              sub="mensajes fallidos"
-              color={(stats?.errorsToday ?? 0) > 0 ? "text-red-600" : "text-text-muted"}
-            />
-          </>
-        )}
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <section className="grid shrink-0 border-y border-border sm:grid-cols-3" aria-label="Estado de mensajería">
+        <Signal label="Enviados hoy" value={stats?.sentToday ?? 0} loading={loading} />
+        <Signal label="Entrega" value={`${stats?.deliveryRate ?? 0}%`} loading={loading} tone={(stats?.deliveryRate ?? 0) >= 90 ? "success" : "warning"} />
+        <Signal label="Errores hoy" value={stats?.errorsToday ?? 0} loading={loading} tone={(stats?.errorsToday ?? 0) > 0 ? "danger" : "success"} />
+      </section>
 
-      {/* Accesos rápidos */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {[
-          { href: "/whatsapp/send", icon: "send", label: "Envío masivo", desc: "Envía contratos a múltiples empleados" },
-          { href: "/whatsapp/history", icon: "history", label: "Historial de envíos", desc: "Revisa todos los envíos masivos" },
-          { href: "/settings/whatsapp/templates", icon: "template", label: "Templates", desc: "Sincroniza templates de Meta" },
-        ].map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="group rounded-2xl border border-border bg-surface p-5 shadow-sm transition-all hover:border-primary hover:shadow-md hover:shadow-primary/10"
-          >
-            <div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-primary-light">
-              <QuickIcon name={item.icon} />
-            </div>
-            <p className="font-semibold text-text-primary group-hover:text-primary">{item.label}</p>
-            <p className="mt-0.5 text-sm text-text-muted">{item.desc}</p>
-          </Link>
-        ))}
-      </div>
+      <section className="mt-7 flex min-h-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-end justify-between gap-4 border-b border-border pb-3">
+          <div><h2 className="font-display text-lg font-semibold text-text-primary">Actividad reciente</h2><p className="mt-0.5 text-xs text-text-muted">Últimos movimientos reportados por WhatsApp.</p></div>
+          <Link href="/whatsapp/history" className="shrink-0 text-xs font-semibold text-primary hover:text-primary-hover">Ver historial completo</Link>
+        </div>
 
-      {/* Actividad reciente */}
-      <Card>
-        <CardHeader className="flex items-center justify-between">
-          <div>
-            <h3 className="text-h2 font-semibold text-text-primary">Actividad reciente</h3>
-            <p className="text-sm text-text-muted">Últimos 20 mensajes enviados vía WhatsApp API</p>
+        <div className="panel-scroll min-h-0 flex-1">
+          <div className="sticky top-0 z-10 hidden grid-cols-[minmax(220px,1.3fr)_1fr_160px_120px] gap-4 border-b border-border bg-[var(--background)] px-2 py-3 text-[10px] font-semibold uppercase tracking-[.12em] text-text-muted md:grid">
+            <span>Empleado</span><span>Tipo</span><span>Fecha</span><span>Resultado</span>
           </div>
-          <Link
-            href="/whatsapp/history"
-            className="text-sm font-semibold text-primary hover:underline"
-          >
-            Ver historial completo →
-          </Link>
-        </CardHeader>
-        <CardBody className="p-0">
-          {loading ? (
-            <div className="divide-y divide-border">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="flex items-center gap-4 px-6 py-4">
-                  <div className="h-4 w-1/3 animate-pulse rounded bg-surface-muted" />
-                  <div className="h-4 w-1/4 animate-pulse rounded bg-surface-muted" />
-                  <div className="ml-auto h-5 w-16 animate-pulse rounded-full bg-surface-muted" />
-                </div>
-              ))}
-            </div>
-          ) : recent.length === 0 ? (
-            <div className="px-6 py-10 text-center text-sm text-text-muted">
-              No hay mensajes enviados todavía.
-            </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {recent.map((msg) => (
-                <div key={msg.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 hover:bg-surface-muted/40">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-text-primary text-sm">
-                      {[msg.nombre, msg.apellidos].filter(Boolean).join(" ") || "—"}
-                    </p>
-                    <p className="text-xs text-text-muted font-mono">{msg.rfc ?? "—"}</p>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-text-muted">
-                    <span>{msg.message_type}</span>
-                    <span>{fmtDate(msg.created_at)}</span>
-                    <DeliveryChip status={msg.delivery_status} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardBody>
-      </Card>
+          {loading ? <LoadingRows /> : recent.length === 0 ? <div className="py-12 text-center"><p className="text-sm font-medium text-text-primary">Todavía no hay envíos</p><p className="mt-1 text-xs text-text-muted">Los mensajes aparecerán aquí cuando comience la operación.</p></div> : recent.map((message) => <MessageRow key={message.id} message={message} />)}
+        </div>
+      </section>
     </div>
   );
 }
 
-function QuickIcon({ name }: { name: string }) {
-  const cls = "h-5 w-5 text-primary";
-  if (name === "send")
-    return (
-      <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-      </svg>
-    );
-  if (name === "history")
-    return (
-      <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    );
-  return (
-    <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-    </svg>
-  );
+function Signal({ label, value, loading, tone = "neutral" }: { label: string; value: string | number; loading: boolean; tone?: "neutral" | "success" | "warning" | "danger" }) {
+  const color = { neutral: "bg-[var(--color-3)]", success: "bg-success", warning: "bg-warning", danger: "bg-danger" }[tone];
+  return <div className="flex items-center gap-3 border-b border-border px-2 py-5 last:border-b-0 sm:border-b-0 sm:border-r sm:px-6 sm:first:pl-0 sm:last:border-r-0"><span className={`h-2.5 w-2.5 rounded-full ${color}`} /><div><p className="text-xs text-text-muted">{label}</p>{loading ? <span className="skeleton-bone mt-1 block h-7 w-16 rounded" /> : <p className="font-data mt-0.5 text-2xl font-semibold text-text-primary">{value}</p>}</div></div>;
 }
+
+function MessageRow({ message }: { message: RecentMessage }) {
+  const fullName = [message.nombre, message.apellidos].filter(Boolean).join(" ") || "Empleado sin nombre";
+  return <Link href={`/contracts/${message.employee_id}`} className="interactive-row grid gap-2 border-b border-border-subtle px-2 py-4 text-sm md:grid-cols-[minmax(220px,1.3fr)_1fr_160px_120px] md:items-center md:gap-4"><div><p className="font-semibold text-text-primary">{fullName}</p><p className="font-data text-[10px] text-text-muted">{message.employee_id.slice(0, 12)}</p></div><span className="text-text-secondary">{formatMessageType(message.message_type)}</span><span className="text-xs text-text-muted">{formatDate(message.created_at)}</span><span><StatusBadge status={formatStatus(message.delivery_status)} tone={getDeliveryTone(message.delivery_status)} /></span></Link>;
+}
+
+function LoadingRows() { return <div>{[0, 1, 2, 3, 4].map((row) => <div key={row} className="grid grid-cols-[1.3fr_1fr_160px_120px] gap-4 border-b border-border-subtle px-2 py-5"><span className="skeleton-bone h-3 w-2/3 rounded" /><span className="skeleton-bone h-3 w-1/2 rounded" /><span className="skeleton-bone h-3 w-24 rounded" /><span className="skeleton-bone h-5 w-16 rounded" /></div>)}</div>; }
+function formatDate(value: string | null) { return value ? dateFormatter.format(new Date(value)) : "Sin fecha"; }
+function formatStatus(value: string | null) { return (value ?? "pendiente").replaceAll("_", " "); }
+function formatMessageType(value: string) { return value.replaceAll("_", " "); }
+function getDeliveryTone(status: string | null) { if (status === "failed") return "danger" as const; if (["delivered", "read", "click"].includes(status ?? "")) return "success" as const; return "neutral" as const; }

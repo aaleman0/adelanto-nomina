@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import {
   createBackofficeStatusFixture,
-  createEmployeeWithOfferFixture,
   getRequiredSupabaseTestClient,
 } from "../helpers/contract-fixtures";
 
@@ -36,14 +35,6 @@ test("retry devuelve 404 para ID inexistente", async ({ request }) => {
 test("regenerate-link sobre contrato con link expirado genera nuevo link", async ({ request }) => {
   const supabase = getRequiredSupabaseTestClient();
   const fixture = await createBackofficeStatusFixture(supabase, "link_expirado");
-
-  // Obtener el contract_request_id que fue creado para este RFC
-  const { data: contractRequests } = await supabase
-    .from("contract_requests")
-    .select("id")
-    .eq("status", "link_generado")
-    .order("created_at", { ascending: false })
-    .limit(1);
 
   // Buscar por RFC via employee
   const { data: employee } = await supabase

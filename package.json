@@ -2,24 +2,34 @@
   "name": "adelantos-admin",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.18.3",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "NODE_OPTIONS=--max-old-space-size=4096 next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "test": "vitest",
+    "test:unit": "vitest run",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
+    "db:types": "supabase gen types typescript --project-id \"$SUPABASE_PROJECT_ID\" --schema public > src/types/database.types.ts",
+    "db:types:check": "supabase gen types typescript --project-id \"$SUPABASE_PROJECT_ID\" --schema public | diff -u src/types/database.types.ts - || (echo '\\nLos tipos generados están desactualizados. Ejecuta: pnpm db:types' && exit 1)",
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test tests/e2e/smoke",
     "test:e2e:api": "playwright test tests/e2e/api",
-    "test:e2e:flows": "playwright test tests/e2e/flows"
+    "test:e2e:flows": "playwright test tests/e2e/flows",
+    "verify:rls": "RUN_RLS_CHECK=1 vitest run src/lib/security/rls-invariant.test.ts"
   },
   "dependencies": {
+    "@komandero/numeros-a-letras": "2.0.0",
+    "@sentry/nextjs": "^10.67.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.107.0",
     "csv-parse": "^6.2.1",
-    "next": "16.2.4",
+    "googleapis": "^173.0.0",
+    "next": "16.2.11",
+    "pdf-lib": "^1.17.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zod": "^4.4.3"
@@ -34,11 +44,25 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react-swc": "^4.3.1",
     "eslint": "^9",
-    "eslint-config-next": "16.2.4",
+    "eslint-config-next": "16.2.11",
     "jsdom": "^29.1.1",
     "msw": "^2.14.6",
+    "pdf-parse": "^2.4.5",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vite": "^8.0.16",
     "vitest": "^4.1.6"
+  },
+  "pnpm": {
+    "overrides": {
+      "vite": "^8.0.16",
+      "undici": "^7.28.0",
+      "brace-expansion@>=1.0.0 <1.1.16": "^1.1.16",
+      "brace-expansion@>=2.0.0 <2.1.2": "^2.1.2",
+      "brace-expansion@>=3.0.0 <5.0.7": "^5.0.7",
+      "js-yaml@>=4.0.0 <4.3.0": "^4.3.0",
+      "postcss@<=8.5.11": "^8.5.12",
+      "sharp@<0.35.0": "^0.35.0"
+    }
   }
 }

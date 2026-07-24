@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { recordAuditEvent } from "@/lib/audit";
 
 type JsonRecord = Record<string, unknown>;
 
-type RawImportRow = {
+export type RawImportRow = {
   id: string;
   batch_id: string;
   row_number: number;
@@ -12,9 +13,11 @@ type RawImportRow = {
   status: string;
 };
 
-type NormalizedPayload = {
+export type NormalizedPayload = {
   nombre?: string;
-  apellidos?: string;
+  apellido_paterno?: string | null;
+  apellido_materno?: string | null;
+  apellidos?: string | null;
   monto_prestamo_autorizado?: number | null;
   empleador?: string;
   clabe?: string | null;
@@ -25,26 +28,38 @@ type NormalizedPayload = {
   telefono?: string;
   telefono_normalizado?: string | null;
   email?: string | null;
+  estado_civil?: string | null;
+  nacionalidad?: string | null;
+  lugar_origen?: string | null;
+  fecha_nacimiento?: string | null;
+  domicilio?: string | null;
   estatus_p_esta_q?: string;
   estatus_conversion?: string;
   estatus_cliente?: string;
   is_eligible?: boolean;
 };
 
-type Employee = {
+export type Employee = {
   id: string;
   rfc: string;
   curp: string | null;
   nombre: string;
+  apellido_paterno: string | null;
+  apellido_materno: string | null;
   apellidos: string | null;
   cp_csf: string | null;
   telefono: string;
   telefono_normalizado: string;
   email: string | null;
   empleador: string | null;
+  estado_civil: string | null;
+  nacionalidad: string | null;
+  lugar_origen: string | null;
+  fecha_nacimiento: string | null;
+  domicilio: string | null;
 };
 
-type EmployeePayload = Omit<Employee, "id"> & {
+export type EmployeePayload = Omit<Employee, "id"> & {
   source_batch_id: string;
   source_row_id: string;
 };
@@ -240,6 +255,8 @@ async function upsertEmployee(row: RawImportRow, normalized: NormalizedPayload) 
     rfc,
     curp: normalized.curp ?? null,
     nombre: requireString(normalized.nombre, "Nombre requerido."),
+    apellido_paterno: normalized.apellido_paterno ?? null,
+    apellido_materno: normalized.apellido_materno ?? null,
     apellidos: normalized.apellidos || null,
     cp_csf: normalized.cp_csf ?? null,
     telefono: requireString(normalized.telefono, "Telefono requerido."),
@@ -249,13 +266,18 @@ async function upsertEmployee(row: RawImportRow, normalized: NormalizedPayload) 
     ),
     email: normalized.email ?? null,
     empleador: normalized.empleador || null,
+    estado_civil: normalized.estado_civil ?? null,
+    nacionalidad: normalized.nacionalidad ?? null,
+    lugar_origen: normalized.lugar_origen ?? null,
+    fecha_nacimiento: normalized.fecha_nacimiento ?? null,
+    domicilio: normalized.domicilio ?? null,
     source_batch_id: row.batch_id,
     source_row_id: row.id,
   };
 
   const { data: existing, error: existingError } = await supabase
     .from("employees")
-    .select("id, rfc, curp, nombre, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador")
+    .select("id, rfc, curp, nombre, apellido_paterno, apellido_materno, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador, estado_civil, nacionalidad, lugar_origen, fecha_nacimiento, domicilio")
     .eq("rfc", rfc)
     .maybeSingle();
 
@@ -267,7 +289,7 @@ async function upsertEmployee(row: RawImportRow, normalized: NormalizedPayload) 
     const { data, error } = await supabase
       .from("employees")
       .insert(employeePayload)
-      .select("id, rfc, curp, nombre, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador")
+      .select("id, rfc, curp, nombre, apellido_paterno, apellido_materno, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador, estado_civil, nacionalidad, lugar_origen, fecha_nacimiento, domicilio")
       .single();
 
     if (error) {
@@ -296,7 +318,7 @@ async function upsertEmployee(row: RawImportRow, normalized: NormalizedPayload) 
     .from("employees")
     .update(employeePayload)
     .eq("id", existing.id)
-    .select("id, rfc, curp, nombre, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador")
+    .select("id, rfc, curp, nombre, apellido_paterno, apellido_materno, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador, estado_civil, nacionalidad, lugar_origen, fecha_nacimiento, domicilio")
     .single();
 
   if (error) {
@@ -510,7 +532,8 @@ async function syncOffer(
   };
 }
 
-function buildOfferPayload(
+// Exportada para pruebas: mapea elegibilidad a estado de la oferta.
+export function buildOfferPayload(
   row: RawImportRow,
   employeeId: string,
   normalized: NormalizedPayload,
@@ -544,6 +567,9 @@ async function updateRowStatus(rowId: string, status: "aplicada" | "sin_cambios"
   }
 }
 
+// Delega en el módulo de auditoría compartido, conservando la firma para no
+// tocar los llamadores. Estas son acciones de sistema (job de importación), sin
+// actor humano.
 async function createAuditEvent(input: {
   event_name: string;
   entity_type: string;
@@ -552,40 +578,45 @@ async function createAuditEvent(input: {
   summary: string;
   metadata?: JsonRecord;
 }) {
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("audit_events").insert({
-    event_name: input.event_name,
-    entity_type: input.entity_type,
-    entity_id: input.entity_id,
-    employee_id: input.employee_id ?? null,
+  await recordAuditEvent({
+    eventName: input.event_name,
+    entityType: input.entity_type,
+    entityId: input.entity_id,
+    employeeId: input.employee_id ?? null,
     source: "backend",
     summary: input.summary,
-    metadata: input.metadata ?? {},
-    actor_type: "system",
+    metadata: input.metadata,
+    actorType: "system",
   });
-
-  if (error) {
-    throw error;
-  }
 }
 
-function hasEmployeeChanged(
+// Exportada para pruebas: decide si un empleado existente cambió respecto al
+// CSV. De aquí salen los conteos de "actualizados" vs "sin cambios".
+export function hasEmployeeChanged(
   existing: Employee,
   next: EmployeePayload,
 ) {
   return (
     existing.curp !== (next.curp ?? null) ||
     existing.nombre !== next.nombre ||
+    existing.apellido_paterno !== (next.apellido_paterno ?? null) ||
+    existing.apellido_materno !== (next.apellido_materno ?? null) ||
     existing.apellidos !== (next.apellidos || null) ||
     existing.cp_csf !== (next.cp_csf ?? null) ||
     existing.telefono !== next.telefono ||
     existing.telefono_normalizado !== next.telefono_normalizado ||
     existing.email !== (next.email ?? null) ||
-    existing.empleador !== (next.empleador || null)
+    existing.empleador !== (next.empleador || null) ||
+    existing.estado_civil !== (next.estado_civil ?? null) ||
+    existing.nacionalidad !== (next.nacionalidad ?? null) ||
+    existing.lugar_origen !== (next.lugar_origen ?? null) ||
+    existing.fecha_nacimiento !== (next.fecha_nacimiento ?? null) ||
+    existing.domicilio !== (next.domicilio ?? null)
   );
 }
 
-function requireString(value: unknown, message: string) {
+// Exportada para pruebas.
+export function requireString(value: unknown, message: string) {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(message);
   }

@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { normalizePhoneFromCsv } from "@/lib/whatsapp/phone-utils";
+import { createEasyLexAttempt } from "@/lib/contracts/create-easylex-attempt";
+import { sendContractLinkWhatsApp } from "@/lib/contracts/send-contract-link";
+import { formatDateForDisplay } from "@/lib/contracts/format-date";
+import { recordAuditEvent, recordIntegrationLog } from "@/lib/audit";
+import { easylexEnv } from "@/lib/env";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -22,12 +28,19 @@ type Employee = {
   rfc: string;
   curp: string | null;
   nombre: string;
+  apellido_paterno: string | null;
+  apellido_materno: string | null;
   apellidos: string | null;
   cp_csf: string | null;
   telefono: string;
   telefono_normalizado: string;
   email: string | null;
   empleador: string | null;
+  estado_civil: string | null;
+  nacionalidad: string | null;
+  lugar_origen: string | null;
+  fecha_nacimiento: string | null;
+  domicilio: string | null;
 };
 
 type AdvanceOffer = {
@@ -93,24 +106,13 @@ type RequestContractResult = {
   request_id?: string;
   attempt_id?: string;
   link_easylex?: string;
+  /** Si el link se envió al empleado por WhatsApp (undefined si no aplica). */
+  link_enviado?: boolean;
   expires_at?: string;
   expires_at_formatted?: string;
 };
 
 const LINK_TTL_HOURS = 2;
-
-function formatDateForDisplay(isoDate: string): string {
-  const date = new Date(isoDate);
-  const options: Intl.DateTimeFormatOptions = {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/Mexico_City",
-  };
-  return date.toLocaleDateString("es-MX", options);
-}
 
 export function parseRequestContractPayload(
   payload: RequestContractPayload,
@@ -252,7 +254,17 @@ export async function requestContractFromWhatsApp(
 
   const latestAttempt = await getLatestAttempt(contractRequest.id);
   const reusableAttempt = getReusableAttempt(latestAttempt);
-  const attempt = reusableAttempt ?? (await regenerateMockAttempt(contractRequest, latestAttempt));
+
+  let attempt: ContractAttempt;
+  const isReused = Boolean(reusableAttempt);
+
+  if (reusableAttempt) {
+    attempt = reusableAttempt;
+  } else if (easylexEnv.isConfigured) {
+    attempt = await createEasyLexAttempt(contractRequest, employee, offer, bankAccount, latestAttempt, correlationId);
+  } else {
+    attempt = await regenerateMockAttempt(contractRequest, latestAttempt);
+  }
 
   await updateContractRequestLinkGenerated(contractRequest.id);
   await recordWhatsAppInteraction({
@@ -264,12 +276,14 @@ export async function requestContractFromWhatsApp(
     metadata: {
       result_status: "contract_ready",
       attempt_id: attempt.id,
-      reused_link: Boolean(reusableAttempt),
+      reused_link: isReused,
     },
   });
 
+  const isEasyLex = easylexEnv.isConfigured && !isReused;
+
   await createAuditEvent({
-    eventName: reusableAttempt
+    eventName: isReused
       ? "contract.link_reused"
       : latestAttempt
         ? "contract.link_regenerated"
@@ -278,15 +292,33 @@ export async function requestContractFromWhatsApp(
     entityId: attempt.id,
     employeeId: employee.id,
     source: "backend",
-    summary: reusableAttempt
-      ? "Link mock vigente reutilizado."
-      : "Link mock de firma generado por 2 horas.",
+    summary: isReused
+      ? "Link vigente reutilizado."
+      : isEasyLex
+        ? "Contrato creado en EasyLex y link de firma generado."
+        : "Link mock de firma generado por 2 horas.",
     metadata: {
       contract_request_id: contractRequest.id,
       offer_id: offer.id,
       expires_at: attempt.expires_at,
       correlation_id: correlationId,
+      provider: isEasyLex ? "easylex" : "mock",
     },
+  });
+
+  // Enviar el link al empleado por WhatsApp. No es fatal: el contrato ya está
+  // generado y el link queda en el resultado aunque el envío falle.
+  const linkSend = await sendContractLinkWhatsApp({
+    employeeId: employee.id,
+    offerId: offer.id,
+    contractRequestId: contractRequest.id,
+    nombre: employee.nombre,
+    telefonoNormalizado: employee.telefono_normalizado,
+    monto: offer.monto_prestamo_autorizado,
+    signingUrl: attempt.signing_url,
+    expiresAt: attempt.expires_at,
+    subscriberId: input.subscriberId,
+    correlationId,
   });
 
   const result: RequestContractResult = {
@@ -297,6 +329,7 @@ export async function requestContractFromWhatsApp(
     request_id: contractRequest.id,
     attempt_id: attempt.id,
     link_easylex: attempt.signing_url ?? undefined,
+    link_enviado: linkSend.sent,
     expires_at: attempt.expires_at ?? undefined,
     expires_at_formatted: attempt.expires_at
       ? formatDateForDisplay(attempt.expires_at)
@@ -312,7 +345,7 @@ async function getEmployeeByRfc(rfc: string) {
   const { data, error } = await supabase
     .from("employees")
     .select(
-      "id, rfc, curp, nombre, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador",
+      "id, rfc, curp, nombre, apellido_paterno, apellido_materno, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador, estado_civil, nacionalidad, lugar_origen, fecha_nacimiento, domicilio",
     )
     .eq("rfc", rfc)
     .maybeSingle();
@@ -618,6 +651,8 @@ async function logBusinessResult(
   });
 }
 
+// Delegan en el módulo de auditoría compartido; se conserva la firma para no
+// tocar los llamadores. Son acciones de sistema (solicitud entrante), sin actor.
 async function createIntegrationLog(input: {
   correlationId: string;
   requestPayload: JsonRecord;
@@ -626,25 +661,19 @@ async function createIntegrationLog(input: {
   entityType?: string;
   entityId?: string;
 }) {
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("integration_logs").insert({
+  await recordIntegrationLog({
     provider: "whatsapp",
     direction: "inbound",
     endpoint: "/api/whatsapp/request-contract",
     method: "POST",
-    request_payload: input.requestPayload,
-    response_payload: input.responsePayload,
-    status_code: 200,
-    status: input.success ? "success" : "failed",
+    requestPayload: input.requestPayload,
+    responsePayload: input.responsePayload,
+    statusCode: 200,
     success: input.success,
-    correlation_id: input.correlationId,
-    entity_type: input.entityType ?? null,
-    entity_id: input.entityId ?? null,
+    correlationId: input.correlationId,
+    entityType: input.entityType ?? null,
+    entityId: input.entityId ?? null,
   });
-
-  if (error) {
-    throw error;
-  }
 }
 
 async function createAuditEvent(input: {
@@ -656,21 +685,16 @@ async function createAuditEvent(input: {
   summary: string;
   metadata: JsonRecord;
 }) {
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("audit_events").insert({
-    event_name: input.eventName,
-    entity_type: input.entityType,
-    entity_id: input.entityId,
-    employee_id: input.employeeId,
+  await recordAuditEvent({
+    eventName: input.eventName,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    employeeId: input.employeeId,
     source: input.source,
     summary: input.summary,
     metadata: input.metadata,
-    actor_type: "system",
+    actorType: "system",
   });
-
-  if (error) {
-    throw error;
-  }
 }
 
 function readString(value: unknown) {
@@ -690,21 +714,7 @@ function normalizeRfc(value: unknown) {
 }
 
 function normalizePhone(value: string | null) {
-  const digits = value?.replace(/\D/g, "") ?? "";
-
-  if (!digits) {
-    return null;
-  }
-
-  if (digits.length === 10) {
-    return `52${digits}`;
-  }
-
-  if (digits.length === 12 && digits.startsWith("52")) {
-    return digits;
-  }
-
-  return digits.length >= 10 && digits.length <= 15 ? digits : null;
+  return normalizePhoneFromCsv(value ?? undefined);
 }
 
 function sanitizePayload(payload: JsonRecord) {

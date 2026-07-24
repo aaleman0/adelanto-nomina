@@ -12,6 +12,7 @@
  * - /auth/callback                  → callback de OAuth
  * - /api/webhooks/*                 → webhooks externos (Meta, EasyLex)
  * - /api/health/*                   → health checks
+ * - /api/tasks/*                    → workers invocados por Cloud Tasks
  */
 
 import { NextResponse, type NextRequest } from "next/server";
@@ -20,11 +21,27 @@ import { createMiddlewareClient } from "@/lib/supabase/middleware-client";
 /** Rutas que no requieren sesión. */
 const PUBLIC_PATHS = ["/login", "/auth/callback"];
 
-/** Prefijos de API que no requieren sesión (webhooks externos y health checks). */
-const PUBLIC_API_PREFIXES = ["/api/webhooks/", "/api/health"];
+/**
+ * Prefijos de API que no requieren sesión.
+ *
+ * No son rutas abiertas: cada una se autentica por su cuenta —los webhooks por
+ * firma HMAC o secreto compartido, y los workers de `/api/tasks/` por el token
+ * OIDC que emite Cloud Tasks—. Quedan fuera del gate de sesión porque quien las
+ * llama es una máquina y no tiene cookie de navegador.
+ */
+const PUBLIC_API_PREFIXES = ["/api/webhooks/", "/api/health/", "/api/tasks/"];
+
+/**
+ * Rutas públicas exactas. `/api/health` (el endpoint raíz, sin sub-ruta) es
+ * público, pero se lista aparte —en vez de como prefijo `/api/health`— para que
+ * un futuro `/api/health-xyz` NO quede público por accidente. Los sub-endpoints
+ * (`/api/health/whatsapp`) entran por el prefijo `/api/health/`.
+ */
+const PUBLIC_API_EXACT = ["/api/health"];
 
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.includes(pathname)) return true;
+  if (PUBLIC_API_EXACT.includes(pathname)) return true;
   if (PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true;
   return false;
 }

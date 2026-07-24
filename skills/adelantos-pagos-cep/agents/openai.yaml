@@ -1,4 +1,0 @@
-interface:
-  display_name: "Adelantos Pagos CEP"
-  short_description: "Pagos, dispersion y claves CEP"
-  default_prompt: "Use $adelantos-pagos-cep para gestionar pagos, dispersion y claves CEP."

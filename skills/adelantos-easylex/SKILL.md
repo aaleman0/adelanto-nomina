@@ -1,62 +1,51 @@
 ---
 name: adelantos-easylex
-description: Integrar EasyLex en el flujo de adelantos para crear contratos, enviar links de firma, procesar webhooks de firma, guardar evidencia contractual y sincronizar estados con backend y ManyChat. Use cuando Codex trabaje con API EasyLex, contract_id, signing_url, estatus de contrato, callbacks, errores de firma, expiracion o evidencia de contrato firmado.
+description: Integrar y mantener EasyLex en el flujo de adelantos: crear documentos de contrato, generar el PDF, obtener el link de firma, procesar el webhook de firma, guardar evidencia contractual y sincronizar estados con el backend. Use cuando se trabaje con la API de EasyLex, contract_id, signing_url, estados de contrato, callbacks, expiración o evidencia de firma.
 ---
 
 # Adelantos EasyLex
 
-## Proposito
+## Lee primero
 
-Usar esta skill para aislar todo lo relacionado con contrato, firma y evidencia contractual. Los detalles reales de EasyLex quedan pendientes hasta trabajar con EasyLex, sandbox o documentacion oficial del plan contratado.
+`docs/easylex-contratos.md` — ciclo de vida, reglas de negocio, generación de PDF, cliente y webhook.
 
-## Responsabilidades
+Código: `src/lib/contracts/` (reglas) y `src/lib/easylex/` (cliente y PDF).
 
-- Crear o preparar contrato con datos validados por el backend.
-- Guardar `contract_id`, `signing_url`, estado y expiracion cuando aplique.
-- Procesar webhooks de firma, rechazo, expiracion o error.
-- Normalizar estados de EasyLex hacia estados internos.
-- Conservar evidencia suficiente para soporte y auditoria.
+## Estado actual
 
-## Flujo De Contrato
+La integración es **real y está funcionando**, no un mock. Documentación anterior la describía como pendiente; eso es obsoleto.
 
-1. Recibir solicitud validada desde el backend.
-2. Construir payload para EasyLex con datos minimos necesarios.
-3. Llamar API de EasyLex.
-4. Guardar respuesta cruda en log tecnico y resumen en tablas operativas.
-5. Actualizar contrato a `generado` si existe link de firma.
-6. Notificar o responder a ManyChat con `signing_url`.
+Existen dos rutas de generación de PDF: la activa usa `pdf-lib` sobre una plantilla con AcroForm; la alternativa usa Google Docs y requiere credenciales **en archivos** (`google_oauth_client.json`, `token.json`) en `process.cwd()`. Confirma cuál estás tocando antes de cambiar nada.
 
-## Webhook De Firma
+## Reglas que no se negocian
 
-Confirmar con EasyLex si el plan/API contratado soporta webhook o postback de firma cuando empiece el trabajo directo con EasyLex. Las paginas publicas mencionan API REST, documentacion API y sandbox, pero no muestran de forma publica el detalle del webhook.
+- **No llamar a EasyLex** si el empleado no tiene oferta vigente, elegible y cuenta bancaria activa.
+- **No confiar en campos que lleguen desde fuera** si la base tiene datos normalizados.
+- **Congelar el snapshot** al generar el link, para que cambios posteriores del CSV no alteren lo firmado.
+- **TTL del link: 2 horas.** La constante `LINK_TTL_HOURS` está declarada en **tres archivos**; cambiarla exige tocar los tres.
+- **Regenerar crea un intento nuevo**, nunca sobrescribe el anterior. El historial de `contract_attempts` debe quedar íntegro.
+- **No revertir una firma** desde el backoffice.
+- Guardar errores de EasyLex con código, mensaje, endpoint y correlación en `integration_logs`.
 
-1. Validar autenticidad del webhook si EasyLex ofrece firma o secreto.
-2. Aplicar idempotencia por `event_id` o `contract_id + status + timestamp`.
-3. Guardar payload crudo.
-4. Traducir estado externo a estado interno.
-5. Actualizar `contract_requests` y `contract_events`.
-6. Crear evento de auditoria.
-7. Actualizar ManyChat si el cambio debe comunicarse al empleado.
+## Webhook de firma
 
-## Estados Internos
+- Idempotencia por `easylex_events.event_id` (índice único parcial). **Pero si falta `webhookId`, el id se sintetiza con `Date.now()` y nunca colisiona** — en ese caso no hay protección real.
+- `DOCUMENT_SIGNED` cierra el ciclo y busca por `data.id`; `SIGNED_BY_USER` solo registra y busca por `data.documentId`. No es una errata: los payloads difieren.
+- Responde **siempre `200`** para evitar reintentos. Un fallo solo es visible en `integration_logs`.
+- La autenticación compara `x-easylex-signature` en tiempo constante (`verifySharedSecret`) y **falla cerrado en producción** si el secreto no está configurado.
 
-- `solicitado`
-- `generando`
-- `generado`
-- `firmado`
-- `expirado`
-- `error`
+## Trampas de configuración
 
-## Reglas
+`EASYLEX_BASE_URL` y `EASYLEX_SIGNING_LINK_BASE_URL` **apuntan al sandbox por defecto**. Sin definirlas explícitamente, producción firma contra pruebas.
 
-- No llamar EasyLex si el empleado no esta activo o ya tiene una solicitud abierta equivalente.
-- No confiar en campos enviados por ManyChat si la BD tiene datos normalizados.
-- Guardar errores de EasyLex con codigo, mensaje, endpoint y correlacion.
-- Mantener el link vivo por 2 horas desde su generacion.
-- No invalidar links solo limpiando ManyChat; la expiracion real debe vivir en EasyLex o backend.
-- Si no hay webhook de firma, implementar fallback por polling, conciliacion operativa o revision desde backoffice.
+`EASYLEX_CALLBACK_URL` debe terminar en `/api/webhooks/easylex/sign`.
 
-## Referencias
+Las claves `acreedor_banco`, `acreedor_cuenta`, `acreedor_clabe`, `testigo_1_nombre` y `testigo_2_nombre` de `company_settings` están **vacías**. Un contrato emitido sin llenarlas sale incompleto.
 
-Leer `references/payloads-easylex.md` para payloads conceptuales y mapeo de estados.
-Leer `../adelantos-arquitectura/references/fases-v1.md`; EasyLex mock corresponde a fase 5 y EasyLex real a fase 8.
+`POST /api/webhooks/easylex/mock-sign` está deshabilitado en producción (`404`), pero fuera de ella no tiene autenticación. Sigue siendo herramienta de desarrollo, nunca mecanismo operativo.
+
+## Mapeo de estados
+
+`created`/`sent` → `generado` · `signed` → `firmado` · `expired` → `expirado` · `failed` → `error`
+
+Existe `getDocumentStatus()` pero **no hay job de polling**: la confirmación depende solo del webhook.

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useSyncExternalStore, useEffect } from "react";
 
 /* ─── Types ─── */
 
@@ -34,35 +34,73 @@ const NotificationsContext = createContext<NotificationsContextValue | null>(nul
 const STORAGE_KEY = "app-notifications-v1";
 const MAX_NOTIFICATIONS = 50;
 
+/* ─── localStorage sync store ───
+ * useSyncExternalStore is the correct React primitive for reading from an
+ * external store such as localStorage. It provides a matching server snapshot
+ * so the server-rendered HTML and the client-rendered HTML are identical on
+ * first paint, avoiding hydration mismatches.
+ */
+
+let cachedNotifications: Notification[] = [];
+let lastStorageString: string | null = null;
+const listeners = new Set<() => void>();
+
+function readStoredNotifications(): Notification[] {
+  if (typeof window === "undefined") return cachedNotifications;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === lastStorageString) return cachedNotifications;
+    const parsed = stored ? (JSON.parse(stored) as Notification[]) : [];
+    lastStorageString = stored;
+    cachedNotifications = parsed;
+    return parsed;
+  } catch {
+    return cachedNotifications;
+  }
+}
+
+function writeStoredNotifications(next: Notification[]) {
+  if (typeof window === "undefined") return;
+  try {
+    const serialized = JSON.stringify(next);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    lastStorageString = serialized;
+    cachedNotifications = next;
+    listeners.forEach((listener) => listener());
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+function subscribeToStorage(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  listeners.add(callback);
+  const handleStorage = (e: StorageEvent) => {
+    if (e.key !== STORAGE_KEY) return;
+    readStoredNotifications();
+    callback();
+  };
+  window.addEventListener("storage", handleStorage);
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    listeners.delete(callback);
+  };
+}
+
+const emptyServerSnapshot: Notification[] = [];
+
+function getServerSnapshot(): Notification[] {
+  return emptyServerSnapshot;
+}
+
 /* ─── Provider ─── */
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isHydrated, setIsHydrated] = useState(false);
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setNotifications(parsed);
-      }
-    } catch {
-      // Ignore localStorage errors
-    }
-    setIsHydrated(true);
-  }, []);
-
-  // Save to localStorage when notifications change
-  useEffect(() => {
-    if (!isHydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications));
-    } catch {
-      // Ignore localStorage errors
-    }
-  }, [notifications, isHydrated]);
+  const notifications = useSyncExternalStore(
+    subscribeToStorage,
+    readStoredNotifications,
+    getServerSnapshot,
+  );
 
   const addNotification = useCallback((notification: Omit<Notification, "id" | "timestamp" | "read">): string => {
     const id = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -73,30 +111,29 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       read: false,
     };
 
-    setNotifications((prev) => {
-      const updated = [newNotification, ...prev].slice(0, MAX_NOTIFICATIONS);
-      return updated;
-    });
+    const updated = [newNotification, ...notifications].slice(0, MAX_NOTIFICATIONS);
+    writeStoredNotifications(updated);
 
     return id;
-  }, []);
+  }, [notifications]);
 
   const markAsRead = useCallback((id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-  }, []);
+    const updated = notifications.map((n) => (n.id === id ? { ...n, read: true } : n));
+    writeStoredNotifications(updated);
+  }, [notifications]);
 
   const markAllAsRead = useCallback(() => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  }, []);
+    const updated = notifications.map((n) => ({ ...n, read: true }));
+    writeStoredNotifications(updated);
+  }, [notifications]);
 
   const dismissNotification = useCallback((id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  }, []);
+    const updated = notifications.filter((n) => n.id !== id);
+    writeStoredNotifications(updated);
+  }, [notifications]);
 
   const clearAll = useCallback(() => {
-    setNotifications([]);
+    writeStoredNotifications([]);
   }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -128,8 +165,8 @@ export function useNotifications() {
 
 /* ─── Notification Bell Component ─── */
 
-export function NotificationBell() {
-  const { unreadCount, notifications, markAsRead, markAllAsRead, dismissNotification } = useNotifications();
+export function NotificationBell({ placement = "default" }: { placement?: "default" | "sidebar" }) {
+  const { unreadCount, notifications, markAsRead, markAllAsRead, dismissNotification, clearAll } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
 
   // Close dropdown when clicking outside
@@ -145,14 +182,14 @@ export function NotificationBell() {
     return () => document.removeEventListener("click", handleClick);
   }, [isOpen]);
 
-  const handleNotificationClick = (notification: Notification) => {
+  const handleNotificationClick = useCallback((notification: Notification) => {
     if (!notification.read) {
       markAsRead(notification.id);
     }
     if (notification.actionUrl) {
-      window.location.href = notification.actionUrl;
+      window.location.assign(notification.actionUrl);
     }
-  };
+  }, [markAsRead]);
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -169,13 +206,6 @@ export function NotificationBell() {
     return date.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
   };
 
-  const typeStyles: Record<NotificationType, string> = {
-    success: "bg-emerald-50 border-emerald-200",
-    error: "bg-red-50 border-red-200",
-    warning: "bg-amber-50 border-amber-200",
-    info: "bg-blue-50 border-blue-200",
-  };
-
   const typeDot: Record<NotificationType, string> = {
     success: "bg-emerald-500",
     error: "bg-red-500",
@@ -187,10 +217,10 @@ export function NotificationBell() {
     <div data-notification-bell className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative flex h-10 w-10 items-center justify-center rounded-full hover:bg-surface-muted transition"
+        className={`relative flex h-10 w-10 items-center justify-center rounded-lg transition ${placement === "sidebar" ? "text-sidebar-text-muted hover:bg-white/10 hover:text-white" : "hover:bg-surface-muted"}`}
         aria-label={`${unreadCount} notificaciones sin leer`}
       >
-        <svg className="h-5 w-5 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className={`h-5 w-5 ${placement === "sidebar" ? "text-current" : "text-text-muted"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
         </svg>
         {unreadCount > 0 && (
@@ -201,7 +231,7 @@ export function NotificationBell() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-96 rounded-xl border border-border bg-white shadow-lg z-50">
+        <div className={`absolute z-50 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-border bg-white shadow-lg ${placement === "sidebar" ? "bottom-full left-0 mb-2" : "right-0 top-full mt-2"}`}>
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <h3 className="font-semibold text-text-primary">Notificaciones</h3>
             <div className="flex gap-2">
@@ -218,12 +248,7 @@ export function NotificationBell() {
 
           <div className="max-h-[400px] overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-text-muted">
-                <svg className="mx-auto mb-2 h-8 w-8 text-text-muted/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-                </svg>
-                No hay notificaciones
-              </div>
+              <div className="px-4 py-4"><p className="mb-3 text-xs font-medium text-text-muted">Sin notificaciones pendientes</p>{[0, 1, 2].map((row) => <div className="flex gap-3 border-t border-border-subtle py-3 first:border-0" key={row}><span className="skeleton-bone h-9 w-9 shrink-0 rounded-lg" /><div className="min-w-0 flex-1 space-y-2"><span className="skeleton-bone block h-2.5 w-2/3 rounded" /><span className="skeleton-bone block h-2 w-full rounded" /><span className="skeleton-bone block h-1.5 w-12 rounded" /></div></div>)}</div>
             ) : (
               <div className="divide-y divide-border">
                 {notifications.map((notification) => (
@@ -268,10 +293,7 @@ export function NotificationBell() {
           {notifications.length > 0 && (
             <div className="border-t border-border px-4 py-2 text-center">
               <button
-                onClick={() => {
-                  const { clearAll } = useNotifications();
-                  clearAll();
-                }}
+                onClick={() => clearAll()}
                 className="text-xs text-text-muted hover:text-text-primary"
               >
                 Limpiar todas
