@@ -19,7 +19,7 @@ jobs:
     name: Lint, tipos, tests y build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
 
@@ -55,7 +55,7 @@ jobs:
     name: Escaneo de secretos
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Gitleaks necesita el historial completo para escanear commits.
           fetch-depth: 0
@@ -69,7 +69,7 @@ jobs:
     name: Auditoría de dependencias
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -104,7 +104,7 @@ jobs:
     env:
       IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPO }}/adelantos-admin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Autenticar en GCP (Workload Identity Federation, sin llaves)
         # Keyless: no hay JSON de service account en los secretos del repo. GitHub
@@ -148,7 +148,7 @@ jobs:
     # Supabase. Sin ellas el paso se omite en vez de fallar.
     if: ${{ vars.SUPABASE_PROJECT_ID != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
