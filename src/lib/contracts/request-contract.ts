@@ -6,6 +6,7 @@ import { sendContractLinkWhatsApp } from "@/lib/contracts/send-contract-link";
 import { formatDateForDisplay } from "@/lib/contracts/format-date";
 import { recordAuditEvent, recordIntegrationLog } from "@/lib/audit";
 import { easylexEnv } from "@/lib/env";
+import { logger } from "@/lib/logger";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -96,6 +97,7 @@ type RequestContractResult = {
   ok: boolean;
   status:
     | "contract_ready"
+    | "contract_link_failed"
     | "already_signed"
     | "not_found"
     | "not_eligible"
@@ -261,7 +263,16 @@ export async function requestContractFromWhatsApp(
   if (reusableAttempt) {
     attempt = reusableAttempt;
   } else if (easylexEnv.isConfigured) {
-    attempt = await createEasyLexAttempt(contractRequest, employee, offer, bankAccount, latestAttempt, correlationId);
+    try {
+      attempt = await createEasyLexAttempt(contractRequest, employee, offer, bankAccount, latestAttempt, correlationId);
+    } catch (error) {
+      // El proveedor de firma caído NO debe tumbar el pipeline. El intento ya
+      // quedó registrado como "error" (la vista lo marca operational_status =
+      // 'error'), así que el empleado cae en "Requieren acción → Con error",
+      // listo para reintentar en lote cuando EasyLex vuelva. No se manda
+      // WhatsApp: no hay link válido que enviar.
+      return await handleContractLinkFailure({ input, employee, offer, contractRequest, correlationId, error });
+    }
   } else {
     attempt = await regenerateMockAttempt(contractRequest, latestAttempt);
   }
@@ -334,6 +345,68 @@ export async function requestContractFromWhatsApp(
     expires_at_formatted: attempt.expires_at
       ? formatDateForDisplay(attempt.expires_at)
       : undefined,
+  };
+
+  await logBusinessResult(input, employee.id, result, correlationId);
+  return result;
+}
+
+/**
+ * El proveedor de firma (EasyLex) falló al crear el documento. El PDF se generó
+ * y el intento ya quedó registrado como "error", así que el expediente aparece
+ * en "Requieren acción → Con error". Se marca también la solicitud como `error`
+ * (mejor mensaje en la timeline) y se devuelve un resultado suave: la operación
+ * no se completó, pero el pipeline sigue y el expediente queda en la cola para
+ * reintentar en lote cuando EasyLex vuelva. No se envía WhatsApp: no hay link.
+ */
+async function handleContractLinkFailure(params: {
+  input: RequestContractInput;
+  employee: Employee;
+  offer: AdvanceOffer;
+  contractRequest: ContractRequest;
+  correlationId: string;
+  error: unknown;
+}): Promise<RequestContractResult> {
+  const { input, employee, offer, contractRequest, correlationId, error } = params;
+  const reason = error instanceof Error ? error.message : "No se pudo generar el link de firma.";
+
+  // Best-effort: la vista ya marca 'error' por el intento; esto solo mejora el
+  // estado de la solicitud y su mensaje. Si falla, no debe tumbar el manejador.
+  const supabase = getSupabaseAdmin();
+  const { error: updateError } = await supabase
+    .from("contract_requests")
+    .update({ status: "error", error_message: reason })
+    .eq("id", contractRequest.id);
+  if (updateError) {
+    logger.warn("contract.request_error_update_failed", {
+      contractRequestId: contractRequest.id,
+      error: updateError.message,
+    });
+  }
+
+  await createAuditEvent({
+    eventName: "contract.link_failed",
+    entityType: "contract_requests",
+    entityId: contractRequest.id,
+    employeeId: employee.id,
+    source: "backend",
+    summary: "El proveedor de firma no está disponible; el contrato quedó en la cola para reintentar.",
+    metadata: {
+      contract_request_id: contractRequest.id,
+      offer_id: offer.id,
+      correlation_id: correlationId,
+      provider: "easylex",
+      error: reason,
+    },
+  });
+
+  const result: RequestContractResult = {
+    ok: false,
+    status: "contract_link_failed",
+    message:
+      "El contrato se generó, pero el link de firma no se pudo crear (proveedor no disponible). Quedó en la cola para reintentar.",
+    estatus_contrato: "no_disponible",
+    request_id: contractRequest.id,
   };
 
   await logBusinessResult(input, employee.id, result, correlationId);
