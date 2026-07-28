@@ -13,6 +13,7 @@ Cada tema tiene **un solo documento**. Si un dato aparece en dos sitios, uno de 
 | [EasyLex y contratos](easylex-contratos.md) | Reglas del contrato, PDF, cliente de EasyLex, firma |
 | [Seguridad](seguridad.md) | Los cinco pilares (auth, RBAC, rate limiting, RLS, validación), casos comunes y plan de endurecimiento |
 | [Configuración](configuracion.md) | Variables de entorno, `settings`, `company_settings`, checklist de producción |
+| [Migrar base de producción](migrar-base-produccion.md) | Runbook: aplicar migraciones y verificar RLS en una base de prod nueva |
 | [Testing](testing.md) | Vitest, Playwright, comandos, cobertura y huecos |
 | [Scripts](scripts.md) | Utilidades de `scripts/` |
 | [Infraestructura](infraestructura.md) | Despliegue: Docker, Cloud Run, CI/CD, Cloud Tasks |
