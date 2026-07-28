@@ -206,7 +206,7 @@ function readBooleanSetting(settings: Record<string, string>, key: string): bool
 }
 
 function buildValidationConfig(settings: Record<string, string>): EasyLexValidationConfig {
-  return {
+  const config: EasyLexValidationConfig = {
     validateId: readBooleanSetting(settings, "easylex_validate_id"),
     validateSms: readBooleanSetting(settings, "easylex_validate_sms"),
     validatePicture: readBooleanSetting(settings, "easylex_validate_picture"),
@@ -215,4 +215,16 @@ function buildValidationConfig(settings: Record<string, string>): EasyLexValidat
     validateLiveness: readBooleanSetting(settings, "easylex_validate_liveness"),
     validateVoice: readBooleanSetting(settings, "easylex_validate_voice"),
   };
+
+  // EasyLex exige que el biométrico y la prueba de vida vengan acompañados de
+  // validación de INE (validateId) y foto comparativa (validatePicture): tiene
+  // sentido —para cotejar la cara necesita el documento—. Sin esa dependencia,
+  // createDocument falla con 502 "InvalidRequest". Se fuerza aquí para que una
+  // configuración inconsistente en company_settings no tumbe el pipeline.
+  if (config.validateBiometric || config.validateLiveness) {
+    config.validateId = true;
+    config.validatePicture = true;
+  }
+
+  return config;
 }

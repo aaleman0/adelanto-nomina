@@ -69,12 +69,58 @@ export type EasyLexDocumentStatusResponse = {
   references: unknown[];
 };
 
+/**
+ * Forma real del error de EasyLex: `{ error: { path, message, description, code } }`.
+ * El `description` (validación de esquema) trae `dataPath` y `params.allowedValues`,
+ * que es lo que hace legible un rechazo como "validateId debe ser true".
+ */
+export type EasyLexErrorDetail = {
+  path?: string;
+  message?: string;
+  code?: number;
+  description?: {
+    keyword?: string;
+    dataPath?: string;
+    message?: string;
+    params?: { allowedValues?: unknown[] };
+  };
+};
+
 export type EasyLexError = {
-  error?: string;
+  // `error` puede venir como string (formato viejo) u objeto (v2).
+  error?: string | EasyLexErrorDetail;
   message?: string;
   code?: number;
   statusCode?: number;
 };
+
+/**
+ * Convierte la respuesta de error de EasyLex en un mensaje legible. Antes se
+ * hacía `body.message ?? body.error`, pero en v2 `body.error` es un OBJETO, así
+ * que terminaba como "[object Object]" y ocultaba la causa real (p. ej. que una
+ * validación exige otra). Aquí se extrae el detalle del esquema cuando existe.
+ */
+export function describeEasyLexError(body: unknown, status: number): string {
+  const b = (body ?? {}) as EasyLexError;
+  const err = b.error;
+
+  if (err && typeof err === "object") {
+    const base = err.message || "InvalidRequest";
+    const d = err.description;
+    if (d && (d.dataPath || d.params?.allowedValues)) {
+      const field = d.dataPath ? d.dataPath.replace(/^\./, "") : "campo";
+      const allowed = d.params?.allowedValues?.length
+        ? ` (valor permitido: ${d.params.allowedValues.join(", ")})`
+        : "";
+      return `${base}: '${field}' inválido${allowed}`;
+    }
+    return err.code ? `${base} [code ${err.code}]` : base;
+  }
+
+  if (typeof err === "string" && err) return err;
+  if (typeof b.message === "string" && b.message) return b.message;
+  return `HTTP ${status}`;
+}
 
 export type CreateDocumentResult =
   | { ok: true; documentId: string; signerId: string; signingUrl: string; rawResponse: EasyLexCreateDocumentResponse }
@@ -162,9 +208,7 @@ export class EasyLexClient {
       const body = await response.json();
 
       if (!response.ok) {
-        const errorMsg = (body as EasyLexError).message
-          ?? (body as EasyLexError).error
-          ?? `HTTP ${response.status}`;
+        const errorMsg = describeEasyLexError(body, response.status);
 
         logger.error("easylex.create_document.failed", new Error(errorMsg), {
           status: response.status,
@@ -221,7 +265,7 @@ export class EasyLexClient {
       const body = await response.json();
 
       if (!response.ok) {
-        const errorMsg = (body as EasyLexError).message ?? `HTTP ${response.status}`;
+        const errorMsg = describeEasyLexError(body, response.status);
         return { ok: false, error: errorMsg };
       }
 
