@@ -50,3 +50,7 @@ tests/e2e/.auth/
 # En producción se inyectan desde Secret Manager, nunca desde el repo.
 /google_oauth_client.json
 /token.json
+
+# Artefactos de pruebas manuales locales
+/scripts/test-full-contract-flow.ts
+/scripts/test-filled-contract.pdf

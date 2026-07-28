@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { easylexEnv } from "@/lib/env";
 import { verifySharedSecret, isProduction, enforceSignatures } from "@/lib/security/webhook-signatures";
+import { redactPII } from "@/lib/audit/redact";
 import { randomUUID } from "node:crypto";
 
 import { enforceRateLimit } from "@/lib/security/rate-limit";
@@ -95,7 +96,12 @@ export async function POST(request: Request) {
   } catch (error) {
     logger.error("easylex.webhook.error", error, { correlationId });
 
-    return NextResponse.json({ ok: true }, { status: 200 });
+    // Devolver 5xx (no 200) para que EasyLex REINTENTE. Los handlers son
+    // idempotentes (saltan si el intento ya está 'firmado' y deduplican el
+    // evento por id), así que un fallo transitorio de BD durante la transición
+    // a 'firmado' no pierde la confirmación de firma. Antes esto respondía 200
+    // y la firma —evidencia legal— se perdía en silencio.
+    return NextResponse.json({ ok: false, error: "processing_error" }, { status: 500 });
   }
 }
 
@@ -233,7 +239,9 @@ async function handleDocumentSigned(
 
     if (offerError) throw offerError;
 
-    await supabase.from("audit_events").insert({
+    // El audit_event de firma es la evidencia legal: su fallo NO debe tragarse.
+    // Se lanza para que el webhook devuelva 5xx y EasyLex reintente.
+    const { error: auditError } = await supabase.from("audit_events").insert({
       event_name: "contract.signed",
       entity_type: "contract_requests",
       entity_id: contractRequest.id,
@@ -251,6 +259,8 @@ async function handleDocumentSigned(
       },
       actor_type: "system",
     });
+
+    if (auditError) throw auditError;
   }
 
   await recordEasyLexEvent({
@@ -265,7 +275,7 @@ async function handleDocumentSigned(
     direction: "inbound",
     endpoint: "/api/webhooks/easylex/sign",
     method: "POST",
-    request_payload: payload,
+    request_payload: redactPII(payload),
     response_payload: { ok: true, status: "signed" },
     status_code: 200,
     status: "success",
@@ -307,7 +317,7 @@ async function recordEasyLexEvent(input: {
     easylex_contract_id: input.attempt.easylex_contract_id,
     event_id: eventId,
     event_type: input.eventType,
-    raw_payload: input.payload,
+    raw_payload: redactPII(input.payload),
     status: "success",
     processed_at: new Date().toISOString(),
   });

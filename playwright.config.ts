@@ -27,6 +27,11 @@ export default defineConfig({
     url: "http://localhost:3000",
     reuseExistingServer: true,
     timeout: 120_000,
+    // El webhook mock-sign ahora exige ENABLE_MOCK_SIGN además de no-producción
+    // (doble cerrojo). La suite lo usa para simular la firma, así que se activa
+    // aquí. Nota: con reuseExistingServer, si ya hay un dev server corriendo sin
+    // el flag, hay que reiniciarlo para que la suite mock-sign pase.
+    env: { ENABLE_MOCK_SIGN: "true" },
   },
   projects: [
     {

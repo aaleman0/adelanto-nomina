@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
+import { redactPII } from "./redact";
 import type { Actor } from "@/lib/auth/roles";
 
 /**
@@ -104,8 +105,10 @@ export async function recordIntegrationLog(input: RecordIntegrationLogInput): Pr
     direction: input.direction,
     endpoint: input.endpoint,
     method: input.method,
-    request_payload: input.requestPayload ?? {},
-    response_payload: input.responsePayload ?? {},
+    // Redacción de PII: integration_logs es consultable; los identificadores
+    // sensibles (RFC/CURP/CLABE/teléfono/nombres) no deben quedar en claro.
+    request_payload: redactPII(input.requestPayload ?? {}),
+    response_payload: redactPII(input.responsePayload ?? {}),
     status_code: input.statusCode ?? (input.success ? 200 : 500),
     status: input.success ? "success" : "failed",
     success: input.success,
