@@ -1,9 +1,27 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getWhatsAppClient } from "@/lib/whatsapp/client";
 import { logger } from "@/lib/logger";
 import { whatsAppEnv } from "@/lib/env";
 
 export const runtime = "nodejs";
+
+// Verificación REAL del token contra Meta (no solo su presencia), cacheada para
+// no golpear la API de Meta en cada poll del banner de salud. El token temporal
+// caduca sin aviso: esto lo detecta de forma proactiva.
+const CONNECTION_TTL_MS = 5 * 60 * 1000;
+let connectionCache: { at: number; ok: boolean; error: string | null } | null = null;
+
+async function checkWhatsappConnection(configured: boolean): Promise<{ ok: boolean; error: string | null }> {
+  if (!configured) return { ok: false, error: "WhatsApp no configurado." };
+  const now = Date.now();
+  if (connectionCache && now - connectionCache.at < CONNECTION_TTL_MS) {
+    return { ok: connectionCache.ok, error: connectionCache.error };
+  }
+  const result = await getWhatsAppClient().testConnection();
+  connectionCache = { at: now, ok: result.ok, error: result.ok ? null : result.error ?? "Error de conexión con Meta." };
+  return { ok: connectionCache.ok, error: connectionCache.error };
+}
 
 export async function GET() {
   const checks = {
@@ -83,12 +101,17 @@ export async function GET() {
   // Log health check results
   const allTablesOk = Object.values(checks.tables).every(Boolean);
   const isConfigured = Object.values(checks.env).every(Boolean);
-  
+
+  // Validez real del token contra Meta (cacheada). No baja el status HTTP —el
+  // servicio sigue "healthy" aunque el token expire— pero alimenta el banner.
+  const connection = await checkWhatsappConnection(isConfigured);
+
   logger.info("whatsapp.health_check", {
     status,
     supabase: checks.supabase,
     tables: allTablesOk,
     env: isConfigured,
+    connection: connection.ok,
     errors: errors.length > 0 ? errors : undefined,
   });
 
@@ -101,6 +124,7 @@ export async function GET() {
       status: status === 200 ? "healthy" : "unhealthy",
       checks,
       whatsappConfigured: isConfigured,
+      connection,
     },
     { status }
   );

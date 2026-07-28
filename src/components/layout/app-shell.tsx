@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { SidebarFrame, type NavEntry } from "./sidebar-frame";
+import { HealthBanner } from "./health-banner";
 import { NotificationsProvider } from "@/components/ui/notifications";
 import { RoleProvider } from "@/components/auth/role-context";
 import { getCurrentActor, hasRole, type UserRole } from "@/lib/auth/roles";
@@ -63,7 +64,10 @@ export async function AppShell({ children }: { children: ReactNode }) {
           user={{ displayName, email: user?.email ?? "", avatarUrl, role }}
         >
           <main className="flex min-h-0 flex-1 flex-col bg-transparent text-text-primary">
-            <div className="panel-scroll flex min-h-0 w-full flex-1 flex-col gap-5 px-4 py-4 sm:px-6 lg:px-7">{children}</div>
+            <div className="panel-scroll flex min-h-0 w-full flex-1 flex-col gap-5 px-4 py-4 sm:px-6 lg:px-7">
+              <HealthBanner />
+              {children}
+            </div>
           </main>
         </SidebarFrame>
       </NotificationsProvider>
