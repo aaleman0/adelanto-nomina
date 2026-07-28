@@ -12,8 +12,12 @@ export const runtime = "nodejs";
 const CONNECTION_TTL_MS = 5 * 60 * 1000;
 let connectionCache: { at: number; ok: boolean; error: string | null } | null = null;
 
-async function checkWhatsappConnection(configured: boolean): Promise<{ ok: boolean; error: string | null }> {
-  if (!configured) return { ok: false, error: "WhatsApp no configurado." };
+async function checkWhatsappConnection(canTest: boolean): Promise<{ ok: boolean; error: string | null }> {
+  // `canTest` = hay token + phone number (lo único que testConnection necesita).
+  // NO se exige appSecret aquí: ese solo hace falta para verificar la firma del
+  // webhook, no para enviar; gatearlo aquí reportaría "no configurado" en vez
+  // del estado real del token.
+  if (!canTest) return { ok: false, error: "WhatsApp sin token o phone number configurado." };
   const now = Date.now();
   if (connectionCache && now - connectionCache.at < CONNECTION_TTL_MS) {
     return { ok: connectionCache.ok, error: connectionCache.error };
@@ -104,7 +108,10 @@ export async function GET() {
 
   // Validez real del token contra Meta (cacheada). No baja el status HTTP —el
   // servicio sigue "healthy" aunque el token expire— pero alimenta el banner.
-  const connection = await checkWhatsappConnection(isConfigured);
+  // Se prueba con token + phone number, sin exigir appSecret (ese es solo para
+  // el webhook), para reportar el estado REAL del token aunque falte esa var.
+  const canTestConnection = Boolean(whatsAppEnv.accessToken) && Boolean(whatsAppEnv.phoneNumberId);
+  const connection = await checkWhatsappConnection(canTestConnection);
 
   logger.info("whatsapp.health_check", {
     status,
