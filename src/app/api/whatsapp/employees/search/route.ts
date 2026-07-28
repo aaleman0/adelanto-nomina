@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth/roles";
 import { EmployeeSearchQuerySchema } from "@/lib/whatsapp/schemas";
 import { parseQuery, escapePostgrestValue } from "@/lib/api/validation";
 import { logger } from "@/lib/logger";
@@ -13,6 +14,11 @@ export const runtime = "nodejs";
  * Devuelve datos básicos + oferta vigente para poder evaluar elegibilidad.
  */
 export async function GET(request: Request) {
+  // Devuelve PII por persona (nombre, teléfono, RFC): exige rol operaciones,
+  // no solo sesión.
+  const auth = await requireRole("operaciones");
+  if (!auth.ok) return auth.response;
+
   const parsed = parseQuery(request, EmployeeSearchQuerySchema);
   if (!parsed.success) return parsed.response;
   const { q, limit } = parsed.data;

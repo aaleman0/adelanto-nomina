@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth/roles";
 import { isUuid, invalidIdResponse } from "@/lib/api/validation";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  // Historial de mensajes de un empleado concreto (PII): exige operaciones.
+  const auth = await requireRole("operaciones");
+  if (!auth.ok) return auth.response;
+
   const { searchParams } = new URL(request.url);
   const employeeId = searchParams.get("employeeId");
 

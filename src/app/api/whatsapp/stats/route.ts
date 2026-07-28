@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth/roles";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
 export async function GET() {
+  // Métricas agregadas (sin PII por persona): basta un usuario aprovisionado.
+  const auth = await requireRole("solo_lectura");
+  if (!auth.ok) return auth.response;
+
   try {
     const supabase = getSupabaseAdmin();
     const todayStart = new Date();

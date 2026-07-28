@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth/roles";
 import { logger } from "@/lib/logger";
 import { classifyPhone, type PhoneIssue } from "@/lib/whatsapp/phone-utils";
 
@@ -31,6 +32,10 @@ export type PhoneAuditResult = {
  * formatos que Meta rechazaría al intentar enviar por WhatsApp.
  */
 export async function GET() {
+  // Lista teléfonos + nombres + RFC de empleados con problemas: PII → operaciones.
+  const auth = await requireRole("operaciones");
+  if (!auth.ok) return auth.response;
+
   try {
     const supabase = getSupabaseAdmin();
 

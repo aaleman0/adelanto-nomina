@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth/roles";
 import { BulkDetailQuerySchema } from "@/lib/whatsapp/schemas";
 import { parseQuery } from "@/lib/api/validation";
 import { logger } from "@/lib/logger";
@@ -8,6 +9,9 @@ export const runtime = "nodejs";
 
 // GET /api/whatsapp/bulk/detail?id=<bulkSendId>&page=1&pageSize=50
 export async function GET(request: Request) {
+  const auth = await requireRole("solo_lectura");
+  if (!auth.ok) return auth.response;
+
   const parsed = parseQuery(request, BulkDetailQuerySchema);
   if (!parsed.success) return parsed.response;
   const { id, page, pageSize, status: statusFilter, q: searchQuery } = parsed.data;
