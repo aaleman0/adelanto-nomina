@@ -8,7 +8,7 @@ import {
   getContractControlData,
   getActionQueue,
   getDashboardKpis,
-  type ContractControlRow,
+  type ActionQueue,
   type DashboardKpis,
 } from "@/lib/backoffice/contract-control";
 
@@ -44,16 +44,16 @@ export default async function Home() {
         </section>
       ) : null}
       <PipelineOverview metrics={result.metrics} signed={kpis.firmados} total={kpis.totalElegibles} />
-      <OperationsCockpit rows={actionQueue} />
+      <OperationsCockpit rows={actionQueue.rows} total={actionQueue.total} />
     </AppShell>
   );
 }
 
-async function getActionQueueResult(): Promise<ContractControlRow[]> {
+async function getActionQueueResult(): Promise<ActionQueue> {
   try {
     return await getActionQueue();
   } catch {
-    return [];
+    return { rows: [], total: 0 };
   }
 }
 

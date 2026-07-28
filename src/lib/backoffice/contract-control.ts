@@ -149,32 +149,50 @@ export const ACTION_REQUIRED_STATUSES: ContractOperationalStatus[] = [
   "pendiente_envio",
 ];
 
+export type ActionQueue = {
+  /** Filas cargadas, ordenadas por urgencia (≤ limit). */
+  rows: ContractControlRow[];
+  /** Total REAL de expedientes que requieren acción (puede exceder rows.length). */
+  total: number;
+};
+
 /**
- * Cola de acción del cockpit: solo los expedientes que requieren que el
- * operador haga algo, ordenados por urgencia (error → link vencido →
- * pendiente) y, dentro de cada grupo, por actividad más reciente.
+ * Cola de acción del cockpit: solo los expedientes que requieren que el operador
+ * haga algo, por urgencia (error → link vencido → pendiente) y, dentro de cada
+ * grupo, por actividad más reciente.
+ *
+ * Se trae POR PRIORIDAD, no por recencia: se llena el cupo empezando por los
+ * errores, luego los links vencidos, luego los pendientes. Antes traía las 50
+ * más recientes y recién después reordenaba en memoria, así que con muchos
+ * pendientes recientes un error urgente quedaba fuera del tope y se volvía
+ * invisible. También devuelve el conteo total real, para no mentir con
+ * "N por resolver".
  */
-export async function getActionQueue(limit = 50): Promise<ContractControlRow[]> {
+export async function getActionQueue(limit = 50): Promise<ActionQueue> {
   const supabase = await getReadClient();
 
-  const { data, error } = await supabase
+  const { count, error: countError } = await supabase
     .from("backoffice_contract_control_v1")
-    .select(CONTRACT_CONTROL_SELECT)
-    .in("operational_status", ACTION_REQUIRED_STATUSES)
-    .order("last_movement_at", { ascending: false })
-    .limit(limit);
+    .select("employee_id", { count: "exact", head: true })
+    .in("operational_status", ACTION_REQUIRED_STATUSES);
 
-  if (error) throw error;
+  if (countError) throw countError;
 
-  const rows = (data ?? []) as unknown as ContractControlRow[];
+  const rows: ContractControlRow[] = [];
+  for (const status of ACTION_REQUIRED_STATUSES) {
+    if (rows.length >= limit) break;
+    const { data, error } = await supabase
+      .from("backoffice_contract_control_v1")
+      .select(CONTRACT_CONTROL_SELECT)
+      .eq("operational_status", status)
+      .order("last_movement_at", { ascending: false })
+      .limit(limit - rows.length);
 
-  // El orden por urgencia se aplica aquí: PostgREST no ordena por una lista
-  // arbitraria de valores, y son ≤ limit filas, así que ordenar en memoria es
-  // trivial y mantiene el "más reciente primero" dentro de cada grupo.
-  const rank = new Map(ACTION_REQUIRED_STATUSES.map((status, index) => [status, index]));
-  return rows.sort(
-    (a, b) => (rank.get(a.operational_status) ?? 99) - (rank.get(b.operational_status) ?? 99),
-  );
+    if (error) throw error;
+    rows.push(...((data ?? []) as unknown as ContractControlRow[]));
+  }
+
+  return { rows, total: count ?? rows.length };
 }
 
 export async function getContractControlData(

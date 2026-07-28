@@ -9,13 +9,15 @@ import { RoleGate } from "@/components/auth/role-gate";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { regenerateContractLinkAction, retryContractFlowAction } from "@/app/contracts/actions";
 
-export function OperationsCockpit({ rows }: { rows: ContractControlRow[] }) {
+export function OperationsCockpit({ rows, total }: { rows: ContractControlRow[]; total: number }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("es"));
   // El cockpit muestra solo lo que requiere acción del operador (lo trae ya
   // filtrado el servidor). El archivo completo y buscable vive en /contracts.
   const queue = rows;
+  // `total` es el conteo REAL de la cola; `queue` son las cargadas (≤ tope).
+  const truncated = total > queue.length;
   const filtered = queue.filter((row) => [row.empleado, row.empleador, row.operational_status].some((value) => value?.toLocaleLowerCase("es").includes(deferredQuery)));
   const [selectedId, setSelectedId] = useState(queue[0]?.employee_id ?? "");
   const selected = queue.find((row) => row.employee_id === selectedId) ?? filtered[0] ?? queue[0];
@@ -80,10 +82,15 @@ export function OperationsCockpit({ rows }: { rows: ContractControlRow[] }) {
     <section className="grid flex-1 gap-3 xl:min-h-0 xl:grid-cols-[minmax(420px,1fr)_340px]">
       <div className="surface-panel flex min-h-0 flex-col rounded-xl xl:overflow-hidden">
         <div className="shrink-0 border-b border-border p-4 sm:p-5">
-          <div className="flex items-center justify-between gap-4"><div><h2 className="font-display text-xl font-semibold text-text-primary">Requieren acción</h2><p className="font-data mt-1 text-[10px] uppercase tracking-[.14em] text-text-muted">{filtered.length} por resolver</p></div><Link href="/contracts" className="text-xs font-semibold text-primary hover:text-primary-hover">Ver archivo completo</Link></div>
+          <div className="flex items-center justify-between gap-4"><div><h2 className="font-display text-xl font-semibold text-text-primary">Requieren acción</h2><p className="font-data mt-1 text-[10px] uppercase tracking-[.14em] text-text-muted">{deferredQuery ? `${filtered.length} ${filtered.length === 1 ? "coincidencia" : "coincidencias"}` : `${total} por resolver`}</p></div><Link href="/contracts" className="text-xs font-semibold text-primary hover:text-primary-hover">Ver archivo completo</Link></div>
+          {truncated && !deferredQuery && (
+            <p className="mt-2 text-[11px] text-text-muted">
+              Mostrando los <span className="font-semibold text-text-secondary">{queue.length}</span> más urgentes de {total}. <Link href="/contracts" className="text-primary hover:underline">Ver todos</Link>.
+            </p>
+          )}
           <label className="mt-4 flex h-11 items-center gap-3 rounded-lg border border-border bg-white/55 px-3 transition focus-within:border-[var(--color-3)] focus-within:bg-white">
             <svg className="h-4 w-4 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-            <input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-text-disabled" placeholder="Buscar empleado, empresa o estado" />
+            <input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-text-disabled" placeholder="Filtrar la cola cargada…" />
             <kbd className="hidden shrink-0 rounded border border-border px-1.5 py-0.5 font-data text-[10px] text-text-muted xl:inline">/</kbd>
           </label>
         </div>
