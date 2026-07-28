@@ -5,6 +5,9 @@ import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ContractControlRow } from "@/lib/backoffice/contract-control";
 import { SendWhatsAppButton } from "@/components/whatsapp/send-whatsapp-button";
+import { RoleGate } from "@/components/auth/role-gate";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import { regenerateContractLinkAction, retryContractFlowAction } from "@/app/contracts/actions";
 
 export function OperationsCockpit({ rows }: { rows: ContractControlRow[] }) {
   const router = useRouter();
@@ -56,6 +59,10 @@ export function OperationsCockpit({ rows }: { rows: ContractControlRow[] }) {
         // Dispara el botón de envío del inspector (autocontenido, con su confirm).
         const btn = document.querySelector<HTMLButtonElement>("[data-cockpit-send] button");
         btn?.click();
+      } else if (event.key === "r") {
+        // Resuelve el desvío (reintentar/regenerar) sin abrir el expediente.
+        const btn = document.querySelector<HTMLButtonElement>("[data-cockpit-resolve] button");
+        btn?.click();
       }
     }
     window.addEventListener("keydown", onKey);
@@ -101,6 +108,7 @@ export function OperationsCockpit({ rows }: { rows: ContractControlRow[] }) {
           <ShortcutHint keys="j / k" label="mover" />
           <ShortcutHint keys="Enter" label="abrir" />
           <ShortcutHint keys="s" label="enviar" />
+          <ShortcutHint keys="r" label="resolver" />
           <ShortcutHint keys="/" label="buscar" />
         </div>
       </div>
@@ -149,7 +157,74 @@ function QueueRow({ row, selected, onSelect, rowRef }: { row: ContractControlRow
 
 function Inspector({ row }: { row: ContractControlRow }) {
   const tone = getTone(row.operational_status);
-  return <div className="mt-6 animate-fade-up" key={row.employee_id}><div className="flex items-center justify-between gap-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${tone.badge}`}>{formatStatus(row.operational_status)}</span><span className={`h-2.5 w-2.5 rounded-full ${tone.dot}`} /></div><h3 className="font-display mt-6 text-2xl font-semibold leading-tight text-text-primary">{row.empleado || "Empleado sin nombre"}</h3><p className="mt-2 text-sm text-text-muted">{row.empleador || "Sin empleador registrado"}</p><div className="my-6 border-y border-border py-5"><p className="text-xs text-text-muted">Monto autorizado</p><p className="font-data mt-1 text-3xl font-medium text-text-primary">{formatMoney(row.monto_prestamo_autorizado)}</p></div><dl className="space-y-4"><Detail label="Estado" value={formatStatus(row.operational_status)} /><Detail label="Identificador" value={row.employee_id.slice(0, 12)} mono /></dl><div className="mt-7 flex flex-col gap-2">{row.operational_status !== "firmado" && <span data-cockpit-send><SendWhatsAppButton employeeId={row.employee_id} employeeName={row.empleado} className="w-full justify-center" /></span>}<Link href={`/contracts/${row.employee_id}`} className="button-contrast flex h-10 items-center justify-center rounded-lg bg-[var(--color-5)] text-sm font-semibold transition hover:-translate-y-0.5 hover:bg-[var(--color-4)]">Abrir expediente</Link></div></div>;
+  const status = row.operational_status;
+  const hasRequest = Boolean(row.contract_request_id);
+
+  return (
+    <div className="mt-6 animate-fade-up" key={row.employee_id}>
+      <div className="flex items-center justify-between gap-3">
+        <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${tone.badge}`}>{formatStatus(status)}</span>
+        <span className={`h-2.5 w-2.5 rounded-full ${tone.dot}`} />
+      </div>
+      <h3 className="font-display mt-6 text-2xl font-semibold leading-tight text-text-primary">{row.empleado || "Empleado sin nombre"}</h3>
+      <p className="mt-2 text-sm text-text-muted">{row.empleador || "Sin empleador registrado"}</p>
+      <div className="my-6 border-y border-border py-5">
+        <p className="text-xs text-text-muted">Monto autorizado</p>
+        <p className="font-data mt-1 text-3xl font-medium text-text-primary">{formatMoney(row.monto_prestamo_autorizado)}</p>
+      </div>
+      <dl className="space-y-4">
+        <Detail label="Estado" value={formatStatus(status)} />
+        <Detail label="Identificador" value={row.employee_id.slice(0, 12)} mono />
+      </dl>
+
+      {/* La acción PRIMARIA depende del estado de la fila: resolver el desvío sin
+          salir del cockpit. Antes solo se ofrecía "Enviar WhatsApp", que es la
+          acción equivocada para un error o un link vencido. */}
+      <div className="mt-7 flex flex-col gap-2">
+        {status === "error" && (
+          <form action={retryContractFlowAction} data-cockpit-resolve>
+            <input type="hidden" name="contract_request_id" value={row.contract_request_id ?? ""} />
+            <input type="hidden" name="employee_id" value={row.employee_id} />
+            <RoleGate minimum="operaciones" mode="disable">
+              <ConfirmSubmitButton
+                confirmMessage="Se reintentará el flujo del contrato y quedará evidencia en el timeline. ¿Continuar?"
+                disabled={!hasRequest}
+                className="w-full justify-center"
+              >
+                Reintentar flujo
+              </ConfirmSubmitButton>
+            </RoleGate>
+          </form>
+        )}
+
+        {status === "link_expirado" && (
+          <form action={regenerateContractLinkAction} data-cockpit-resolve>
+            <input type="hidden" name="contract_request_id" value={row.contract_request_id ?? ""} />
+            <input type="hidden" name="employee_id" value={row.employee_id} />
+            <RoleGate minimum="operaciones" mode="disable">
+              <ConfirmSubmitButton
+                confirmMessage="Se regenerará el link de firma de este contrato. ¿Continuar?"
+                disabled={!hasRequest}
+                className="w-full justify-center"
+              >
+                Regenerar link
+              </ConfirmSubmitButton>
+            </RoleGate>
+          </form>
+        )}
+
+        {/* Enviar el mensaje inicial: solo cuando esa ES la acción correcta
+            (pendiente de contacto), no para desvíos ni firmados. */}
+        {status === "pendiente_envio" && (
+          <span data-cockpit-send>
+            <SendWhatsAppButton employeeId={row.employee_id} employeeName={row.empleado} className="w-full justify-center" />
+          </span>
+        )}
+
+        <Link href={`/contracts/${row.employee_id}`} className="button-contrast flex h-10 items-center justify-center rounded-lg bg-[var(--color-5)] text-sm font-semibold transition hover:-translate-y-0.5 hover:bg-[var(--color-4)]">Abrir expediente</Link>
+      </div>
+    </div>
+  );
 }
 
 function Detail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) { return <div><dt className="text-[10px] uppercase tracking-wider text-text-muted">{label}</dt><dd className={`mt-1 text-sm text-text-primary ${mono ? "font-data" : ""}`}>{value}</dd></div>; }
