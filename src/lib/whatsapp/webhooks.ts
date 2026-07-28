@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getWhatsAppClient } from "@/lib/whatsapp/client";
 import { safeEqual } from "@/lib/security/webhook-signatures";
+import { redactPII } from "@/lib/audit/redact";
 import { logger } from "@/lib/logger";
 
 export function verifyWebhook(
@@ -70,7 +71,7 @@ export async function handleWebhook(payload: {
           direction: "inbound",
           endpoint: "/api/webhooks/whatsapp",
           method: "POST",
-          request_payload: msg as unknown as Record<string, unknown>,
+          request_payload: redactPII(msg as unknown as Record<string, unknown>),
           response_payload: {},
           status_code: 200,
           status: "success",

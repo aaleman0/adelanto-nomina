@@ -1,3 +1,5 @@
+import { redactPII } from "@/lib/audit/redact";
+
 const BASE_URL = "https://graph.facebook.com/v18.0";
 
 // Timeout de las llamadas salientes a Meta: sin esto una conexión colgada
@@ -100,14 +102,14 @@ export class WhatsAppClient {
 
       if (!res.ok) {
         const errMsg = describeMetaError(json, res.status);
-        console.error("[WhatsApp] send failed", JSON.stringify(json));
+        // Redactar: la respuesta de error de Meta puede incluir el destinatario.
+        console.error("[WhatsApp] send failed", JSON.stringify(redactPII(json)));
         return { ok: false, error: errMsg };
       }
 
       const messageId = json?.messages?.[0]?.id as string | undefined;
-      const waId = json?.contacts?.[0]?.wa_id as string | undefined;
-      const inputPhone = json?.contacts?.[0]?.input as string | undefined;
-      console.log("[WhatsApp] send ok", JSON.stringify({ messageId, waId, inputPhone, to }));
+      // No registrar teléfonos (waId/inputPhone/to son PII); basta el messageId.
+      console.log("[WhatsApp] send ok", JSON.stringify({ messageId }));
       return { ok: true, messageId };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : "Error de red." };

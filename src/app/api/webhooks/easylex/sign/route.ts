@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { easylexEnv } from "@/lib/env";
 import { verifySharedSecret, isProduction, enforceSignatures } from "@/lib/security/webhook-signatures";
+import { redactPII } from "@/lib/audit/redact";
 import { randomUUID } from "node:crypto";
 
 import { enforceRateLimit } from "@/lib/security/rate-limit";
@@ -274,7 +275,7 @@ async function handleDocumentSigned(
     direction: "inbound",
     endpoint: "/api/webhooks/easylex/sign",
     method: "POST",
-    request_payload: payload,
+    request_payload: redactPII(payload),
     response_payload: { ok: true, status: "signed" },
     status_code: 200,
     status: "success",
@@ -316,7 +317,7 @@ async function recordEasyLexEvent(input: {
     easylex_contract_id: input.attempt.easylex_contract_id,
     event_id: eventId,
     event_type: input.eventType,
-    raw_payload: input.payload,
+    raw_payload: redactPII(input.payload),
     status: "success",
     processed_at: new Date().toISOString(),
   });

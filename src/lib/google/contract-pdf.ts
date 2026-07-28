@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { getGoogleAuthClient } from "./auth";
+import { logger } from "@/lib/logger";
 
 const TEMPLATE_DOC_ID = "1XCSrKrMPHDc5S2lxcR4BqsHR6HouIUW8l0_KspocHJQ";
 
@@ -81,6 +82,17 @@ export async function generateContractPdfFromGoogleDocs(
 
     return Buffer.from(pdfResponse.data as ArrayBuffer);
   } finally {
-    await drive.files.delete({ fileId: copiedDocId }).catch(() => {});
+    // La copia contiene PII completa (RFC, CURP, CLABE, domicilio). Si el borrado
+    // falla, queda huérfana en Drive: NO tragar el error, registrarlo para poder
+    // limpiarla a mano y detectar el patrón.
+    try {
+      await drive.files.delete({ fileId: copiedDocId });
+    } catch (error) {
+      logger.error(
+        "google.contract_pdf.cleanup_failed",
+        error instanceof Error ? error : new Error(String(error)),
+        { copiedDocId },
+      );
+    }
   }
 }
