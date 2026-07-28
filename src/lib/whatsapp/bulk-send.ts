@@ -91,6 +91,9 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
   const client = getWhatsAppClient();
   const templateName = params.templateName ?? "adelanto_nomina_v2";
 
+  // Barrido oportunista de envíos previos atascados en 'sending'.
+  await sweepStuckBulkSends();
+
   // 1. Obtener lista de employees
   const employeeIds = await resolveEmployeeIds(params);
 
@@ -344,6 +347,9 @@ export async function enqueueBulkSend(
 ): Promise<BulkSendResult> {
   const supabase = getSupabaseAdmin();
   const templateName = params.templateName ?? DEFAULT_BULK_TEMPLATE;
+
+  // Barrido oportunista de envíos previos atascados en 'sending'.
+  await sweepStuckBulkSends();
 
   const employeeIds = await resolveEmployeeIds(params);
 
@@ -639,4 +645,68 @@ async function finalizeBulkSendIfDone(bulkSendId: string) {
   }
 
   logger.info("whatsapp.bulk_send.completed", { bulkSendId, sent, failed });
+}
+
+/** Un envío masivo lleva demasiado en 'sending' → se considera atascado. */
+const STUCK_BULK_TIMEOUT_MIN = 30;
+
+/**
+ * Reconcilia envíos masivos atascados en 'sending' más allá del timeout: cierra
+ * los fallos silenciosos donde el proceso murió a mitad (inline) o el worker
+ * cayó tras entregar a Meta (cola), dejando el bulk 'sending' para siempre.
+ *
+ * Marca como `failed` los mensajes que nunca completaron (queued/sending) y
+ * finaliza el bulk recomputando contadores. Compromiso conocido: un mensaje que
+ * se entregó a Meta justo antes de un crash quedaría marcado failed; el timeout
+ * largo hace raro ese caso y es preferible a un bulk atascado sin resolución.
+ *
+ * Es idempotente y no lanza: se invoca de forma oportunista al iniciar un envío.
+ */
+export async function reconcileStuckBulkSends(
+  olderThanMinutes = STUCK_BULK_TIMEOUT_MIN,
+): Promise<{ reconciled: number }> {
+  const supabase = getSupabaseAdmin();
+  const cutoff = new Date(Date.now() - olderThanMinutes * 60_000).toISOString();
+
+  const { data: stuck, error } = await supabase
+    .from("whatsapp_bulk_sends")
+    .select("id")
+    .eq("status", "sending")
+    .lt("created_at", cutoff);
+
+  if (error) {
+    logger.error("whatsapp.bulk_send.reconcile_query_failed", error);
+    return { reconciled: 0 };
+  }
+  if (!stuck || stuck.length === 0) return { reconciled: 0 };
+
+  for (const row of stuck) {
+    const bulkSendId = row.id as string;
+    await supabase
+      .from("whatsapp_contract_messages")
+      .update({
+        status: "failed",
+        delivery_status: "failed",
+        error_message: "Reconciliado: el envío no completó dentro del timeout.",
+      })
+      .eq("bulk_send_id", bulkSendId)
+      .in("status", [QUEUED_STATUS, SENDING_STATUS]);
+
+    await finalizeBulkSendIfDone(bulkSendId);
+    logger.warn("whatsapp.bulk_send.reconciled_stuck", { bulkSendId, olderThanMinutes });
+  }
+
+  return { reconciled: stuck.length };
+}
+
+/** Barrido oportunista, no fatal: nunca debe bloquear ni tumbar un envío. */
+async function sweepStuckBulkSends(): Promise<void> {
+  try {
+    await reconcileStuckBulkSends();
+  } catch (error) {
+    logger.error(
+      "whatsapp.bulk_send.reconcile_failed",
+      error instanceof Error ? error : new Error(String(error)),
+    );
+  }
 }

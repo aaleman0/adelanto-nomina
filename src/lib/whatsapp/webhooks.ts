@@ -129,11 +129,27 @@ export async function handleWebhook(payload: {
           updateFields.error_message = errTitle;
         }
 
-        // Actualizar registro en whatsapp_contract_messages
-        await supabase
+        // Actualizar registro en whatsapp_contract_messages. Se captura el
+        // resultado: un update que afecta 0 filas (el wa_message_id no existe
+        // aún o no coincide) perdía el estado de entrega en silencio.
+        const { data: updatedRows, error: updateError } = await supabase
           .from("whatsapp_contract_messages")
           .update(updateFields)
-          .eq("wa_message_id", waMessageId);
+          .eq("wa_message_id", waMessageId)
+          .select("id");
+
+        if (updateError) {
+          logger.error("whatsapp.delivery_status.update_failed", updateError, {
+            waMessageId,
+            deliveryStatus,
+          });
+        } else if (!updatedRows || updatedRows.length === 0) {
+          logger.warn("whatsapp.delivery_status.no_match", {
+            waMessageId,
+            deliveryStatus,
+            detail: "Estado de entrega sin mensaje que coincida (¿status antes del registro?).",
+          });
+        }
 
         // También actualizar bulk_send counters si aplica
         if (deliveryStatus === "delivered" || deliveryStatus === "read") {
