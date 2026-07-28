@@ -43,6 +43,7 @@ export function PipelineOverview({
   const firmados = metricValue(metrics, "signed");
   const errores = metricValue(metrics, "errors");
   const vencidos = metricValue(metrics, "expired");
+  const noElegibles = metricValue(metrics, "notEligible");
 
   // El camino feliz, en orden de avance por el embudo.
   const stages: Stage[] = [
@@ -66,6 +67,14 @@ export function PipelineOverview({
         <p className="font-data text-[10px] uppercase tracking-[.16em] text-text-muted">Embudo de conversión</p>
         <p className="text-xs text-text-muted">
           <span className="font-data text-sm font-semibold text-text-primary">{conversion}%</span> firmados · {signed} de {total} elegibles
+          {noElegibles > 0 && (
+            <>
+              {" · "}
+              <Link href="/contracts?status=no_elegible" className="text-text-secondary hover:text-text-primary hover:underline">
+                {noElegibles} no elegibles
+              </Link>
+            </>
+          )}
         </p>
       </div>
 

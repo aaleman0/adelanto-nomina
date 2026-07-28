@@ -21,6 +21,7 @@ export function ContractDetailView({
   control,
   timeline,
   actionFeedback,
+  eligibilityReason,
 }: {
   control: ContractControlRow;
   timeline: ContractTimelineRow[];
@@ -28,12 +29,19 @@ export function ContractDetailView({
     tone: StatusTone;
     message: string;
   };
+  eligibilityReason?: string | null;
 }) {
   return (
     <div className="flex flex-col gap-6">
       {actionFeedback ? (
         <div className={["rounded-xl border px-4 py-3 text-sm", getFeedbackClasses(actionFeedback.tone)].join(" ")}>
           {actionFeedback.message}
+        </div>
+      ) : null}
+
+      {eligibilityReason ? (
+        <div className="rounded-xl border border-[var(--warning)]/30 bg-warning-bg px-4 py-3 text-sm text-warning">
+          <span className="font-semibold">No elegible:</span> {eligibilityReason}
         </div>
       ) : null}
 

@@ -60,7 +60,8 @@ export type ContractControlMetricKey =
   | "contractGenerated"
   | "signed"
   | "expired"
-  | "errors";
+  | "errors"
+  | "notEligible";
 
 export type ContractControlMetric = {
   key: ContractControlMetricKey;
@@ -93,6 +94,7 @@ export const EMPTY_CONTRACT_CONTROL_METRICS: ContractControlMetric[] = [
   { key: "signed", label: "Firmados", value: 0 },
   { key: "expired", label: "Links expirados", value: 0 },
   { key: "errors", label: "Errores", value: 0 },
+  { key: "notEligible", label: "No elegibles", value: 0 },
 ];
 
 export const CONTRACT_CONTROL_SELECT = [
@@ -358,6 +360,11 @@ function buildContractControlMetrics(
       key: "errors",
       label: "Errores",
       value: count("error"),
+    },
+    {
+      key: "notEligible",
+      label: "No elegibles",
+      value: count("no_elegible"),
     },
   ];
 }

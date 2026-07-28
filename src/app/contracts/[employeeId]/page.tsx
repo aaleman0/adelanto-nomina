@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { ContractDetailView } from "@/components/contracts/contract-detail-view";
 import { getContractDetailData } from "@/lib/backoffice/contract-detail";
+import { validateEligibility } from "@/lib/whatsapp/eligibility";
 
 export const dynamic = "force-dynamic";
 
@@ -26,12 +27,26 @@ export default async function ContractDetailPage({
     notFound();
   }
 
+  // Si el empleado quedó fuera del embudo, resolver el MOTIVO concreto (sin
+  // oferta, oferta rechazada, sin cuenta bancaria...) para mostrarlo. El dato
+  // ya existía en validateEligibility; solo no se enseñaba.
+  let eligibilityReason: string | null = null;
+  if (control.operational_status === "no_elegible") {
+    try {
+      const elig = await validateEligibility(employeeId);
+      eligibilityReason = elig.eligible ? null : elig.reason ?? "No elegible.";
+    } catch {
+      eligibilityReason = "No se pudo determinar el motivo de inelegibilidad.";
+    }
+  }
+
   return (
     <AppShell>
       <ContractDetailView
         actionFeedback={getActionFeedback(resolvedSearchParams?.action_status)}
         control={control}
         timeline={timeline}
+        eligibilityReason={eligibilityReason}
       />
     </AppShell>
   );
