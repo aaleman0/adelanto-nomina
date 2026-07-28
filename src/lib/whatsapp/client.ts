@@ -1,5 +1,9 @@
 const BASE_URL = "https://graph.facebook.com/v18.0";
 
+// Timeout de las llamadas salientes a Meta: sin esto una conexión colgada
+// bloquea el request (y, en el worker de la cola, la tarea) indefinidamente.
+const FETCH_TIMEOUT_MS = 15_000;
+
 export type TemplateComponent = {
   type: "body" | "header" | "button";
   sub_type?: "url" | "quick_reply";
@@ -84,6 +88,7 @@ export class WhatsAppClient {
     try {
       const res = await fetch(`${BASE_URL}/${this.phoneNumberId}/messages`, {
         method: "POST",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         headers: {
           Authorization: `Bearer ${this.accessToken}`,
           "Content-Type": "application/json",
@@ -155,6 +160,7 @@ export class WhatsAppClient {
     try {
       const res = await fetch(`${BASE_URL}/${this.phoneNumberId}/messages`, {
         method: "POST",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         headers: {
           Authorization: `Bearer ${this.accessToken}`,
           "Content-Type": "application/json",
@@ -195,6 +201,7 @@ export class WhatsAppClient {
     try {
       const res = await fetch(`${BASE_URL}/${this.phoneNumberId}/messages`, {
         method: "POST",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         headers: {
           Authorization: `Bearer ${this.accessToken}`,
           "Content-Type": "application/json",
@@ -225,6 +232,7 @@ export class WhatsAppClient {
       const res = await fetch(
         `${BASE_URL}/${this.phoneNumberId}?fields=display_phone_number,verified_name`,
         {
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
           headers: { Authorization: `Bearer ${this.accessToken}` },
         },
       );

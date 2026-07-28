@@ -1,6 +1,11 @@
 import { easylexEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
 
+// Timeout de las llamadas a EasyLex: la creación de documento sube un PDF
+// multipart, así que se da margen; sin timeout una conexión colgada bloquea
+// todo el flujo de contrato.
+const FETCH_TIMEOUT_MS = 20_000;
+
 /* ─── Types ─── */
 
 export type EasyLexSignatory = {
@@ -146,6 +151,7 @@ export class EasyLexClient {
 
       const response = await fetch(url, {
         method: "POST",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         headers: {
           "access-key-id": this.accessKeyId,
           "secret-access-key": this.secretAccessKey,
@@ -205,6 +211,7 @@ export class EasyLexClient {
     try {
       const response = await fetch(url, {
         method: "GET",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         headers: {
           "access-key-id": this.accessKeyId,
           "secret-access-key": this.secretAccessKey,
