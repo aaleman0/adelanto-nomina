@@ -60,6 +60,8 @@ export type BulkSendProgress = {
   eligible: number;
   sent: number;
   failed: number;
+  /** Empleados omitidos por dedup (ya se les envió esta plantilla hace poco). */
+  skipped?: number;
   errors: Array<{ employeeId: string; rfc?: string | null; error: string }>;
 };
 
@@ -134,8 +136,18 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
     eligible: eligible.length,
     sent: 0,
     failed: 0,
+    skipped: 0,
     errors: [],
   };
+
+  // Idempotencia por empleado: si la migración de dedup está aplicada, se
+  // reclama cada empleado antes de enviar; si no, se envía sin dedup (degrada).
+  const dedupEnabled = await isDedupAvailable(supabase);
+  if (!dedupEnabled) {
+    logger.warn("whatsapp.bulk_send.dedup_unavailable", {
+      detail: "Falta la columna dedup_key (aplica la migración 20260724). Envío sin idempotencia por empleado.",
+    });
+  }
 
   // 4. Enviar mensajes en batches
   for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
@@ -161,6 +173,22 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
         continue;
       }
 
+      // Reclamo de dedup: si otro envío ya reclamó a este empleado+plantilla en
+      // la ventana, el índice único lo rechaza y se omite en vez de reenviar.
+      let claimId: string | null = null;
+      if (dedupEnabled) {
+        const claim = await claimEmployeeSend({ supabase, bulkSendId, emp, templateName });
+        if (claim === "duplicate") {
+          progress.skipped = (progress.skipped ?? 0) + 1;
+          logger.info("whatsapp.bulk_send.duplicate_skipped", {
+            bulkSendId,
+            employeeId: emp.employee_id,
+          });
+          continue;
+        }
+        claimId = claim;
+      }
+
       const result = await client.sendTemplateMessage(
         built.to,
         templateName,
@@ -171,7 +199,15 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
       if (result.ok) {
         progress.sent++;
         try {
-          await recordMessage({ supabase, bulkSendId, emp, status: "sent", waMessageId: result.messageId });
+          if (claimId) {
+            await finalizeClaim(supabase, claimId, {
+              status: "sent",
+              delivery_status: "sent",
+              wa_message_id: result.messageId ?? null,
+            });
+          } else {
+            await recordMessage({ supabase, bulkSendId, emp, status: "sent", waMessageId: result.messageId });
+          }
         } catch (recordError) {
           progress.sent--; // Revertir el contador si falló el registro
           progress.failed++;
@@ -198,12 +234,20 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
           error: errMsg,
         });
         try {
-          await recordMessage({ supabase, bulkSendId, emp, status: "failed", error: result.error });
+          if (claimId) {
+            await finalizeClaim(supabase, claimId, {
+              status: "failed",
+              delivery_status: "failed",
+              error_message: result.error ?? null,
+            });
+          } else {
+            await recordMessage({ supabase, bulkSendId, emp, status: "failed", error: result.error });
+          }
         } catch (recordError) {
-          progress.errors.push({ 
-            employeeId: emp.employee_id, 
-            rfc: emp.rfc, 
-            error: `Error al registrar fallo: ${recordError instanceof Error ? recordError.message : 'Error desconocido'}` 
+          progress.errors.push({
+            employeeId: emp.employee_id,
+            rfc: emp.rfc,
+            error: `Error al registrar fallo: ${recordError instanceof Error ? recordError.message : 'Error desconocido'}`
           });
         }
       }
@@ -270,6 +314,73 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
   }
 
   return { ...progress, bulkSendId, status: "completed" };
+}
+
+/** Ventana de deduplicación del envío inline. */
+const DEDUP_WINDOW_MS = 5 * 60 * 1000;
+
+/**
+ * Clave de dedup determinista: mismo empleado + plantilla + ventana de 5 min →
+ * misma clave. Dos envíos en la misma ventana colisionan en el índice único.
+ * `now` se recibe para poder testear el bucketing.
+ */
+export function buildDedupKey(employeeId: string, templateName: string, now: number): string {
+  const bucket = Math.floor(now / DEDUP_WINDOW_MS);
+  return `${employeeId}:${templateName}:${bucket}`;
+}
+
+/**
+ * Reclama el envío a un empleado insertando una fila con `dedup_key`. Devuelve
+ * el id de la fila reclamada, o "duplicate" si el índice único la rechaza (ya se
+ * reclamó ese empleado+plantilla en esta ventana). Cualquier fila reclamo que
+ * quede en 'sending' (proceso muerto a mitad) la barre `reconcileStuckBulkSends`.
+ */
+async function claimEmployeeSend(params: {
+  supabase: ReturnType<typeof getSupabaseAdmin>;
+  bulkSendId: string;
+  emp: { employee_id: string; telefono_normalizado: string | null };
+  templateName: string;
+}): Promise<string | "duplicate"> {
+  const dedupKey = buildDedupKey(params.emp.employee_id, params.templateName, Date.now());
+  const { data, error } = await params.supabase
+    .from("whatsapp_contract_messages")
+    .insert({
+      employee_id: params.emp.employee_id,
+      bulk_send_id: params.bulkSendId,
+      message_type: "bulk_contract_offer",
+      status: SENDING_STATUS,
+      delivery_status: "pending",
+      whatsapp_subscriber_id: params.emp.telefono_normalizado,
+      dedup_key: dedupKey,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    // 23505 = unique_violation: ya reclamado en esta ventana.
+    if ((error as { code?: string }).code === "23505") return "duplicate";
+    throw new Error(`No se pudo reclamar el envío: ${error.message}`);
+  }
+  return data.id as string;
+}
+
+/** Cierra una fila reclamo a 'sent'/'failed' tras el intento de envío. */
+async function finalizeClaim(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  claimId: string,
+  fields: { status: "sent" | "failed"; delivery_status: string; wa_message_id?: string | null; error_message?: string | null },
+): Promise<void> {
+  const { error } = await supabase.from("whatsapp_contract_messages").update(fields).eq("id", claimId);
+  if (error) throw new Error(`No se pudo finalizar el reclamo: ${error.message}`);
+}
+
+/**
+ * ¿Está aplicada la migración de dedup? Sonda barata: seleccionar la columna.
+ * Si no existe, PostgREST devuelve error y se envía sin dedup (degradación).
+ */
+async function isDedupAvailable(supabase: ReturnType<typeof getSupabaseAdmin>): Promise<boolean> {
+  const { error } = await supabase.from("whatsapp_contract_messages").select("dedup_key").limit(1);
+  return !error;
 }
 
 async function recordMessage(params: {
