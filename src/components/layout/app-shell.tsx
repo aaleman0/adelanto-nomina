@@ -28,6 +28,7 @@ const navigation: NavEntry[] = [
   // La sección y su único ítem son admin: sin ese rol, ambos desaparecen y no
   // queda un encabezado colgando.
   { section: "Configuración", minimumRole: "admin" },
+  { href: "/settings/empresa", label: "Datos de empresa", icon: "E", minimumRole: "admin" },
   { href: "/settings", label: "Ajustes", icon: "S", minimumRole: "admin" },
 ];
 
