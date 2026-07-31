@@ -76,17 +76,19 @@ Del acreedor: las claves `acreedor_*` de `company_settings`. Cuatro vienen sembr
 
 Dos cabeceras: `access-key-id` (llave pública) y `secret-access-key` (llave privada), de `Credenciales API` en el panel de EasyLex.
 
-> **Bloqueo conocido (verificado 2026-07-20): las credenciales del panel son rechazadas por la propia API.**
+> **`code 106` "Public or Secret key doesn't match" — RESUELTO (2026-07-28). Era discordancia de ambiente + llave, no un problema de cuenta.**
 >
-> Con la llave pública copiada **exactamente** del panel y la privada recién reseteada, la API responde `code 106: "Public or Secret key doesn't match"` — tanto en `sandboxapi.easylex.com` como en `api.easylex.com`.
+> Causa raíz (confirmada por soporte de EasyLex + el dashboard):
+> - La cuenta **solo existe en producción** (`api.easylex.com`), no en sandbox. Apuntar a `sandboxapi.easylex.com` nunca iba a autenticar.
+> - La llave pública que estaba en `.env.local` **no era de esta cuenta**. La real se ve en el dashboard de producción (`easylex.com` → Credenciales API).
 >
-> Se descartó todo lo del lado del código y la configuración:
-> - La pública en `.env.local` coincide carácter a carácter con la del panel; la privada se reseteó y actualizó; sin espacios ni caracteres ocultos.
-> - Falla igual en sandbox y en producción → no es cruce de entornos.
-> - El esquema de cabeceras es el correcto: `access-key-id`/`secret-access-key` produce un error *específico de llave* (106), mientras que cualquier otro nombre de cabecera produce un genérico `501 InvalidRequest`. Es decir, la API reconoce el esquema y evalúa las llaves; simplemente no las valida.
-> - Orden normal e invertido de las llaves: ambos rechazados.
+> Arreglo:
+> - `EASYLEX_BASE_URL=https://api.easylex.com`.
+> - **Resetear** la llave privada en el dashboard. Ojo: *resetear rota el par completo* — regenera pública **y** secreta. Copiar la secreta al instante (se muestra una sola vez) y pegar ambas en `.env.local`.
 >
-> **Conclusión: es un problema de la cuenta EasyLex** (acceso a la API no habilitado, suscripción, o un fallo de su lado), no del código —que está correcto y no necesita cambios—. La remediación es de EasyLex: soporte debe confirmar que el acceso a la API está activo para la cuenta. En cuanto las credenciales autentiquen, el flujo funciona sin tocar nada.
+> Prueba sin gastar firma: `node scripts/test-easylex.mjs` — consulta el estado de un documento inexistente. `106` = llaves mal; `2905 "Document not found"` = autenticó OK.
+>
+> Los errores de la API ahora se leen claros: `describeEasyLexError` (`src/lib/easylex/client.ts`) desglosa la forma real `{ error: { message, description } }`; antes se perdía como `[object Object]`.
 
 `POST {EASYLEX_BASE_URL}/api/public/v2/document`, como `multipart/form-data`:
 
@@ -101,19 +103,21 @@ Expiración por defecto del documento en EasyLex: **+30 días** (`getDefaultExpi
 
 ### Validaciones biométricas
 
-`buildValidationConfig()` lee de `company_settings` y arma la configuración:
+`buildValidationConfig()` lee de `company_settings` y arma la configuración. Valor actual (verificación completa de identidad):
 
-| Clave | Valor sembrado |
+| Clave | Valor |
 |---|---|
+| `easylex_validate_id` | `true` |
+| `easylex_validate_picture` | `true` |
 | `easylex_validate_biometric` | `true` |
 | `easylex_validate_liveness` | `true` |
-| `easylex_validate_id` | `false` |
 | `easylex_validate_sms` | `false` |
-| `easylex_validate_picture` | `false` |
 | `easylex_validate_email` | `false` |
 | `easylex_validate_voice` | `false` |
 
 Se guardan como booleanos en texto. Se pueden cambiar en base sin redeploy.
+
+> **Regla de dependencia (verificada en producción).** Si `validateBiometric` **o** `validateLiveness` van en `true`, EasyLex **exige** que `validateId` **y** `validatePicture` también lo estén; si no, `createDocument` falla con `502 "InvalidRequest"` (`.validateId`/`.validatePicture` allowed value `true`). Tiene sentido: para cotejar la cara necesita el documento. `buildValidationConfig` **fuerza** id+picture cuando hay biométrico/liveness, para que una configuración inconsistente en `company_settings` no tumbe el pipeline. Combinaciones válidas probadas: los 4 en `true`, o los 7 en `false`. Diagnóstico: `node scripts/probe-easylex-create.mjs DISI id,picture,biometric,liveness` (ojo: si sale `200` gasta firma).
 
 ### Consultar estado
 
@@ -127,13 +131,24 @@ El `signing_url` se construye a partir del id del firmante. La app expone ademá
 /firmar/[signerId]  →  ${EASYLEX_SIGNING_LINK_BASE_URL}/{signerId}
 ```
 
-Por defecto `https://widgetsandbox.easylex.com/firmar` — **sandbox**. En producción hay que definir `EASYLEX_SIGNING_LINK_BASE_URL`.
+**URL correcta de producción: `EASYLEX_SIGNING_LINK_BASE_URL=https://easylex.com/documento/firma`** → el link final es `https://easylex.com/documento/firma/<signerId>`, que abre la página de firma pública (sin cuenta).
+
+> **Cuidado con los dominios muertos.** El default en código y el placeholder que muestra el propio dashboard de EasyLex (`widgetsandbox.easylex.com/firmar`) **NO existen** (NXDOMAIN): el link da "no se puede acceder al sitio". Tampoco sirven `widget.easylex.com/firmar/{id}` (404) ni `app.easylex.com/firmar/{id}` (redirige a login: es el panel con cuenta). El único que funciona para un firmante sin cuenta es `easylex.com/documento/firma/<signerId>`. El `signerId` es el último segmento del path (lo usa `signingUrlSuffix` para la plantilla de WhatsApp).
 
 El redirector permite usar un dominio propio en las plantillas de WhatsApp, lo cual importa porque Meta solo admite variables en la ruta de un botón URL, no en el dominio.
 
+### Plantilla de WhatsApp del link (botón URL dinámico)
+
+En la plantilla `adelanto_contrato_listo` (Meta → WhatsApp Manager), el botón es *dinámico*: la **base va fija** y Meta le pega `{{1}}`. Deben coincidir con `EASYLEX_SIGNING_LINK_BASE_URL`:
+
+- **URL del sitio web:** `https://easylex.com/documento/firma/` (con `/` final; Meta añade `{{1}}`).
+- **URL de muestra `{{1}}`:** `https://easylex.com/documento/firma/sig-XXXX`.
+
+La app manda el `signerId` de cada empleado como `{{1}}`, así que cada quien recibe su propio link.
+
 ### Envío del link al empleado
 
-Cuando el contrato queda listo, `requestContractFromWhatsApp` envía el link al empleado por WhatsApp (`src/lib/contracts/send-contract-link.ts`), como plantilla con **botón URL**: el link va en el botón, el cuerpo lleva nombre y monto. La plantilla se configura con `WHATSAPP_CONTRACT_TEMPLATE` (por defecto `contrato_listo`) y debe estar aprobada en Meta con ese botón.
+Cuando el contrato queda listo, `requestContractFromWhatsApp` envía el link al empleado por WhatsApp (`src/lib/contracts/send-contract-link.ts`), como plantilla con **botón URL**: el link va en el botón; el cuerpo lleva tres variables — `{{1}}` nombre, `{{2}}` monto, `{{3}}` fecha límite. La plantilla se configura con `WHATSAPP_CONTRACT_TEMPLATE` (por defecto `adelanto_contrato_listo`, categoría UTILITY) y debe estar aprobada en Meta con ese botón dinámico.
 
 El envío es **no-fatal**: si falla (WhatsApp mal configurado, plantilla no aprobada, número inválido), el contrato ya está generado y el link sigue en la respuesta (`link_easylex`). El resultado incluye `link_enviado: boolean` y el intento queda registrado en `whatsapp_contract_messages` con `message_type = 'contract_link'`.
 
@@ -143,12 +158,16 @@ El envío es **no-fatal**: si falla (WhatsApp mal configurado, plantilla no apro
 
 `POST /api/webhooks/easylex/sign`. Detalle completo en [API](api.md#webhooks). Lo esencial:
 
-- Se autentica por la cabecera `x-easylex-signature`, comparada en tiempo constante contra `EASYLEX_WEBHOOK_SECRET`. **En producción, sin secreto configurado se rechaza todo** (fail closed).
-- `DOCUMENT_SIGNED` es el evento que cierra el ciclo; `SIGNED_BY_USER` solo deja registro.
+- Se autentica por la cabecera `x-easylex-signature`. `verifyEasylexWebhook` acepta **cualquiera de dos esquemas** (verificado E2E): secreto compartido plano **o** HMAC-SHA256 del cuerpo crudo (con prefijo `sha256=` opcional). No está confirmado cuál usa EasyLex, así que se admiten ambos —los dos exigen el secreto, no debilita nada—. Por eso el handler lee `request.text()` (cuerpo crudo) y parsea después: un JSON reserializado invalidaría el HMAC.
+- **En producción, sin secreto configurado se rechaza todo** con `401` (fail closed). Fuera de producción se permite (fail-open) con log, para pruebas.
+- `DOCUMENT_SIGNED` es el evento que cierra el ciclo (busca por `data.id`); `SIGNED_BY_USER` solo deja registro (busca por `data.documentId`).
+- Marca `contract_attempts` → `firmado`, `contract_requests` → `firmado`, `advance_offers` → `firmada`, e inserta el `audit_events` `contract.signed` (la **evidencia legal** de la firma).
 - Idempotencia por `easylex_events.event_id`, con la salvedad de que si falta `webhookId` el id se sintetiza con `Date.now()` y por tanto nunca colisiona.
-- **Siempre responde `200`**, incluso ante error, para evitar reintentos de EasyLex.
+- **Ante un error de procesamiento devuelve `500`** (no `200`) para que EasyLex **reintente**; los manejadores son idempotentes, así que un fallo transitorio de BD no pierde la firma. (Antes respondía `200` y la firma se perdía en silencio.)
 
-`EASYLEX_CALLBACK_URL` debe terminar en `/api/webhooks/easylex/sign` — está anotado en `.env.example` y fue motivo de un fix previo.
+Prueba E2E sin gastar firma: `node scripts/demo-webhook-sign.mjs` — crea un contrato mock, dispara `DOCUMENT_SIGNED` al handler real (con firma HMAC si `EASYLEX_WEBHOOK_SECRET` está en `.env.local`), verifica la propagación y limpia.
+
+`EASYLEX_CALLBACK_URL` debe terminar en `/api/webhooks/easylex/sign` — es lo que la app manda a EasyLex por documento para que llame de vuelta. Debe ser una **URL pública** (EasyLex no alcanza `localhost`).
 
 ## Firma simulada
 
@@ -178,8 +197,23 @@ Ambas devuelven `already_signed` si el contrato ya está firmado — no se puede
 
 Estados de la solicitud (`contract_request_status`): `recibida` → `generando` → `link_generado` → `firmado`, con `error` como salida lateral.
 
-## Ambiente por defecto
+## Ambiente y configuración de producción
 
-`EASYLEX_BASE_URL` tiene por defecto `https://sandboxapi.easylex.com` y el link de firma apunta a `widgetsandbox.easylex.com`. **El sistema funciona contra sandbox mientras no se cambien ambas variables.** Es el detalle más fácil de pasar por alto al desplegar.
+Los **defaults en código apuntan a sandbox / dominios muertos** — es el footgun más fácil de pasar por alto al desplegar. La cuenta real solo existe en producción, así que hay que fijar explícitamente:
+
+```
+EASYLEX_BASE_URL=https://api.easylex.com
+EASYLEX_SIGNING_LINK_BASE_URL=https://easylex.com/documento/firma
+EASYLEX_ACCESS_KEY_ID=<pública del dashboard de producción>
+EASYLEX_SECRET_ACCESS_KEY=<secreta; sale al resetear en el dashboard>
+EASYLEX_CALLBACK_URL=https://<dominio-público>/api/webhooks/easylex/sign
+EASYLEX_WEBHOOK_SECRET=<mismo secreto que se configure en EasyLex>
+```
+
+`EASYLEX_ACCESS_KEY_ID` **no** debe traer `_` inválidos ni espacios. La secreta **nunca** se pega en correos ni logs; la pública sí se puede compartir.
+
+### Scripts de diagnóstico (`scripts/*.mjs`)
+
+Corren con `node` (leen `.env.local`, no imprimen secretos): `test-easylex.mjs` (smoke de credenciales), `probe-easylex-create.mjs` (diagnostica campos rechazados), `probe-easylex-widget.mjs` (datos del signer), `dump-easylex-settings.mjs` (validaciones en `company_settings`), `inspect-employee.mjs` (estado de contrato de un empleado), `demo-webhook-sign.mjs` (prueba E2E del webhook).
 
 Ver también: [API](api.md) · [Base de datos](base-de-datos.md) · [Configuración](configuracion.md)

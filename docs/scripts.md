@@ -21,4 +21,21 @@ pnpm dlx tsx scripts/<archivo>.ts
 
 `verify-whatsapp-setup.ts` es el único de utilidad operativa recurrente. El resto pertenece al trabajo puntual sobre el PDF del contrato.
 
+## Diagnóstico de EasyLex (`*.mjs`)
+
+Scripts sueltos que corren con **`node` directo** (no necesitan `tsx`): leen `.env.local` a mano y **no imprimen secretos**. Son las herramientas con las que se resolvió la integración de EasyLex (ver [EasyLex y contratos](easylex-contratos.md)).
+
+```bash
+node scripts/<archivo>.mjs
+```
+
+| Script | Qué hace | Ojo |
+|---|---|---|
+| `test-easylex.mjs` | Smoke test de credenciales: consulta el estado de un documento inexistente. `106` = llaves mal, `2905` = autenticó OK | No gasta firma |
+| `probe-easylex-create.mjs` | Sonda de `createDocument` para ver qué campo rechaza la API. Args: `<type> <validaciones>` | Un `200` **crea documento y gasta firma** |
+| `probe-easylex-widget.mjs` | Datos del signer/widget de un `signerId` (revela el `sessionToken`) | Solo lectura |
+| `dump-easylex-settings.mjs` | Imprime las banderas `easylex_validate_*` de `company_settings` | Solo lectura |
+| `inspect-employee.mjs` | Estado de contrato de un empleado por RFC (oferta, solicitudes, intentos, banco) | Solo lectura |
+| `demo-webhook-sign.mjs` | Prueba E2E del webhook de firma: crea un contrato mock, dispara `DOCUMENT_SIGNED` al handler real (firma HMAC si hay secreto), verifica y limpia | **Requiere dev server**; no gasta firma |
+
 Ver también: [EasyLex y contratos](easylex-contratos.md) · [WhatsApp](whatsapp.md)

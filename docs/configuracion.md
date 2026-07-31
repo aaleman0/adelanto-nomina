@@ -54,12 +54,12 @@ Las dos últimas **no están en el esquema de `src/lib/env.ts`**: se leen direct
 |---|---|---|
 | `EASYLEX_ACCESS_KEY_ID` | sí | |
 | `EASYLEX_SECRET_ACCESS_KEY` | sí | |
-| `EASYLEX_BASE_URL` | no | **Default: `https://sandboxapi.easylex.com`** |
-| `EASYLEX_SIGNING_LINK_BASE_URL` | no | Default: `https://widgetsandbox.easylex.com/firmar` |
-| `EASYLEX_CALLBACK_URL` | sí | **Debe terminar en `/api/webhooks/easylex/sign`** |
-| `EASYLEX_WEBHOOK_SECRET` | sí en producción | Si está vacío, en producción **el webhook rechaza todo** con `401` |
+| `EASYLEX_BASE_URL` | **sí en prod** | Default en código = sandbox. **Producción: `https://api.easylex.com`** (la cuenta solo existe en prod) |
+| `EASYLEX_SIGNING_LINK_BASE_URL` | **sí en prod** | Default en código (`widgetsandbox…`) **no existe / NXDOMAIN**. **Producción: `https://easylex.com/documento/firma`** |
+| `EASYLEX_CALLBACK_URL` | sí en prod | **Debe terminar en `/api/webhooks/easylex/sign`** y ser una **URL pública** (EasyLex no alcanza `localhost`) |
+| `EASYLEX_WEBHOOK_SECRET` | sí en producción | El mismo valor que se configure en EasyLex. Si está vacío, en producción **el webhook rechaza todo** con `401` |
 
-Los dos defaults apuntan a sandbox. Sin definirlos explícitamente, producción firma contra el entorno de pruebas de EasyLex.
+**Los defaults en código apuntan a sandbox/dominios muertos.** Sin fijar `EASYLEX_BASE_URL` y `EASYLEX_SIGNING_LINK_BASE_URL` explícitamente en producción, la firma no funciona. Además, `easylex_validate_biometric`/`_liveness` **exigen** `easylex_validate_id`+`_picture` en `true` (ver [EasyLex y contratos](easylex-contratos.md#validaciones-biométricas)). Detalle completo de la integración en ese doc.
 
 ### Aplicación
 
@@ -163,7 +163,7 @@ Las cinco vacías deben llenarse antes de emitir contratos reales.
 
 ### Validaciones de EasyLex
 
-Booleanos en texto: `easylex_validate_biometric` y `easylex_validate_liveness` en `true`; `easylex_validate_id`, `easylex_validate_sms`, `easylex_validate_picture`, `easylex_validate_email`, `easylex_validate_voice` en `false`.
+Booleanos en texto. Valor actual (verificación completa): `easylex_validate_id`, `easylex_validate_picture`, `easylex_validate_biometric` y `easylex_validate_liveness` en `true`; `easylex_validate_sms`, `easylex_validate_email`, `easylex_validate_voice` en `false`. **Biométrico/liveness exigen id+picture** o `createDocument` da `502`.
 
 ## Checklist antes de producción
 
@@ -171,8 +171,8 @@ Configuración:
 
 - [ ] `EASYLEX_BASE_URL` y `EASYLEX_SIGNING_LINK_BASE_URL` apuntando a producción, no a sandbox
 - [ ] `EASYLEX_WEBHOOK_SECRET` definido (si está vacío no hay autenticación de webhook)
-- [ ] **Credenciales de EasyLex que autentiquen.** Bloqueo verificado (2026-07-20): las llaves del panel de EasyLex son rechazadas por su propia API (`code 106`), en sandbox y producción. No es del código —está correcto—; es de la cuenta EasyLex. Soporte debe habilitar el acceso a la API. Detalle en [EasyLex y contratos](easylex-contratos.md#autenticación)
-- [ ] `EASYLEX_CALLBACK_URL` terminando en `/api/webhooks/easylex/sign`
+- [x] **Credenciales de EasyLex que autentiquen (RESUELTO 2026-07-28).** El `code 106` era discordancia de ambiente+llave, no de cuenta: la cuenta solo existe en producción y la llave estaba equivocada. Fix: `EASYLEX_BASE_URL=https://api.easylex.com` + resetear llaves en el dashboard. Probar con `node scripts/test-easylex.mjs`. Detalle en [EasyLex y contratos](easylex-contratos.md#autenticación)
+- [ ] `EASYLEX_CALLBACK_URL` (URL **pública**) terminando en `/api/webhooks/easylex/sign`, y el webhook + secreto configurados en el dashboard de EasyLex
 - [ ] Las cinco claves `(LLENAR)` de `company_settings` completadas
 - [ ] Secretos en un gestor de secretos, no en la tabla `settings`
 - [ ] `NEXT_PUBLIC_APP_URL` con el dominio real (rompe el OAuth si no)

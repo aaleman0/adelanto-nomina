@@ -224,7 +224,7 @@ Sin `WHATSAPP_APP_SECRET` configurado, en producción se rechaza (`401`); fuera 
 ### `POST /api/webhooks/easylex/sign`
 Webhook real de firma.
 
-**Autenticación:** cabecera `x-easylex-signature` comparada en **tiempo constante** contra `EASYLEX_WEBHOOK_SECRET` (`verifySharedSecret`). Diferencia o ausencia → `401`.
+**Autenticación:** cabecera `x-easylex-signature`, verificada por `verifyEasylexWebhook` (en `src/lib/security/webhook-signatures.ts`), que acepta **cualquiera de dos esquemas** en tiempo constante contra `EASYLEX_WEBHOOK_SECRET`: (1) secreto compartido plano, o (2) HMAC-SHA256 del **cuerpo crudo** (con prefijo `sha256=` opcional). Se admiten ambos porque no está confirmado cuál usa EasyLex y los dos exigen el secreto. Diferencia o ausencia → `401`. Por eso el handler lee `await request.text()` y parsea después: reserializar el JSON invalidaría el HMAC.
 
 Sin secreto configurado, en producción se rechaza (`401`, log `easylex.webhook.secret_missing`); fuera de producción se permite con log `easylex.webhook.signature_check_skipped`.
 
@@ -241,7 +241,7 @@ Los dos manejadores buscan el intento por campos distintos (`documentId` vs `id`
 
 **Idempotencia:** `recordEasyLexEvent` descarta el evento si ya existe una fila con el mismo `event_id`. Cuando falta `webhookId`, el id se sintetiza como `webhook_{attemptId}_{Date.now()}` — que **nunca colisiona**, así que en ese caso la protección de idempotencia no aplica.
 
-**Siempre devuelve `200 {"ok":true}`**, incluso ante errores capturados. Es intencional: evita que EasyLex reintente indefinidamente. El precio es que un fallo de procesamiento no es visible desde EasyLex, solo en `integration_logs`.
+**Ante un error de procesamiento devuelve `500`** (no `200`) para que EasyLex **reintente**. Los manejadores son idempotentes (saltan si el intento ya está `firmado` y deduplican por `event_id`), así que un fallo transitorio de BD durante la transición a `firmado` no pierde la confirmación de firma —evidencia legal—. Éxito → `200 {"ok":true}`.
 
 ### `POST /api/webhooks/easylex/mock-sign`
 Simula una firma para pruebas. **Deshabilitado en producción**: responde `404` sin cuerpo, como si la ruta no existiera (`404` en vez de `403` para no revelar que el endpoint existe).

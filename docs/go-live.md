@@ -87,6 +87,17 @@ Van primero porque tienen tiempos de espera ajenos.
 
 - [ ] 🧑 Webhook de **Meta** → `https://tu-dominio/api/webhooks/whatsapp` (con el
       verify token) y webhook de **EasyLex** → `https://tu-dominio/api/webhooks/easylex/sign`.
+- [ ] 🧑 **Cableado del webhook de EasyLex:** `EASYLEX_CALLBACK_URL` (URL pública que
+      termina en `/api/webhooks/easylex/sign`) + `EASYLEX_WEBHOOK_SECRET` en el entorno,
+      y el **mismo secreto** configurado en el dashboard de EasyLex. Confirmar con EasyLex
+      su esquema de firma y nombres de evento (`DOCUMENT_SIGNED`/`SIGNED_BY_USER`); el
+      handler ya acepta secreto plano **o** HMAC, así que no hay cambio de código. La app
+      manda el `callbackUrl` por documento. Probar firmando un contrato real → el
+      expediente pasa a **Firmado**. Config de EasyLex: [EasyLex y contratos](easylex-contratos.md).
+- [ ] 🧑 **Firma en producción:** `EASYLEX_BASE_URL=https://api.easylex.com` y
+      `EASYLEX_SIGNING_LINK_BASE_URL=https://easylex.com/documento/firma` (los defaults
+      apuntan a sandbox/dominios muertos). Botón de la plantilla `adelanto_contrato_listo`
+      con base `https://easylex.com/documento/firma/` + `{{1}}`.
 - [ ] Post-deploy: correr `pnpm verify:rls` contra producción.
 - [ ] Probar el login: solo las cuentas de `ALLOWED_EMAILS` deben entrar.
 - [ ] Enviar un mensaje de prueba y confirmar en logs `queue.driver.selected { kind: 'cloud-tasks' }`.
