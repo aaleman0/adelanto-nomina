@@ -445,6 +445,6 @@ Vale la pena conocerlas antes de añadir endpoints, porque son consistentes:
 - **Los webhooks siempre responden `200`** para evitar reintentos del proveedor.
 - **Los errores se devuelven en español**, orientados al operador.
 - **La validación va en el borde con Zod**, antes del `try/catch`: un `400` de validación nunca debe salir del bloque que captura errores de servidor.
-- **No hay módulo de auditoría.** Seis archivos declaran su propio `createAuditEvent` privado, e igual ocurre con `createIntegrationLog`. Añadir un evento nuevo implica copiar el helper.
+- **Auditoría centralizada.** `src/lib/audit/` expone `recordAuditEvent` y `recordIntegrationLog`; para registrar un evento o log de integración se llaman esos helpers (aplican redacción de PII). Algunos módulos conservan un `createAuditEvent` local como envoltorio delgado sobre `recordAuditEvent`, con los campos fijos de ese flujo.
 
 Ver también: [Base de datos](base-de-datos.md) · [WhatsApp](whatsapp.md) · [EasyLex y contratos](easylex-contratos.md) · [Configuración](configuracion.md)

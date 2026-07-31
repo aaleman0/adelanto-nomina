@@ -181,7 +181,7 @@ Configuración:
 - [x] **RLS aplicada y verificada (2026-07-21).** Se descubrió (2026-07-20) que la anon key **pública** leía todas las tablas (504 empleados, 48 cuentas bancarias, 310 solicitudes, 347 logs) porque la migración nunca se había aplicado. Se aplicaron las tres migraciones y se verificó el cierre: la anon key sin sesión devuelve **0 filas** en las 18 tablas.
 - [x] Aplicadas, en orden: `20260720_enable_rls_deny_all.sql` (deny-all), `20260721_profiles_provisioning_and_roles.sql` (perfiles), `20260722_rls_policies_phase_b.sql` (políticas por rol)
 - [ ] **Aplicar `20260723_restrict_sensitive_reads.sql`** (M1): restringe la lectura de `employee_bank_accounts` y `raw_import_rows` a `operaciones`+. Hacerlo **antes** de encender `RLS_SESSION_READS`.
-- [ ] **Al aprovisionar una base de producción separada, re-aplicar las migraciones en orden** (`20260720` → `20260721` → `20260722` → `20260723`) y re-verificar el count 0 (la verificación de arriba es sobre la base actual)
+- [ ] **Al aprovisionar una base de producción separada, re-aplicar TODAS las migraciones de `supabase/migrations/` en orden** (incluidas `20260723` restricción de lecturas, `20260724` dedup de WhatsApp, `20260730` bucket de contratos firmados + `signed_pdf_path`, `20260731` CHECK de `whatsapp_bulk_sends.mode`) y re-verificar el count 0 (la verificación de arriba es sobre la base actual)
 - [x] Test automatizado del invariante de RLS (H2): `pnpm verify:rls` (`RUN_RLS_CHECK=1`) — verifica que la anon key devuelve 0 filas en las 18 tablas. Correrlo en CI/post-deploy.
 - [ ] Tras aplicar M1, poner `RLS_SESSION_READS=on` para que las lecturas del backoffice usen el cliente de sesión
 - [ ] Definir `BOOTSTRAP_ADMIN_EMAILS` **antes** de poner `RBAC_ENFORCEMENT=enforce`

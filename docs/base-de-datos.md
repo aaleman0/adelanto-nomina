@@ -14,8 +14,13 @@ Las migraciones viven en `supabase/migrations/` y **se aplican manualmente pegá
 | `20250612_fix_whatsapp_message_status_text.sql` | `status` pasa a `text`; **versión autoritativa de las vistas** |
 | `20250701_contract_employee_fields.sql` | Campos de empleado para el contrato + `company_settings` |
 | `20250701_easylex_validation_settings.sql` | Flags de validación de EasyLex en `company_settings` |
+| `20260720`–`20260722` | RLS: deny-all, aprovisionamiento de perfiles/roles, políticas por rol (fase B) |
+| `20260723_restrict_sensitive_reads.sql` | Restringe la lectura de `employee_bank_accounts` y `raw_import_rows` a `operaciones`+ |
+| `20260724_whatsapp_message_dedup.sql` | `dedup_key` + índice único parcial (idempotencia de envíos) |
+| `20260730_signed_contracts.sql` | Bucket privado `contratos-firmados` + columna `contract_attempts.signed_pdf_path` (PDF firmado archivado) |
+| `20260731_bulk_send_mode_status.sql` | Amplía el CHECK de `whatsapp_bulk_sends.mode` a `('import','manual','status')` |
 
-Además, `20260720_enable_rls_deny_all.sql` activa RLS en modo deny-all sobre todas las tablas. Ver [Seguridad](#seguridad-y-control-de-acceso).
+RLS se activa en modo deny-all con `20260720` y se completa con las políticas por rol de `20260722`. Storage tiene tres buckets: `imports`, `import-reports` y `contratos-firmados` (privado, `application/pdf`). Ver [Seguridad](#seguridad-y-control-de-acceso).
 
 ---
 

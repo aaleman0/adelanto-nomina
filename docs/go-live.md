@@ -28,7 +28,7 @@ Lo que falta es **aprovisionamiento y despliegue**.
 **☐ Pendientes para go-live** (detalle en las fases de abajo)
 
 *Datos — bloquean que el contrato salga completo:*
-- [ ] Llenar en `company_settings` (hoy **vacíos**): `acreedor_nombre`, `acreedor_banco`, `acreedor_cuenta`, `acreedor_clabe`, `testigo_1_nombre`, `testigo_2_nombre`. (`acreedor_rfc` ya está.)
+- [ ] Llenar en `company_settings` las **5 claves vacías**: `acreedor_banco`, `acreedor_cuenta`, `acreedor_clabe`, `testigo_1_nombre`, `testigo_2_nombre`. (Ya sembradas: `acreedor_razon_social`, `acreedor_representante`, `acreedor_rfc`, `acreedor_domicilio`.)
 - [ ] Montar credenciales de Google (`google_oauth_client.json` + `token.json`) en el contenedor — sin ellas no se genera ningún contrato.
 
 *WhatsApp:*
@@ -65,13 +65,21 @@ Van primero porque tienen tiempos de espera ajenos.
       siga en `pending_submission`, las plantillas **MARKETING no se entregan a
       contactos fríos**. También sube el *tier* de mensajería, necesario para
       lotes de miles. Ver [WhatsApp](whatsapp.md#categoría-de-plantilla-y-entrega-importante).
-- [ ] 🧑 **Desbloqueo de EasyLex.** Su API rechaza las llaves (`code 106`); soporte
-      debe habilitar el acceso. Sin esto el link de firma no funciona.
+- [x] **EasyLex ya autentica (resuelto).** El `code 106` era discordancia de
+      ambiente+llave, no un bloqueo de soporte. Solo queda fijar en prod
+      `EASYLEX_BASE_URL=https://api.easylex.com` + las llaves correctas, y
+      confirmar con EasyLex el esquema de firma del webhook. Ver
+      [EasyLex y contratos](easylex-contratos.md#autenticación).
 
 ## Fase 1 — Base de datos
 
-- [ ] 🧑 **Aplicar `supabase/migrations/20260723_restrict_sensitive_reads.sql`** en el
-      SQL Editor de Supabase (restringe CLABE y PII cruda a `operaciones`+).
+- [ ] 🧑 **Aplicar las migraciones pendientes** en el SQL Editor de Supabase, en orden:
+      `20260723_restrict_sensitive_reads.sql` (restringe CLABE/PII a `operaciones`+),
+      `20260724_whatsapp_message_dedup.sql` (dedup de envíos),
+      `20260730_signed_contracts.sql` (bucket `contratos-firmados` + `signed_pdf_path`),
+      `20260731_bulk_send_mode_status.sql` (arregla el CHECK de `whatsapp_bulk_sends.mode`,
+      que hoy hace fallar con 500 el envío en lote por etapa). En una base nueva, aplicar
+      **todas** las de `supabase/migrations/` en orden.
 - [ ] **Verificar RLS:** `set -a; . ./.env.local; set +a; pnpm verify:rls` → 18 tablas
       + 2 vistas a 0 filas con la anon key.
 - [ ] 🧑 Completar las **5 claves `(LLENAR)` de `company_settings`** (datos de la

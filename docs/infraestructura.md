@@ -11,7 +11,7 @@
 | `quality` | `lint` → `typecheck` → `test:unit` → `build` (con variables ficticias) |
 | `secrets` | Gitleaks sobre el historial completo |
 | `audit` | `pnpm audit --audit-level high` |
-| `db-types` | Detecta deriva entre el esquema real y `src/types/database.types.ts`. Se omite si no hay credenciales de Supabase configuradas |
+| `db-types` | Detectaría deriva entre el esquema real y `src/types/database.types.ts`. **Ese baseline aún no está commiteado**, así que hay que generarlo primero con `pnpm db:types` (requiere credenciales de Supabase). Mientras no exista, el chequeo se omite y el cliente de Supabase se usa sin el genérico `<Database>` |
 
 Dependabot (`.github/dependabot.yml`) revisa npm semanalmente y las actions mensualmente, agrupando dev-dependencies y parches para no generar decenas de PRs sueltos. Los majors de Next, React y React DOM están excluidos: van acoplados y se suben a mano de forma coordinada.
 

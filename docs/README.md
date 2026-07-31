@@ -37,7 +37,7 @@ Cada tema tiene **un solo documento**. Si un dato aparece en dos sitios, uno de 
 Tres hechos que afectan a casi cualquier trabajo sobre este código:
 
 1. **RBAC no bloquea por defecto.** Los roles se comprueban con `requireRole()` y se registran, pero solo devuelven `403` con `RBAC_ENFORCEMENT=enforce`. Hasta activarlo, la autorización efectiva sigue siendo "hay sesión o no". → [Configuración](configuracion.md#roles-y-permisos-rbac)
-2. **El envío masivo corre dentro del request HTTP**, sin cola. Es el límite de escalado más importante. → [WhatsApp](whatsapp.md#envío-masivo)
+2. **El envío masivo corre inline dentro del request HTTP por defecto.** Existe una **cola opt-in** (Cloud Tasks) que se activa por configuración (`QUEUE_DRIVER`/GCP); sin ella, el envío inline es el límite de escalado. → [WhatsApp](whatsapp.md#envío-masivo)
 3. **EasyLex apunta a sandbox por defecto.** Dos variables lo determinan. → [Configuración](configuracion.md#easylex)
 
 ## Sobre `skills/`

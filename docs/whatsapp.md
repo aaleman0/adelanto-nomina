@@ -122,7 +122,7 @@ Un empleado sin CLABE activa **no recibe mensaje**, aunque su oferta sea válida
 
 ### Desde la UI
 
-`WhatsApp → Nuevo envío` (`/whatsapp/send`) es un asistente de 5 pasos: **Destinatarios → Mensaje → Revisión → Confirmación → Resultado**.
+`WhatsApp → Nuevo envío` (`/whatsapp/send`) es un asistente de **4 pasos** (la UI muestra "Paso X de 4") — **Destinatarios → Mensaje → Revisión → Confirmación** — más una **pantalla de Resultado** al final.
 
 1. Elegir modo: **por importación** (empleados de un lote CSV aplicado) o **manual** (búsqueda y selección individual).
 2. Elegir o renombrar la plantilla.
