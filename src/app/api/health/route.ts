@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { validateWhatsAppEnv } from "@/lib/env";
+import { validateWhatsAppEnv, validateEasyLexEnv } from "@/lib/env";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 
@@ -28,6 +28,18 @@ export async function GET() {
 
   // WhatsApp env validation
   const waValidation = validateWhatsAppEnv();
+
+  // EasyLex env validation. Además, un footgun de go-live: si en producción el
+  // BASE_URL apunta a sandbox o está vacío, la firma no funciona con la cuenta
+  // real. Se marca para que el health lo delate en vez de fallar en silencio.
+  const easylexValidation = validateEasyLexEnv();
+  const easylexBase = process.env.EASYLEX_BASE_URL ?? "";
+  const easylexSandboxInProd =
+    process.env.NODE_ENV === "production" &&
+    (easylexBase === "" || easylexBase.includes("sandbox"));
+  if (easylexSandboxInProd) {
+    logger.warn("health.easylex.sandbox_in_prod", { base: easylexBase || "(vacío)" });
+  }
 
   // Error rate check (últimas 24h)
   let errorRate: number | null = null;
@@ -87,6 +99,11 @@ export async function GET() {
         configured: whatsAppConfigured,
         errorRate24h: errorRate,
         alerting: errorRate !== null && errorRate > 10,
+      },
+      easylex: {
+        ok: easylexValidation.ok && !easylexSandboxInProd,
+        configured: easylexValidation.ok,
+        sandboxInProd: easylexSandboxInProd,
       },
     },
   }, { status: supabaseOk ? 200 : 503 });

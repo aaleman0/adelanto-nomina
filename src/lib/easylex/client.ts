@@ -325,10 +325,16 @@ export class EasyLexClient {
   }
 
   private buildSigningUrl(signerId: string): string {
-    if (this.signingLinkBaseUrl) {
-      return `${this.signingLinkBaseUrl}/${signerId}`;
+    // Sin base configurada, el fallback antiguo (`baseUrl` con `api.`→`widget.`)
+    // producía un dominio que no sirve para firmar (404). Fallar en voz alta:
+    // así el intento queda en 'error' con un mensaje claro en vez de generar un
+    // link muerto que el empleado no podría abrir.
+    if (!this.signingLinkBaseUrl) {
+      throw new Error(
+        "EASYLEX_SIGNING_LINK_BASE_URL no está configurada: no se puede construir el link de firma.",
+      );
     }
-    return `${this.baseUrl.replace("api.", "widget.")}/firmar/${signerId}`;
+    return `${this.signingLinkBaseUrl}/${signerId}`;
   }
 }
 

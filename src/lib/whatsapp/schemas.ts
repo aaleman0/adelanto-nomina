@@ -69,17 +69,6 @@ export const BulkSendBodySchema = z
     employeeIds: z.array(uuidParam()).max(5000).optional(),
     status: z.enum(BULK_SEND_TARGET_STATUSES).optional(),
     templateName: z.string().trim().min(1).max(512).optional(),
-    buttonConfig: z
-      .object({
-        // Meta limita el texto de botón a 25 caracteres.
-        text: z.string().trim().min(1).max(25),
-        url: z.string().url("Debe ser una URL válida."),
-      })
-      // El cliente arranca el estado del botón en `null` y lo envía tal cual
-      // cuando no se activa. `null` significa "sin botón", igual que ausente,
-      // así que se acepta y se normaliza a `undefined` para el resto del flujo.
-      .nullish()
-      .transform((value) => value ?? undefined),
   })
   .superRefine((value, ctx) => {
     if (value.mode === "import" && !value.importId) {

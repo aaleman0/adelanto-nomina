@@ -55,35 +55,6 @@ describe("BulkSendBodySchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rechaza un texto de botón de más de 25 caracteres (límite de Meta)", () => {
-    const result = BulkSendBodySchema.safeParse({
-      mode: "import",
-      importId: UUID,
-      buttonConfig: { text: "x".repeat(26), url: "https://example.com" },
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("rechaza una URL de botón inválida", () => {
-    const result = BulkSendBodySchema.safeParse({
-      mode: "import",
-      importId: UUID,
-      buttonConfig: { text: "Firmar", url: "no-es-url" },
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("acepta buttonConfig=null (sin botón) y lo normaliza a undefined", () => {
-    // El cliente arranca el estado del botón en null y lo envía tal cual cuando
-    // no se activa; debe tratarse igual que ausente, no rechazarse.
-    const result = BulkSendBodySchema.safeParse({
-      mode: "manual",
-      employeeIds: [UUID],
-      buttonConfig: null,
-    });
-    expect(result.success).toBe(true);
-    expect(result.data?.buttonConfig).toBeUndefined();
-  });
 
   it("acepta mode=status con un estado válido (acción por etapa)", () => {
     const result = BulkSendBodySchema.safeParse({ mode: "status", status: "pendiente_envio" });

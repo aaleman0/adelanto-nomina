@@ -17,10 +17,6 @@ export type BulkSendParams = {
   /** Estado operativo a enviar en bloque cuando mode === "status". */
   status?: string;
   templateName?: string;
-  buttonConfig?: {
-    text: string;
-    url: string;
-  };
 };
 
 /**
@@ -126,9 +122,6 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
     totalEmployees: employeeIds.length,
     eligibleCount: eligible.length,
     templateName,
-    hasButton: !!params.buttonConfig,
-    buttonText: params.buttonConfig?.text,
-    buttonUrl: params.buttonConfig?.url,
   });
 
   const progress: BulkSendProgress = {
@@ -510,17 +503,52 @@ export async function enqueueBulkSend(
     return { ...progress, bulkSendId, status: "completed", queued: 0 };
   }
 
+  // Dedup por empleado (misma garantía que el path síncrono): si el mismo
+  // empleado+plantilla ya se encoló en la ventana, no se vuelve a mandar. Se
+  // PRE-FILTRAN los que ya existen porque el índice único es PARCIAL y no sirve
+  // para un ON CONFLICT en el insert masivo; una carrera rara igual la atrapa el
+  // índice (el insert lanza y el operador reintenta). Gated por la migración de
+  // dedup: si la columna no existe, se degrada a enviar sin idempotencia.
+  const dedupEnabled = await isDedupAvailable(supabase);
+  const now = Date.now();
+  let toInsert = eligible;
+
+  if (dedupEnabled) {
+    const keyByEmployee = new Map(
+      eligible.map((e) => [e.employee_id, buildDedupKey(e.employee_id, templateName, now)] as const),
+    );
+    const { data: existing } = await supabase
+      .from("whatsapp_contract_messages")
+      .select("dedup_key")
+      .in("dedup_key", [...keyByEmployee.values()]);
+    const taken = new Set((existing ?? []).map((r) => r.dedup_key as string));
+    toInsert = eligible.filter((e) => !taken.has(keyByEmployee.get(e.employee_id)!));
+    const skipped = eligible.length - toInsert.length;
+    if (skipped > 0) {
+      logger.info("whatsapp.bulk_send.dedup_skipped", { bulkSendId, skipped });
+    }
+  }
+
+  if (toInsert.length === 0) {
+    await supabase
+      .from("whatsapp_bulk_sends")
+      .update({ status: "completed", sent_count: 0, failed_count: 0 })
+      .eq("id", bulkSendId);
+    return { ...progress, bulkSendId, status: "queued", queued: 0 };
+  }
+
   // Crear las filas de mensaje por adelantado, con snapshot del destinatario.
   const { data: created, error: createError } = await supabase
     .from("whatsapp_contract_messages")
     .insert(
-      eligible.map((emp) => ({
+      toInsert.map((emp) => ({
         employee_id: emp.employee_id,
         bulk_send_id: bulkSendId,
         message_type: "bulk_contract_offer",
         status: QUEUED_STATUS,
         delivery_status: null,
         whatsapp_subscriber_id: emp.telefono_normalizado,
+        ...(dedupEnabled ? { dedup_key: buildDedupKey(emp.employee_id, templateName, now) } : {}),
         metadata: {
           template_name: templateName,
           recipient: {

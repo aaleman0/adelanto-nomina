@@ -16,8 +16,6 @@ type StoredTemplate = {
 type Props = {
   templateName: string;
   onTemplateChange: (name: string) => void;
-  buttonConfig: { text: string; url: string } | null;
-  onButtonConfigChange: (config: { text: string; url: string } | null) => void;
   onNext: () => void;
   onBack: () => void;
 };
@@ -37,8 +35,6 @@ function templateStatusInfo(status: TemplateStatus) {
 export function MessageTemplateStep({
   templateName,
   onTemplateChange,
-  buttonConfig,
-  onButtonConfigChange,
   onNext,
   onBack,
 }: Props) {
@@ -89,35 +85,10 @@ export function MessageTemplateStep({
               {bodyText}
             </div>
 
-            <div>
-              <label className="flex items-center gap-2 text-sm text-text-primary">
-                <input
-                  type="checkbox"
-                  checked={!!buttonConfig}
-                  onChange={(e) => onButtonConfigChange(e.target.checked ? { text: "Ir al sitio", url: "https://adelanto-nomina.com/" } : null)}
-                  className="rounded border-border text-primary"
-                />
-                Incluir botón de acción
-              </label>
-              {buttonConfig && (
-                <div className="mt-2 flex gap-2">
-                  <input
-                    type="text"
-                    value={buttonConfig.text}
-                    onChange={(e) => onButtonConfigChange({ ...buttonConfig, text: e.target.value })}
-                    className="h-9 flex-1 rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-primary"
-                    maxLength={25}
-                  />
-                  <input
-                    type="url"
-                    value={buttonConfig.url}
-                    onChange={(e) => onButtonConfigChange({ ...buttonConfig, url: e.target.value })}
-                    className="h-9 flex-[2] rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-primary"
-                    placeholder="https://..."
-                  />
-                </div>
-              )}
-            </div>
+            {/* El botón del mensaje NO es configurable por envío: en WhatsApp los
+                botones se definen en la plantilla aprobada (texto + URL), no se
+                pasan al enviar. Se quitó el control que dejaba fijar un botón
+                arbitrario porque nunca llegaba al mensaje. */}
 
             {templates.length > 1 && (
               <div>

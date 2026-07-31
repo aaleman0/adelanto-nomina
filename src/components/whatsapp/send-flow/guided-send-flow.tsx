@@ -56,7 +56,6 @@ export function GuidedSendFlow() {
   const [importMeta, setImportMeta] = useState<RecentImport | null>(null);
   const [manualIds, setManualIds] = useState<string[]>([]);
   const [templateName, setTemplateName] = useState(DEFAULT_TEMPLATE);
-  const [buttonConfig, setButtonConfig] = useState<{ text: string; url: string } | null>(null);
   const [validation, setValidation] = useState<ValidationSummary | null>(null);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
@@ -70,7 +69,6 @@ export function GuidedSendFlow() {
     setImportMeta(null);
     setManualIds([]);
     setTemplateName(DEFAULT_TEMPLATE);
-    setButtonConfig(null);
     setValidation(null);
     setSelectedEmployeeIds(new Set());
     setSending(false);
@@ -86,8 +84,8 @@ export function GuidedSendFlow() {
     try {
       const payload =
         mode === "import"
-          ? { mode: "import", importId: selectedImportId, employeeIds: [...selectedEmployeeIds], templateName, buttonConfig }
-          : { mode: "manual", employeeIds: [...selectedEmployeeIds], templateName, buttonConfig };
+          ? { mode: "import", importId: selectedImportId, employeeIds: [...selectedEmployeeIds], templateName }
+          : { mode: "manual", employeeIds: [...selectedEmployeeIds], templateName };
 
       const res = await fetch("/api/whatsapp/bulk", {
         method: "POST",
@@ -134,7 +132,7 @@ export function GuidedSendFlow() {
     } finally {
       setSending(false);
     }
-  }, [mode, selectedImportId, selectedEmployeeIds, templateName, buttonConfig, toastify, addNotification]);
+  }, [mode, selectedImportId, selectedEmployeeIds, templateName, toastify, addNotification]);
 
   if (step === 5 && result) {
     return <SendResult result={result} templateName={templateName} onNewSend={resetFlow} />;
@@ -163,8 +161,9 @@ export function GuidedSendFlow() {
               setValidation(null);
               setSelectedEmployeeIds(new Set());
             }}
-            onImportChange={(id) => {
+            onImportChange={(id, meta) => {
               setSelectedImportId(id);
+              setImportMeta(meta);
               setValidation(null);
               setSelectedEmployeeIds(new Set());
             }}
@@ -180,8 +179,6 @@ export function GuidedSendFlow() {
           <MessageTemplateStep
             templateName={templateName}
             onTemplateChange={setTemplateName}
-            buttonConfig={buttonConfig}
-            onButtonConfigChange={setButtonConfig}
             onNext={() => setStep(3)}
             onBack={() => setStep(1)}
           />
@@ -198,12 +195,7 @@ export function GuidedSendFlow() {
             templateName={templateName}
             validation={validation}
             selectedEmployeeIds={selectedEmployeeIds}
-            onValidationChange={(v) => {
-              setValidation(v);
-              if (mode === "import" && v.employees.length > 0) {
-                // import filename se mantiene en importMeta
-              }
-            }}
+            onValidationChange={setValidation}
             onSelectionChange={setSelectedEmployeeIds}
             onNext={() => setStep(4)}
             onBack={() => setStep(2)}

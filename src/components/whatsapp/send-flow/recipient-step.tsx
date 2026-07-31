@@ -21,7 +21,7 @@ type Props = {
   selectedImportId: string;
   manualIds: string[];
   onModeChange: (mode: SendMode) => void;
-  onImportChange: (importId: string) => void;
+  onImportChange: (importId: string, meta: RecentImport | null) => void;
   onManualIdsChange: (ids: string[]) => void;
   onNext: () => void;
 };
@@ -113,7 +113,7 @@ export function RecipientStep({
                     <button
                       key={imp.id}
                       type="button"
-                      onClick={() => onImportChange(imp.id)}
+                      onClick={() => onImportChange(imp.id, imp)}
                       aria-pressed={seleccionada}
                       className={["flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition", seleccionada ? "border-primary bg-primary-light ring-1 ring-primary" : "border-border bg-surface hover:bg-surface-muted"].join(" ")}
                     >

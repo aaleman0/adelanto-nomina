@@ -102,6 +102,16 @@ export function WhatsAppConfigForm() {
           <code className="font-data">WHATSAPP_ACCESS_TOKEN</code> y{" "}
           <code className="font-data">WHATSAPP_APP_SECRET</code>, porque en base de datos
           quedaban sin cifrar y las variables de entorno tienen precedencia de todas formas.
+          <br />
+          <span className="mt-2 block">
+            Lo mismo aplica a los campos de abajo: el runtime lee el{" "}
+            <strong className="text-text-primary">Phone Number ID</strong> y el{" "}
+            <strong className="text-text-primary">Webhook Verify Token</strong> de{" "}
+            <code className="font-data">WHATSAPP_PHONE_NUMBER_ID</code> y{" "}
+            <code className="font-data">WHATSAPP_WEBHOOK_VERIFY_TOKEN</code>, <strong className="text-text-primary">no</strong> de
+            lo guardado aquí. Estos valores son solo una referencia visible en el panel; la
+            configuración operativa se cambia en las variables de entorno del despliegue.
+          </span>
         </p>
 
         <form className="mt-3 flex flex-col gap-4" onSubmit={handleSave}>
