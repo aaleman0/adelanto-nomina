@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   regenerateContractLinkAction,
   retryContractFlowAction,
+  resendSignedContractAction,
 } from "@/app/contracts/actions";
 import { Card } from "@/components/ui/card";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
@@ -228,12 +229,39 @@ function ActionsCard({ control }: { control: ContractControlRow }) {
             <CopyLinkButton value={control.signing_url} />
           </>
         ) : null}
+
+        {/* Contrato ya firmado: descargar la copia archivada y reenviarla al
+            empleado si la entrega automática no llegó (p. ej. fuera de la
+            ventana de 24 h de WhatsApp). */}
+        {isSigned && hasRequest && (
+          <>
+            <Link
+              className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-text-primary transition hover:bg-surface-muted"
+              href={`/api/backoffice/contracts/${control.contract_request_id}/signed-pdf`}
+              target="_blank"
+            >
+              Descargar contrato firmado
+            </Link>
+            <form action={resendSignedContractAction}>
+              <input name="contract_request_id" type="hidden" value={control.contract_request_id ?? ""} />
+              <input name="employee_id" type="hidden" value={control.employee_id} />
+              <RoleGate minimum="operaciones" mode="disable">
+                <ConfirmSubmitButton
+                  confirmMessage="Se reenviará el contrato firmado al empleado por WhatsApp. ¿Continuar?"
+                  variant="secondary"
+                >
+                  Reenviar al empleado
+                </ConfirmSubmitButton>
+              </RoleGate>
+            </form>
+          </>
+        )}
       </div>
       <p className="mt-3 text-sm text-text-muted">
         {!hasRequest
           ? "Las acciones se habilitan cuando el empleado solicita desde WhatsApp."
           : isSigned
-            ? "Este contrato ya está firmado; no se debe regenerar ni reintentar."
+            ? "Este contrato ya está firmado. Puedes descargar la copia archivada o reenviarla al empleado por WhatsApp."
             : "Si el link sigue vigente, el sistema lo reutiliza. Si venció o hubo error, crea un nuevo intento."}
       </p>
     </Card>

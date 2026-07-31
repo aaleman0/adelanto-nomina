@@ -23,6 +23,10 @@ POST /api/webhooks/easylex/sign   (DOCUMENT_SIGNED)
       │
       ▼
 attempt → firmado · request → firmado · offer → firmada
+      │
+      │  deliverSignedContract (best-effort, no-fatal)
+      ▼
+PDF firmado → bucket contratos-firmados → WhatsApp al empleado
 ```
 
 ## Reglas de negocio
@@ -168,6 +172,27 @@ El envío es **no-fatal**: si falla (WhatsApp mal configurado, plantilla no apro
 Prueba E2E sin gastar firma: `node scripts/demo-webhook-sign.mjs` — crea un contrato mock, dispara `DOCUMENT_SIGNED` al handler real (con firma HMAC si `EASYLEX_WEBHOOK_SECRET` está en `.env.local`), verifica la propagación y limpia.
 
 `EASYLEX_CALLBACK_URL` debe terminar en `/api/webhooks/easylex/sign` — es lo que la app manda a EasyLex por documento para que llame de vuelta. Debe ser una **URL pública** (EasyLex no alcanza `localhost`).
+
+## Entrega del contrato firmado al empleado
+
+Tras confirmar la firma, `handleDocumentSigned` llama a `deliverSignedContract` (`src/lib/contracts/deliver-signed-contract.ts`):
+
+1. **Descarga** el PDF firmado de EasyLex (`EasyLexClient.getSignedDocument` → `GET /document/signed/{id}`).
+2. **Archiva** en el bucket privado `contratos-firmados` (`{contractRequestId}/{documentId}.pdf`) y guarda la ruta en `contract_attempts.signed_pdf_path`.
+3. **Envía** el PDF al empleado por WhatsApp (`WhatsAppClient.sendDocument`, con una signed URL temporal).
+
+Es **best-effort y NUNCA lanza**: un fallo aquí no debe convertir el webhook en 5xx (la firma ya quedó registrada). El **archivo se intenta siempre**; el envío es lo frágil.
+
+> **Restricción de WhatsApp (24 h).** Meta solo entrega un documento iniciado por el negocio dentro de la **ventana de 24 h** desde el último mensaje del empleado. Como acaban de firmar, normalmente están dentro. Si pasaron >24 h, Meta lo rechaza — el PDF **igual queda archivado** y el operador puede reenviarlo. Deja constancia con el `audit_event` `contract.signed_delivered` (`metadata.sent`).
+
+### Desde el backoffice (expediente firmado)
+
+| Acción | Ruta | Qué hace |
+|---|---|---|
+| Descargar contrato firmado | `GET /api/backoffice/contracts/[contractRequestId]/signed-pdf` | Redirige a una signed URL de descarga del PDF archivado. Rol `operaciones`. `404` si aún no hay archivo |
+| Reenviar al empleado | `resendSignedContractAction` (server action) | Re-corre `deliverSignedContract` (re-archiva + reintenta el WhatsApp). Útil si la entrega automática falló |
+
+Ambas aparecen en `ActionsCard` solo cuando el contrato está firmado.
 
 ## Firma simulada
 

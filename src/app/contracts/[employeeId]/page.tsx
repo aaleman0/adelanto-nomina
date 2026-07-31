@@ -74,6 +74,21 @@ function getActionFeedback(status: string | undefined) {
     };
   }
 
+  if (status === "contract_resent") {
+    return {
+      tone: "success" as const,
+      message: "El contrato firmado se reenvió al empleado por WhatsApp.",
+    };
+  }
+
+  if (status === "contract_resend_failed") {
+    return {
+      tone: "warning" as const,
+      message:
+        "El contrato quedó archivado, pero el reenvío por WhatsApp no se completó (revisa que el empleado esté dentro de la ventana de 24 h y que el token de WhatsApp esté vigente).",
+    };
+  }
+
   if (status === "not_found") {
     return {
       tone: "danger" as const,

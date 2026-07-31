@@ -1,11 +1,14 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   type BackofficeContractAction,
   runBackofficeContractAction,
 } from "@/lib/contracts/backoffice-actions";
+import { deliverSignedContract } from "@/lib/contracts/deliver-signed-contract";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/roles";
 
 export async function regenerateContractLinkAction(formData: FormData) {
@@ -14,6 +17,53 @@ export async function regenerateContractLinkAction(formData: FormData) {
 
 export async function retryContractFlowAction(formData: FormData) {
   await runContractAction(formData, "retry");
+}
+
+/**
+ * Reenvía al empleado su contrato ya firmado (re-archiva + WhatsApp). Útil
+ * cuando la entrega automática falló (fuera de la ventana de 24 h, token de
+ * WhatsApp caído, etc.). Reutiliza `deliverSignedContract`, así que el archivo
+ * queda al día y el envío se reintenta.
+ */
+export async function resendSignedContractAction(formData: FormData) {
+  const contractRequestId = readFormValue(formData, "contract_request_id");
+  const employeeId = readFormValue(formData, "employee_id");
+
+  if (!contractRequestId || !employeeId) {
+    redirect("/");
+  }
+
+  const auth = await requireRole("operaciones");
+  if (!auth.ok) {
+    redirect(`/contracts/${employeeId}?action_status=forbidden`);
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data: attempt } = await supabase
+    .from("contract_attempts")
+    .select("id, easylex_contract_id")
+    .eq("contract_request_id", contractRequestId)
+    .eq("status", "firmado")
+    .order("attempt_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!attempt?.easylex_contract_id) {
+    redirect(`/contracts/${employeeId}?action_status=not_found`);
+  }
+
+  const result = await deliverSignedContract({
+    documentId: attempt.easylex_contract_id,
+    contractRequestId,
+    contractAttemptId: attempt.id,
+    employeeId,
+    correlationId: randomUUID(),
+  });
+
+  revalidatePath(`/contracts/${employeeId}`);
+  redirect(
+    `/contracts/${employeeId}?action_status=${result.sent ? "contract_resent" : "contract_resend_failed"}`,
+  );
 }
 
 async function runContractAction(
