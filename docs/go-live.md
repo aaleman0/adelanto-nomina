@@ -28,8 +28,11 @@ Lo que falta es **aprovisionamiento y despliegue**.
 **☐ Pendientes para go-live** (detalle en las fases de abajo)
 
 *Datos — bloquean que el contrato salga completo:*
-- [ ] Llenar en `company_settings` las **5 claves vacías**: `acreedor_banco`, `acreedor_cuenta`, `acreedor_clabe`, `testigo_1_nombre`, `testigo_2_nombre`. (Ya sembradas: `acreedor_razon_social`, `acreedor_representante`, `acreedor_rfc`, `acreedor_domicilio`.)
+- [ ] **Datos personales de los empleados (el bloqueo grande).** Al 2026-07-31 solo **3/608** empleados tienen `estado_civil`, `nacionalidad`, `lugar_origen`, `fecha_nacimiento` y `domicilio`; al resto le faltan → generarían contratos con huecos. Requiere el CSV completo. Medir con `pnpm dlx tsx scripts/verify-contracts-batch.ts --audit-only`.
+- [ ] Llenar en `company_settings` las **5 claves vacías**: `acreedor_banco`, `acreedor_cuenta`, `acreedor_clabe`, `testigo_1_nombre`, `testigo_2_nombre` (desde "Datos de empresa"). La identidad del acreedor (`acreedor_razon_social/representante/rfc/domicilio`) **ya es editable y tiene respaldo** — no bloquea.
 - [ ] Montar credenciales de Google (`google_oauth_client.json` + `token.json`) en el contenedor — sin ellas no se genera ningún contrato.
+
+> **Hechos 2026-07-31:** bug de formato del monto en la plantilla **corregido**; identidad del acreedor **convertida a placeholders editables** con respaldo. Verificación con `scripts/verify-contracts-batch.ts` (veredicto `LIMPIO`). Detalle en [EasyLex y contratos](easylex-contratos.md#plantilla-del-contrato-placeholders-y-arreglos).
 
 *WhatsApp:*
 - [ ] Token **permanente** (System User); el temporal caduca sin aviso.
@@ -48,7 +51,7 @@ Lo que falta es **aprovisionamiento y despliegue**.
 - [ ] `RBAC_ENFORCEMENT=enforce`, `RLS_SESSION_READS=on` (confirmar M1 `20260723` aplicada primero), `WEBHOOK_ENFORCE_SIGNATURES=true`, CSP report-only → enforce; `pnpm verify:rls` post-deploy.
 
 *Prueba final:*
-- [ ] Firmar un contrato **real** en producción → el expediente pasa a **Firmado** y el empleado **recibe su PDF** por WhatsApp.
+- [ ] Firmar un contrato **real** en producción → el expediente pasa a **Firmado** y el empleado **recibe su PDF** por WhatsApp. Runbook paso a paso: [Primera prueba end-to-end](primera-prueba-e2e.md).
 
 ---
 

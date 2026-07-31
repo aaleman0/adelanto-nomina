@@ -260,6 +260,8 @@ Claves sembradas en `20250701_contract_employee_fields.sql` (`ON CONFLICT DO NOT
 | `acreedor_domicilio` | `Del Gran Parque número 225, Interior C, colonia Cumbres, C.P. 64610, Monterrey, Nuevo León` |
 | `acreedor_banco`, `acreedor_cuenta`, `acreedor_clabe`, `testigo_1_nombre`, `testigo_2_nombre` | vacías — marcadas `(LLENAR)` |
 
+Desde 2026-07-31 las cuatro de identidad (`acreedor_razon_social/representante/rfc/domicilio`) **sí llegan al contrato** vía placeholders `{{razon_social_acreedor}}`… con respaldo en código si están vacías; las cinco `(LLENAR)` no tienen respaldo. Editables desde "Datos de empresa". Ver [Configuración](configuracion.md#datos-del-acreedor-contrato).
+
 Claves de `20250701_easylex_validation_settings.sql`, todas booleanos en texto: `easylex_validate_biometric` = `true`, `easylex_validate_liveness` = `true`; `easylex_validate_id`, `easylex_validate_sms`, `easylex_validate_picture`, `easylex_validate_email`, `easylex_validate_voice` = `false`.
 
 #### `settings`

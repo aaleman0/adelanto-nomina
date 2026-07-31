@@ -147,19 +147,21 @@ Configuración de negocio, editable en base sin redeploy. Se lee con `getCompany
 
 ### Datos del acreedor (contrato)
 
-| Clave | Estado |
-|---|---|
-| `acreedor_razon_social` | sembrada — `LOZAV CONSTRUCTORES, SOCIEDAD ANÓNIMA DE CAPITAL VARIABLE` |
-| `acreedor_representante` | sembrada — `DARA JAHDAI LOPEZ DE LOS ANGELES` |
-| `acreedor_rfc` | sembrada — `LCO2105032T5` |
-| `acreedor_domicilio` | sembrada |
-| `acreedor_banco` | **vacía — (LLENAR)** |
-| `acreedor_cuenta` | **vacía — (LLENAR)** |
-| `acreedor_clabe` | **vacía — (LLENAR)** |
-| `testigo_1_nombre` | **vacía — (LLENAR)** |
-| `testigo_2_nombre` | **vacía — (LLENAR)** |
+Todas se editan desde la pantalla **"Datos de empresa"** (`/settings/empresa`, admin) o en base. Dos grupos según qué pasa si están vacías:
 
-Las cinco vacías deben llenarse antes de emitir contratos reales.
+| Clave | Estado | Si está vacía |
+|---|---|---|
+| `acreedor_razon_social` | identidad — respaldo `LOZAV CONSTRUCTORES, SOCIEDAD ANÓNIMA DE CAPITAL VARIABLE` | usa el respaldo (no sale en blanco) |
+| `acreedor_representante` | identidad — respaldo `DARA JAHDAI LOPEZ DE LOS ANGELES` | usa el respaldo |
+| `acreedor_rfc` | identidad — respaldo `LCO2105032T5` | usa el respaldo |
+| `acreedor_domicilio` | identidad — respaldo `Del Gran Parque número 225…` | usa el respaldo |
+| `acreedor_banco` | **vacía — (LLENAR)** | **sale en blanco** |
+| `acreedor_cuenta` | **vacía — (LLENAR)** | **sale en blanco** |
+| `acreedor_clabe` | **vacía — (LLENAR)** | **sale en blanco** |
+| `testigo_1_nombre` | **vacía — (LLENAR)** | **sale en blanco** |
+| `testigo_2_nombre` | **vacía — (LLENAR)** | **sale en blanco** |
+
+La identidad (primeras cuatro) tiene respaldo en código (`ACREEDOR_DEFAULTS`): editarla es opcional, cambia el contrato pero nunca lo deja en blanco. Las **cinco `(LLENAR)`** no tienen respaldo y **deben llenarse antes de emitir contratos reales**. Detalle en [EasyLex y contratos](easylex-contratos.md#plantilla-del-contrato-placeholders-y-arreglos).
 
 ### Validaciones de EasyLex
 

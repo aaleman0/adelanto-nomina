@@ -1,4 +1,7 @@
-import { generateContractPdfFromGoogleDocs } from "@/lib/google/contract-pdf";
+import {
+  generateContractPdfFromGoogleDocs,
+  type ContractData as ContractPlaceholders,
+} from "@/lib/google/contract-pdf";
 import type { CompanySettings } from "@/lib/company-settings";
 import { montoEnLetra } from "@/lib/easylex/monto-en-letra";
 
@@ -42,15 +45,32 @@ function formatMonto(monto: number): string {
   return new Intl.NumberFormat("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(monto);
 }
 
-/* ─── PDF generation ─── */
+/* ─── Identidad del acreedor: respaldo ─── */
 
-export async function generateContractPdf(data: ContractData): Promise<Buffer> {
+// La identidad del acreedor se edita desde "Datos de empresa" (company_settings).
+// Si un campo está vacío, se usa este respaldo —el valor histórico de la plantilla—
+// para que el dato NUNCA salga en blanco en el contrato. Nota: la razón social del
+// bloque de firma sigue fija en la plantilla (ver scripts/add-acreedor-placeholders.ts).
+const ACREEDOR_DEFAULTS = {
+  razon_social: "LOZAV CONSTRUCTORES, SOCIEDAD ANÓNIMA DE CAPITAL VARIABLE",
+  rfc: "LCO2105032T5",
+  representante: "DARA JAHDAI LOPEZ DE LOS ANGELES",
+  domicilio: "Del Gran Parque número 225, Interior C, colonia Cumbres, C.P. 64610, Monterrey, Nuevo León",
+} as const;
+
+const withDefault = (value: string | undefined, fallback: string) => value?.trim() || fallback;
+
+/* ─── Placeholder mapping ─── */
+
+// Mapea `ContractData` → los placeholders `{{...}}` de la plantilla. Es la ÚNICA
+// fuente de verdad de qué campo llena cada hueco; `generateContractPdf` la usa
+// para renderizar y las herramientas de verificación la usan para auditar sin
+// llamar a Google (misma lógica, cero divergencia).
+export function buildContractPlaceholders(data: ContractData): ContractPlaceholders {
   const { dia, mes, anio } = formatDate(data.fechaFirma);
-  const montoNum = formatMonto(data.monto);
-  const montoLetra = montoEnLetra(data.monto);
   const cs = data.companySettings;
 
-  return generateContractPdfFromGoogleDocs({
+  return {
     nombre_completo: data.nombreCompleto,
     estado_civil: data.estadoCivil ?? "",
     nacionalidad: data.nacionalidad ?? "",
@@ -58,16 +78,26 @@ export async function generateContractPdf(data: ContractData): Promise<Buffer> {
     fecha_nacimiento: data.fechaNacimiento ?? "",
     rfc: data.rfc,
     domicilio: data.domicilio ?? "",
-    monto_numero: montoNum,
-    monto_letra: montoLetra,
+    monto_numero: formatMonto(data.monto),
+    monto_letra: montoEnLetra(data.monto),
     banco_acreedor: cs.acreedor_banco ?? "",
     cuenta_acreedor: cs.acreedor_cuenta ?? "",
     clabe_acreedor: cs.acreedor_clabe ?? "",
+    razon_social_acreedor: withDefault(cs.acreedor_razon_social, ACREEDOR_DEFAULTS.razon_social),
+    rfc_acreedor: withDefault(cs.acreedor_rfc, ACREEDOR_DEFAULTS.rfc),
+    representante_acreedor: withDefault(cs.acreedor_representante, ACREEDOR_DEFAULTS.representante),
+    domicilio_acreedor: withDefault(cs.acreedor_domicilio, ACREEDOR_DEFAULTS.domicilio),
     dia_firma: dia,
     mes_firma: mes,
     anio_firma: anio,
     empleador: data.empleador,
     testigo_1: cs.testigo_1_nombre ?? "",
     testigo_2: cs.testigo_2_nombre ?? "",
-  });
+  };
+}
+
+/* ─── PDF generation ─── */
+
+export async function generateContractPdf(data: ContractData): Promise<Buffer> {
+  return generateContractPdfFromGoogleDocs(buildContractPlaceholders(data));
 }

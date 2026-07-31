@@ -56,7 +56,7 @@ create-easylex-attempt.ts
        └─ generateContractPdfFromGoogleDocs   (google/contract-pdf.ts)  ← usa Google
 ```
 
-`easylex/contract-pdf.ts` solo prepara los datos —incluido el monto en letra— y delega. El `TEMPLATE_DOC_ID` del documento de Google está hardcodeado.
+`easylex/contract-pdf.ts` solo prepara los datos —incluido el monto en letra— y delega. El `TEMPLATE_DOC_ID` del documento de Google está hardcodeado. El mapeo campo→placeholder vive en **`buildContractPlaceholders()`** (exportada): es la **única fuente de verdad** de qué dato llena cada `{{...}}`. La usan tanto el render real como el verificador (`scripts/verify-contracts-batch.ts`), así que no hay lógica duplicada que se desincronice.
 
 La plantilla PDF con AcroForm (`src/lib/easylex/templates/contrato-prestamo.pdf`) y los scripts que la generaron (`create-pdf-template-fixed.ts`, `inspect-pdf.ts`, `extract-pdf-text.ts`) corresponden a un enfoque anterior con `pdf-lib` que **ya no está conectado a nada**. Se conservan pero no participan en el flujo.
 
@@ -70,7 +70,38 @@ De la oferta: `monto_prestamo_autorizado` (en número y en letra).
 
 De la cuenta bancaria: CLABE y banco.
 
-Del acreedor: las claves `acreedor_*` de `company_settings`. Cuatro vienen sembradas; `acreedor_banco`, `acreedor_cuenta`, `acreedor_clabe`, `testigo_1_nombre` y `testigo_2_nombre` están **vacías y marcadas `(LLENAR)`**. Un contrato emitido sin llenarlas sale incompleto.
+Del acreedor: las claves `acreedor_*` y `testigo_*` de `company_settings`, **todas editables desde la pantalla "Datos de empresa"** (`/settings/empresa`). Dos grupos:
+
+- **Identidad** (`acreedor_razon_social`, `acreedor_rfc`, `acreedor_representante`, `acreedor_domicilio`): tienen **valor de respaldo** en código (`ACREEDOR_DEFAULTS` en `easylex/contract-pdf.ts`, = los valores actuales de LOZAV). Si el ajuste está vacío se usa el respaldo, así que **nunca salen en blanco**.
+- **Bancarios y testigos** (`acreedor_banco`, `acreedor_cuenta`, `acreedor_clabe`, `testigo_1_nombre`, `testigo_2_nombre`): **sin respaldo**. Si están vacíos, salen en blanco en el contrato. Son los cinco que faltan `(LLENAR)`.
+
+Ver la mecánica de identidad y sus placeholders en [Plantilla del contrato](#plantilla-del-contrato-placeholders-y-arreglos).
+
+## Plantilla del contrato: placeholders y arreglos
+
+La plantilla de Google Docs (`TEMPLATE_DOC_ID`) se llena por completo con placeholders `{{...}}`; no quedan huecos literales (`____` o `[texto]`) que saldrían vacíos en silencio — **auditado 2026-07-31**: los únicos no-placeholder son la línea donde se firma y el nombre en el pie de firma (ver más abajo).
+
+**Se adaptan a cada empleado/oferta** (del CSV y la oferta): `{{nombre_completo}}`, `{{estado_civil}}`, `{{nacionalidad}}`, `{{lugar_origen}}`, `{{fecha_nacimiento}}`, `{{rfc}}`, `{{domicilio}}`, `{{empleador}}`, `{{monto_numero}}`, `{{monto_letra}}`, `{{dia_firma}}`/`{{mes_firma}}`/`{{anio_firma}}`.
+
+**Iguales en todos los contratos** (de `company_settings`, vía "Datos de empresa"): `{{banco_acreedor}}`, `{{cuenta_acreedor}}`, `{{clabe_acreedor}}`, `{{testigo_1}}`, `{{testigo_2}}`, y la identidad del acreedor `{{razon_social_acreedor}}`, `{{rfc_acreedor}}`, `{{representante_acreedor}}`, `{{domicilio_acreedor}}`.
+
+### Cambios aplicados (2026-07-31)
+
+Dos arreglos en la plantilla, hechos por API con scripts reproducibles (dry-run + `--apply`):
+
+1. **Formato del monto (bug corregido).** La plantilla escribía `.00` tras `{{monto_numero}}` (que ya trae decimales) y ` PESOS 00/100 MONEDA NACIONAL` tras `{{monto_letra}}` (que ya termina en `M.N.`), duplicando el formato (`$4,000.00.00 (… M.N. PESOS 00/100 MONEDA NACIONAL)`). Se quitaron ambos textos con `scripts/fix-contract-template.ts --apply`. Ahora sale `$4,000.00 (CUATRO MIL PESOS 00/100 M.N.)`.
+
+2. **Identidad del acreedor ahora editable.** Razón social, RFC, representante y domicilio estaban **escritos fijos** en la plantilla; se convirtieron en placeholders con `scripts/add-acreedor-placeholders.ts --apply` para que "Datos de empresa" los controle. El generador usa `ACREEDOR_DEFAULTS` como respaldo, así que nunca salen en blanco.
+   - **Excepción:** la razón social del **bloque de firma** sigue fija como LOZAV (está partida en dos renglones del formato de firma; convertirla rompía el diseño). Con el respaldo se ve idéntica a hoy. Si algún día cambia la razón social, hay que editar esa línea del Doc a mano. El representante del pie de firma **sí** se actualiza.
+
+### Verificación (night-run)
+
+`scripts/verify-contracts-batch.ts` (solo lectura) comprueba la generación y deja evidencia en `scripts/contract-verify-out/<runId>/` (report.md, results.json, PDFs; ignorado por git, conserva las últimas 25 corridas). Dos partes:
+
+- **A) Datos:** audita los ~600 empleados y reporta cuántos generarían contrato completo vs. a cuáles les falta qué campo (sin llamar a Google). Al 2026-07-31: **3/608 listos**; el resto sin datos personales (pendiente del CSV).
+- **B) Render:** genera el PDF real de los empleados listos + una batería sintética (acentos/ñ, casado/soltero, montos con centavos/grandes/chicos, apellido faltante), extrae el texto y verifica que cada campo aparezca y que no haya placeholders sin reemplazar. Veredictos: `LIMPIO`, `SOLO_BUG_CONOCIDO_PLANTILLA` (aísla el bug del monto para no confundirlo con hallazgos nuevos) o `PROBLEMAS_REALES`.
+
+Flags: `--audit-only` (rápido, sin Google), `--synthetic-only`, `--no-synthetic`, `--render=N`, `--offset=K`. Pensado para dejarlo en loop y despertar con la bitácora.
 
 ## Cliente de EasyLex
 

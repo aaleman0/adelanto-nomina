@@ -56,3 +56,6 @@ tests/e2e/.auth/
 # Artefactos de pruebas manuales locales
 /scripts/test-full-contract-flow.ts
 /scripts/test-filled-contract.pdf
+# Evidencia del night-run de verificación de contratos (PDFs con PII + reportes)
+/scripts/contract-verify-out/
+/scripts/demo-contrato-lleno.pdf

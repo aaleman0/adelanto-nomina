@@ -17,6 +17,10 @@ export interface ContractData {
   banco_acreedor: string;
   cuenta_acreedor: string;
   clabe_acreedor: string;
+  razon_social_acreedor: string;
+  rfc_acreedor: string;
+  representante_acreedor: string;
+  domicilio_acreedor: string;
   dia_firma: string;
   mes_firma: string;
   anio_firma: string;
@@ -55,6 +59,10 @@ export async function generateContractPdfFromGoogleDocs(
       { old: "{{banco_acreedor}}", new: data.banco_acreedor },
       { old: "{{cuenta_acreedor}}", new: data.cuenta_acreedor },
       { old: "{{clabe_acreedor}}", new: data.clabe_acreedor },
+      { old: "{{razon_social_acreedor}}", new: data.razon_social_acreedor },
+      { old: "{{rfc_acreedor}}", new: data.rfc_acreedor },
+      { old: "{{representante_acreedor}}", new: data.representante_acreedor },
+      { old: "{{domicilio_acreedor}}", new: data.domicilio_acreedor },
       { old: "{{dia_firma}}", new: data.dia_firma },
       { old: "{{mes_firma}}", new: data.mes_firma },
       { old: "{{anio_firma}}", new: data.anio_firma },
