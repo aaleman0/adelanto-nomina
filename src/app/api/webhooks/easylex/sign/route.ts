@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { easylexEnv } from "@/lib/env";
-import { verifySharedSecret, isProduction, enforceSignatures } from "@/lib/security/webhook-signatures";
+import { verifyEasylexWebhook, isProduction, enforceSignatures } from "@/lib/security/webhook-signatures";
 import { redactPII } from "@/lib/audit/redact";
 import { randomUUID } from "node:crypto";
 
@@ -45,6 +45,10 @@ export async function POST(request: Request) {
   try {
     const signature = request.headers.get("x-easylex-signature");
     const webhookSecret = easylexEnv.webhookSecret;
+    // Cuerpo crudo (no parseado): se necesita para poder validar un HMAC del
+    // payload. Si se reserializa el JSON, los bytes cambian y la firma nunca
+    // coincide. Se lee una sola vez y luego se parsea desde aquí.
+    const rawBody = await request.text();
 
     if (!webhookSecret) {
       // Antes, un secreto vacío omitía la validación por completo (fail open).
@@ -63,7 +67,7 @@ export async function POST(request: Request) {
         correlationId,
         detail: "EASYLEX_WEBHOOK_SECRET no configurado (solo permitido fuera de producción).",
       });
-    } else if (!verifySharedSecret(signature, webhookSecret)) {
+    } else if (!verifyEasylexWebhook(rawBody, signature, webhookSecret)) {
       logger.warn("easylex.webhook.unauthorized", {
         correlationId,
         hasSignature: Boolean(signature),
@@ -71,7 +75,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const payload: EasyLexWebhookPayload = await request.json();
+    const payload: EasyLexWebhookPayload = JSON.parse(rawBody);
 
     logger.info("easylex.webhook.received", {
       webhookId: payload.webhookId,
