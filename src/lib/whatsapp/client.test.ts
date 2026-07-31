@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { describeMetaError } from "./client";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describeMetaError, WhatsAppClient } from "./client";
 
 describe("describeMetaError", () => {
   it("traduce el código 190 (token expirado/inválido) a un mensaje accionable", () => {
@@ -25,5 +25,65 @@ describe("describeMetaError", () => {
   it("cae al código HTTP cuando no hay mensaje de error", () => {
     expect(describeMetaError({}, 500)).toBe("HTTP 500");
     expect(describeMetaError(null, 503)).toBe("HTTP 503");
+  });
+});
+
+describe("WhatsAppClient.sendDocument", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const client = new WhatsAppClient("token-123", "phone-456");
+
+  it("arma un mensaje type=document con link, filename y caption", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ messages: [{ id: "wamid.X" }] }) });
+
+    const res = await client.sendDocument("5218110000000", "https://x/y.pdf", "contrato-firmado.pdf", "hola");
+
+    expect(res).toEqual({ ok: true, messageId: "wamid.X" });
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toContain("/phone-456/messages");
+    const body = JSON.parse(opts.body);
+    expect(body.type).toBe("document");
+    expect(body.document).toEqual({
+      link: "https://x/y.pdf",
+      filename: "contrato-firmado.pdf",
+      caption: "hola",
+    });
+    expect(opts.headers.Authorization).toBe("Bearer token-123");
+  });
+
+  it("omite caption cuando no se pasa", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ messages: [{ id: "wamid.Y" }] }) });
+
+    await client.sendDocument("521811", "https://x/y.pdf", "f.pdf");
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.document).not.toHaveProperty("caption");
+  });
+
+  it("devuelve error legible cuando Meta responde !ok (token 190)", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: { message: "Authentication Error", code: 190 } }),
+    });
+
+    const res = await client.sendDocument("521811", "https://x/y.pdf", "f.pdf");
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("Token de WhatsApp");
+  });
+
+  it("no envía sin token o phone number", async () => {
+    const res = await new WhatsAppClient("", "").sendDocument("521811", "https://x/y.pdf", "f.pdf");
+
+    expect(res.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

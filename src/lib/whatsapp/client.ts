@@ -225,6 +225,62 @@ export class WhatsAppClient {
     }
   }
 
+  /**
+   * Envía un documento (PDF) al empleado por su link. WhatsApp descarga el
+   * archivo desde `link` al momento del envío, así que basta con una URL pública
+   * temporal (p. ej. una signed URL de Supabase Storage).
+   *
+   * Restricción de Meta: un documento iniciado por el negocio solo se entrega
+   * dentro de la **ventana de 24 h** desde el último mensaje del usuario; fuera
+   * de ella hace falta una plantilla con encabezado de documento. Por eso el
+   * envío del contrato firmado es best-effort.
+   */
+  async sendDocument(
+    to: string,
+    link: string,
+    filename: string,
+    caption?: string,
+  ): Promise<SendTemplateResult> {
+    if (!this.accessToken || !this.phoneNumberId) {
+      return { ok: false, error: "WhatsApp no configurado (token o phone_number_id faltante)." };
+    }
+
+    const body = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "document",
+      document: {
+        link,
+        filename,
+        ...(caption ? { caption } : {}),
+      },
+    };
+
+    try {
+      const res = await fetch(`${BASE_URL}/${this.phoneNumberId}/messages`, {
+        method: "POST",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        return { ok: false, error: describeMetaError(json, res.status) };
+      }
+
+      const messageId = json?.messages?.[0]?.id as string | undefined;
+      return { ok: true, messageId };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Error de red." };
+    }
+  }
+
   async testConnection(): Promise<TestConnectionResult> {
     if (!this.accessToken || !this.phoneNumberId) {
       return { ok: false, error: "Credenciales no configuradas." };

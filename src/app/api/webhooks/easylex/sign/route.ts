@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { easylexEnv } from "@/lib/env";
 import { verifyEasylexWebhook, isProduction, enforceSignatures } from "@/lib/security/webhook-signatures";
 import { redactPII } from "@/lib/audit/redact";
+import { deliverSignedContract } from "@/lib/contracts/deliver-signed-contract";
 import { randomUUID } from "node:crypto";
 
 import { enforceRateLimit } from "@/lib/security/rate-limit";
@@ -288,6 +289,19 @@ async function handleDocumentSigned(
     entity_type: "contract_attempts",
     entity_id: attempt.id,
   });
+
+  // Entrega del contrato firmado al empleado (archiva el PDF + WhatsApp).
+  // Best-effort y NUNCA lanza: un fallo de entrega no debe convertirse en un
+  // 5xx que haga a EasyLex reintentar la firma, que ya quedó registrada.
+  if (contractRequest) {
+    await deliverSignedContract({
+      documentId,
+      contractRequestId: contractRequest.id,
+      contractAttemptId: attempt.id,
+      employeeId: contractRequest.employee_id,
+      correlationId,
+    });
+  }
 
   logger.info("easylex.webhook.document_signed.completed", {
     attemptId: attempt.id,

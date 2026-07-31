@@ -130,6 +130,10 @@ export type GetDocumentStatusResult =
   | { ok: true; status: "SIGNED" | "UNSIGNED" }
   | { ok: false; error: string };
 
+export type GetSignedDocumentResult =
+  | { ok: true; pdf: Buffer }
+  | { ok: false; error: string };
+
 /* ─── Client ─── */
 
 export class EasyLexClient {
@@ -274,6 +278,48 @@ export class EasyLexClient {
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Error al consultar status de documento.";
       logger.error("easylex.get_status.error", error, { documentId });
+      return { ok: false, error: msg };
+    }
+  }
+
+  /**
+   * Descarga el PDF FIRMADO de un documento. Cuando existe, la respuesta es
+   * binaria (`application/pdf`); si el documento no está firmado o la petición
+   * falla, EasyLex responde JSON de error, que se traduce con
+   * `describeEasyLexError` en lugar de tratar los bytes como PDF.
+   */
+  async getSignedDocument(documentId: string): Promise<GetSignedDocumentResult> {
+    if (!this.accessKeyId || !this.secretAccessKey) {
+      return { ok: false, error: "EasyLex no configurado (access-key-id o secret-access-key faltante)." };
+    }
+
+    const url = `${this.baseUrl}/api/public/v2/document/signed/${documentId}`;
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        headers: {
+          "access-key-id": this.accessKeyId,
+          "secret-access-key": this.secretAccessKey,
+        },
+      });
+
+      if (!response.ok) {
+        let body: unknown = null;
+        try {
+          body = await response.json();
+        } catch {
+          // La respuesta de error podría no ser JSON; se cae al status HTTP.
+        }
+        return { ok: false, error: describeEasyLexError(body, response.status) };
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      return { ok: true, pdf: Buffer.from(arrayBuffer) };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Error al descargar el documento firmado.";
+      logger.error("easylex.get_signed.error", error, { documentId });
       return { ok: false, error: msg };
     }
   }
