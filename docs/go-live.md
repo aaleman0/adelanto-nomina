@@ -11,6 +11,47 @@ configuración. Detalle por tema en [Configuración](configuracion.md),
 
 ---
 
+## Estado actual — resumen (act. 2026-07-30)
+
+El **flujo completo está terminado y probado** en código (importar → WhatsApp →
+contrato EasyLex → firma → webhook → entrega del PDF al empleado → backoffice).
+Lo que falta es **aprovisionamiento y despliegue**.
+
+**✅ Resuelto/verificado esta iteración**
+- EasyLex autentica en producción (`api.easylex.com`); llaves y ambiente correctos.
+- Firma pública correcta: `easylex.com/documento/firma/<signerId>` + plantilla `adelanto_contrato_listo` configurada.
+- Validaciones de identidad (INE + foto + biométrico + prueba de vida) con la dependencia forzada.
+- Webhook de firma robusto (secreto plano **o** HMAC), probado end-to-end.
+- Entrega del contrato firmado: archiva + WhatsApp + descargar/reenviar en backoffice. Bucket + columna **migrados**.
+- RLS aplicada y verificada.
+
+**☐ Pendientes para go-live** (detalle en las fases de abajo)
+
+*Datos — bloquean que el contrato salga completo:*
+- [ ] Llenar en `company_settings` (hoy **vacíos**): `acreedor_nombre`, `acreedor_banco`, `acreedor_cuenta`, `acreedor_clabe`, `testigo_1_nombre`, `testigo_2_nombre`. (`acreedor_rfc` ya está.)
+- [ ] Montar credenciales de Google (`google_oauth_client.json` + `token.json`) en el contenedor — sin ellas no se genera ningún contrato.
+
+*WhatsApp:*
+- [ ] Token **permanente** (System User); el temporal caduca sin aviso.
+- [ ] `WHATSAPP_APP_SECRET` (firma del webhook de Meta) — hoy ausente.
+- [ ] Verificación del negocio en Meta (si se enviará a números fríos / marketing).
+
+*Deploy:*
+- [ ] Desplegar a Cloud Run (URL pública) + `NEXT_PUBLIC_APP_URL` con el dominio real.
+- [ ] Variables de prod en el entorno (no en `.env.local`): `EASYLEX_BASE_URL=https://api.easylex.com`, `EASYLEX_SIGNING_LINK_BASE_URL=https://easylex.com/documento/firma`, y las llaves de EasyLex/WhatsApp/Supabase.
+
+*Webhooks (ya con URL pública):*
+- [ ] Meta → `https://<dominio>/api/webhooks/whatsapp` (+ verify token).
+- [ ] EasyLex → `https://<dominio>/api/webhooks/easylex/sign`: `EASYLEX_CALLBACK_URL` + `EASYLEX_WEBHOOK_SECRET` en prod **y** el mismo secreto en el dashboard de EasyLex. Confirmar con ellos el esquema de firma.
+
+*Endurecimiento final (flips, con todo estable):*
+- [ ] `RBAC_ENFORCEMENT=enforce`, `RLS_SESSION_READS=on` (confirmar M1 `20260723` aplicada primero), `WEBHOOK_ENFORCE_SIGNATURES=true`, CSP report-only → enforce; `pnpm verify:rls` post-deploy.
+
+*Prueba final:*
+- [ ] Firmar un contrato **real** en producción → el expediente pasa a **Firmado** y el empleado **recibe su PDF** por WhatsApp.
+
+---
+
 ## Fase 0 — Desbloqueos externos (empezar YA, dependen de terceros)
 
 Van primero porque tienen tiempos de espera ajenos.
