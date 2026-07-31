@@ -1,6 +1,9 @@
 import { redactPII } from "@/lib/audit/redact";
+import { GRAPH_BASE_URL as BASE_URL } from "./graph-version";
 
-const BASE_URL = "https://graph.facebook.com/v18.0";
+// Idioma de las plantillas al enviar. Configurable por si se agregan plantillas
+// en otro locale; por defecto es_MX (el de las plantillas actuales).
+const TEMPLATE_LANGUAGE = process.env.WHATSAPP_TEMPLATE_LANGUAGE || "es_MX";
 
 // Timeout de las llamadas salientes a Meta: sin esto una conexión colgada
 // bloquea el request (y, en el worker de la cola, la tarea) indefinidamente.
@@ -82,7 +85,7 @@ export class WhatsAppClient {
       type: "template",
       template: {
         name: templateName,
-        language: { code: "es_MX" },
+        language: { code: TEMPLATE_LANGUAGE },
         components: bodyComponents,
       },
     };
@@ -154,7 +157,7 @@ export class WhatsAppClient {
       type: "template",
       template: {
         name: templateName,
-        language: { code: "es_MX" },
+        language: { code: TEMPLATE_LANGUAGE },
         components,
       },
     };

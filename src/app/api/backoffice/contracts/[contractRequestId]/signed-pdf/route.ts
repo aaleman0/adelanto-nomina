@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/roles";
+import { isUuid, invalidIdResponse } from "@/lib/api/validation";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,8 @@ export async function GET(
   { params }: { params: Promise<{ contractRequestId: string }> },
 ) {
   const { contractRequestId } = await params;
+
+  if (!isUuid(contractRequestId)) return invalidIdResponse("contractRequestId");
 
   const auth = await requireRole("operaciones");
   if (!auth.ok) {

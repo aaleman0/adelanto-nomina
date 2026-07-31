@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { getRecentImports, getEmployeesFromImport } from "@/lib/whatsapp/imports";
 import { isUuid, invalidIdResponse } from "@/lib/api/validation";
+import { requireRole } from "@/lib/auth/roles";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  // La rama con importId devuelve empleados (PII); alinea con el resto del módulo.
+  const auth = await requireRole("solo_lectura");
+  if (!auth.ok) return auth.response;
+
   const { searchParams } = new URL(request.url);
   const importId = searchParams.get("importId");
 

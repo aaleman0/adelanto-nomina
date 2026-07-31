@@ -14,7 +14,9 @@ import { useEffect, useState } from "react";
 const POLL_MS = 120_000;
 
 type HealthResponse = {
-  connection?: { ok: boolean; error: string | null };
+  // El endpoint público solo expone el booleano; el detalle del error queda en
+  // el log del servidor (no se filtra a llamadas anónimas).
+  connection?: { ok: boolean };
 };
 
 export function HealthBanner() {
@@ -30,7 +32,9 @@ export function HealthBanner() {
         const data = (await res.json()) as HealthResponse;
         if (!alive) return;
         if (data.connection && !data.connection.ok) {
-          setIssue(data.connection.error ?? "La conexión con WhatsApp no está disponible.");
+          // Mensaje genérico pero accionable: la causa más común es el token
+          // expirado. El detalle exacto está en el log del servidor.
+          setIssue("no está respondiendo (con frecuencia es el token expirado).");
           setDismissed(false); // un problema nuevo vuelve a mostrarse
         } else {
           setIssue(null);

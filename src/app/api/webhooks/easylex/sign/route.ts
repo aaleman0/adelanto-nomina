@@ -214,13 +214,12 @@ async function handleDocumentSigned(
     return;
   }
 
-  const { error: updateAttemptError } = await supabase
-    .from("contract_attempts")
-    .update({ status: "firmado", signed_at: signedAt })
-    .eq("id", attempt.id);
-
-  if (updateAttemptError) throw updateAttemptError;
-
+  // ORDEN IMPORTANTE: `contract_attempts.status='firmado'` es el guard de
+  // idempotencia de arriba, así que se marca AL FINAL —después de escribir
+  // request/oferta/auditoría—. Si alguna de esas escrituras falla, el intento
+  // queda SIN firmar y el reintento de EasyLex (5xx) recupera el estado, en vez
+  // de cortocircuitar en el guard como pasaba antes (marcarlo primero perdía la
+  // request/oferta/evidencia si el proceso moría a mitad).
   const { data: contractRequest, error: crError } = await supabase
     .from("contract_requests")
     .select("id, employee_id, offer_id, status, signed_at")
@@ -244,29 +243,51 @@ async function handleDocumentSigned(
 
     if (offerError) throw offerError;
 
-    // El audit_event de firma es la evidencia legal: su fallo NO debe tragarse.
-    // Se lanza para que el webhook devuelva 5xx y EasyLex reintente.
-    const { error: auditError } = await supabase.from("audit_events").insert({
-      event_name: "contract.signed",
-      entity_type: "contract_requests",
-      entity_id: contractRequest.id,
-      employee_id: contractRequest.employee_id,
-      correlation_id: correlationId,
-      source: "easylex",
-      previous_state: contractRequest.status,
-      new_state: "firmado",
-      summary: "Contrato firmado confirmado por webhook de EasyLex.",
-      metadata: {
-        contract_attempt_id: attempt.id,
-        easylex_contract_id: documentId,
-        signed_at: signedAt,
-        webhook_id: payload.webhookId,
-      },
-      actor_type: "system",
-    });
+    // El audit_event de firma es la evidencia legal. Idempotente: si un reintento
+    // vuelve a entrar tras haberlo insertado, no se duplica. Su fallo NO se traga
+    // (se lanza para que el webhook devuelva 5xx y EasyLex reintente).
+    const { data: existingAudit, error: existingAuditError } = await supabase
+      .from("audit_events")
+      .select("id")
+      .eq("entity_id", contractRequest.id)
+      .eq("event_name", "contract.signed")
+      .limit(1)
+      .maybeSingle();
 
-    if (auditError) throw auditError;
+    if (existingAuditError) throw existingAuditError;
+
+    if (!existingAudit) {
+      const { error: auditError } = await supabase.from("audit_events").insert({
+        event_name: "contract.signed",
+        entity_type: "contract_requests",
+        entity_id: contractRequest.id,
+        employee_id: contractRequest.employee_id,
+        correlation_id: correlationId,
+        source: "easylex",
+        previous_state: contractRequest.status,
+        new_state: "firmado",
+        summary: "Contrato firmado confirmado por webhook de EasyLex.",
+        metadata: {
+          contract_attempt_id: attempt.id,
+          easylex_contract_id: documentId,
+          signed_at: signedAt,
+          webhook_id: payload.webhookId,
+        },
+        actor_type: "system",
+      });
+
+      if (auditError) throw auditError;
+    }
   }
+
+  // Guard de idempotencia: se marca el intento firmado AL FINAL de las escrituras
+  // críticas. Los pasos que siguen (evento, log, entrega) son best-effort.
+  const { error: updateAttemptError } = await supabase
+    .from("contract_attempts")
+    .update({ status: "firmado", signed_at: signedAt })
+    .eq("id", attempt.id);
+
+  if (updateAttemptError) throw updateAttemptError;
 
   await recordEasyLexEvent({
     payload,

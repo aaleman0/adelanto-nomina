@@ -119,6 +119,9 @@ export async function GET() {
     tables: allTablesOk,
     env: isConfigured,
     connection: connection.ok,
+    // El detalle del error de conexión (mensaje crudo de Meta) se queda en el
+    // log interno; la respuesta pública solo lleva el booleano.
+    connectionError: connection.ok ? undefined : connection.error ?? undefined,
     errors: errors.length > 0 ? errors : undefined,
   });
 
@@ -131,7 +134,9 @@ export async function GET() {
       status: status === 200 ? "healthy" : "unhealthy",
       checks,
       whatsappConfigured: isConfigured,
-      connection,
+      // Solo el booleano: el mensaje crudo de Meta (que puede exponer internals)
+      // queda en el log, no en la respuesta pública.
+      connection: { ok: connection.ok },
     },
     { status }
   );

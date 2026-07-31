@@ -11,22 +11,31 @@ type Props = {
 };
 
 export function SendResult({ result, templateName, onNewSend }: Props) {
+  const queued = result.status === "queued";
   const allOk = result.failed === 0;
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className={`p-6 text-center ${allOk ? "bg-emerald-50/30 border-emerald-200" : "bg-amber-50/30 border-amber-200"}`}>
-        <p className={`text-lg font-medium ${allOk ? "text-emerald-800" : "text-amber-800"}`}>
-          {allOk ? "Mensajes enviados" : "Envío completado con errores"}
+      <Card className={`p-6 text-center ${queued || allOk ? "bg-emerald-50/30 border-emerald-200" : "bg-amber-50/30 border-amber-200"}`}>
+        <p className={`text-lg font-medium ${queued || allOk ? "text-emerald-800" : "text-amber-800"}`}>
+          {queued ? "Envíos encolados" : allOk ? "Mensajes enviados" : "Envío completado con errores"}
         </p>
-        <p className="mt-1 text-sm text-text-muted">
-          {result.sent} enviado{result.sent !== 1 ? "s" : ""} · {result.failed} error{result.failed !== 1 ? "es" : ""}
-        </p>
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <Stat label="Enviados" value={result.sent} color={allOk ? "text-emerald-700" : "text-amber-700"} />
-          <Stat label="Procesados" value={result.total} />
-          <Stat label="Errores" value={result.failed} color={result.failed > 0 ? "text-red-600" : "text-text-muted"} />
-        </div>
+        {queued ? (
+          <p className="mt-1 text-sm text-text-muted">
+            {result.queued ?? 0} envío{(result.queued ?? 0) !== 1 ? "s" : ""} en cola · se procesan en segundo plano
+          </p>
+        ) : (
+          <>
+            <p className="mt-1 text-sm text-text-muted">
+              {result.sent} enviado{result.sent !== 1 ? "s" : ""} · {result.failed} error{result.failed !== 1 ? "es" : ""}
+            </p>
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              <Stat label="Enviados" value={result.sent} color={allOk ? "text-emerald-700" : "text-amber-700"} />
+              <Stat label="Procesados" value={result.total} />
+              <Stat label="Errores" value={result.failed} color={result.failed > 0 ? "text-red-600" : "text-text-muted"} />
+            </div>
+          </>
+        )}
         <p className="mt-3 text-xs text-text-muted">Plantilla: <code className="font-mono">{templateName}</code></p>
       </Card>
 

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { LINK_TTL_HOURS } from "./link-ttl";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { normalizePhoneFromCsv } from "@/lib/whatsapp/phone-utils";
 import { createEasyLexAttempt } from "@/lib/contracts/create-easylex-attempt";
@@ -113,8 +114,6 @@ type RequestContractResult = {
   expires_at?: string;
   expires_at_formatted?: string;
 };
-
-const LINK_TTL_HOURS = 2;
 
 export function parseRequestContractPayload(
   payload: RequestContractPayload,

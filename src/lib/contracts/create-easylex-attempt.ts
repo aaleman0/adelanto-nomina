@@ -5,8 +5,7 @@ import { generateContractPdf } from "@/lib/easylex/contract-pdf";
 import { easylexEnv } from "@/lib/env";
 import { getCompanySettings } from "@/lib/company-settings";
 import { logger } from "@/lib/logger";
-
-const LINK_TTL_HOURS = 2;
+import { LINK_TTL_HOURS } from "./link-ttl";
 
 export type Employee = {
   id: string;

@@ -96,5 +96,12 @@ function getActionFeedback(status: string | undefined) {
     };
   }
 
+  if (status === "forbidden") {
+    return {
+      tone: "danger" as const,
+      message: "No tienes el rol necesario para esta acción (requiere operaciones).",
+    };
+  }
+
   return undefined;
 }

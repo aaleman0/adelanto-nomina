@@ -36,6 +36,10 @@ export type SendResult = {
   failed: number;
   bulkSendId?: string;
   errors: Array<{ employeeId: string; rfc?: string | null; error: string }>;
+  // Cuando el envío corre por la cola (Cloud Tasks) el backend responde
+  // status='queued' con el conteo encolado, sin sent/failed inline.
+  status?: "queued";
+  queued?: number;
 };
 
 // Pasos del flujo: 1=destinatarios, 2=mensaje, 3=revisión, 4=confirmación, 5=resultado

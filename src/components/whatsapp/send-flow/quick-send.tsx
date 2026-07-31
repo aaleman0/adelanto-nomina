@@ -23,6 +23,7 @@ type QuickState =
   | { status: "idle" }
   | { status: "sending" }
   | { status: "done"; sent: number; failed: number; eligible: number }
+  | { status: "queued"; queued: number }
   | { status: "error"; message: string };
 
 function formatDate(value: string | null): string {
@@ -67,7 +68,14 @@ export function QuickSend() {
         setState({ status: "error", message: data.error ?? `Error ${res.status}` });
         return;
       }
-      setState({ status: "done", sent: data.sent ?? 0, failed: data.failed ?? 0, eligible: data.eligible ?? 0 });
+      // Con la cola (Cloud Tasks) el backend responde status='queued' y NO trae
+      // sent/failed; sin cola responde inline con los conteos. Distinguir ambos
+      // para no reportar un envío encolado como "no se envió a nadie".
+      if (data.status === "queued") {
+        setState({ status: "queued", queued: data.queued ?? 0 });
+      } else {
+        setState({ status: "done", sent: data.sent ?? 0, failed: data.failed ?? 0, eligible: data.eligible ?? 0 });
+      }
       router.refresh();
     } catch (error) {
       setState({ status: "error", message: error instanceof Error ? error.message : "Error de red." });
@@ -100,6 +108,11 @@ export function QuickSend() {
           {state.sent > 0
             ? `Enviado a ${state.sent} de ${state.eligible} elegibles${state.failed > 0 ? ` · ${state.failed} con error` : ""}.`
             : "No se envió a nadie. Revisa elegibilidad o la conexión de WhatsApp."}
+        </p>
+      )}
+      {state.status === "queued" && (
+        <p className="mt-3 text-sm text-text-primary">
+          Encolados {state.queued} envíos. Se procesan en segundo plano; revisa el historial para el resultado.
         </p>
       )}
       {state.status === "error" && <p className="mt-3 text-sm text-red-600">{state.message}</p>}

@@ -98,6 +98,23 @@ export function GuidedSendFlow() {
 
       if (!json.ok) throw new Error(json.error ?? "Error al enviar.");
 
+      // Camino con cola (Cloud Tasks): responde status='queued' sin sent/failed.
+      // Se normaliza a un SendResult 'queued' para no mostrar "0 enviados".
+      if (json.status === "queued") {
+        const queued = (json.queued as number) ?? 0;
+        setResult({ total: queued, eligible: queued, sent: 0, failed: 0, queued, status: "queued", errors: [] });
+        setStep(5);
+        toastify.success(`Encolados ${queued} envíos. Se procesan en segundo plano.`);
+        addNotification({
+          type: "success",
+          title: "Envío masivo encolado",
+          message: `${queued} mensaje${queued !== 1 ? "s" : ""} encolado${queued !== 1 ? "s" : ""}; revisa el historial para el resultado.`,
+          actionUrl: "/whatsapp/history",
+          actionLabel: "Ver historial",
+        });
+        return;
+      }
+
       const r = json as SendResultType;
       setResult(r);
       setStep(5);

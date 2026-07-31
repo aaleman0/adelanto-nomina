@@ -1,6 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-
-const BASE_URL = "https://graph.facebook.com/v18.0";
+import { GRAPH_BASE_URL as BASE_URL } from "./graph-version";
 
 export type MetaTemplate = {
   id: string;
