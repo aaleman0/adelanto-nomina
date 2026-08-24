@@ -3,10 +3,54 @@ import { getWhatsAppClient } from "@/lib/whatsapp/client";
 import { getEmployeesEligibility } from "@/lib/whatsapp/eligibility";
 import { getEmployeesFromImport } from "@/lib/whatsapp/imports";
 import { buildBulkTemplateMessage, DEFAULT_BULK_TEMPLATE } from "@/lib/whatsapp/message-builder";
+import { requestContractFromWhatsApp, type RequestContractInput } from "@/lib/contracts/request-contract";
 import { logger } from "@/lib/logger";
 
 const BATCH_SIZE = 100;
 const BATCH_DELAY_MS = 1000;
+
+async function resolveButtonUrl(
+  emp: {
+    employee_id: string;
+    rfc: string | null;
+    nombre: string | null;
+    apellidos: string | null;
+    telefono_normalizado: string | null;
+  },
+  manualButtonUrl: string | undefined,
+  bulkSendId: string,
+): Promise<string | null> {
+  if (manualButtonUrl) return manualButtonUrl;
+  if (!emp.rfc) {
+    logger.warn("whatsapp.bulk_send.missing_rfc", { employeeId: emp.employee_id, bulkSendId });
+    return null;
+  }
+  const input: RequestContractInput = {
+    subscriberId: emp.telefono_normalizado ?? emp.employee_id,
+    rfc: emp.rfc,
+    telefonoNormalizado: emp.telefono_normalizado,
+    firstName: emp.nombre,
+    lastName: emp.apellidos,
+    rawPayload: { source: "bulk_send", bulkSendId, employeeId: emp.employee_id },
+  };
+  const result = await requestContractFromWhatsApp(input, {
+    skipSend: true,
+    skipRecord: true,
+    skipLog: true,
+    source: "backend",
+  });
+  if (result.ok && result.link_easylex) {
+    return result.link_easylex;
+  }
+  logger.warn("whatsapp.bulk_send.contract_link_failed", {
+    employeeId: emp.employee_id,
+    rfc: emp.rfc,
+    status: result.status,
+    message: result.message,
+    bulkSendId,
+  });
+  return null;
+}
 
 export type BulkSendMode = "import" | "manual" | "status";
 
@@ -149,9 +193,26 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
     const batch = eligible.slice(i, i + BATCH_SIZE);
 
     for (const emp of batch) {
+      const buttonUrl = await resolveButtonUrl(emp, params.buttonUrl, bulkSendId);
+      if (!buttonUrl) {
+        const err = "No se pudo generar el link del contrato.";
+        progress.failed++;
+        progress.errors.push({ employeeId: emp.employee_id, rfc: emp.rfc, error: err });
+        try {
+          await recordMessage({ supabase, bulkSendId, emp, status: "failed", error: err });
+        } catch (recordError) {
+          progress.errors.push({
+            employeeId: emp.employee_id,
+            rfc: emp.rfc,
+            error: `Error al registrar mensaje: ${recordError instanceof Error ? recordError.message : 'Error desconocido'}`,
+          });
+        }
+        continue;
+      }
+
       const built = buildBulkTemplateMessage(emp, templateName, {
         headerImageUrl: process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE_URL,
-        buttonUrl: params.buttonUrl,
+        buttonUrl,
       });
 
       if (!built.ok) {
@@ -672,9 +733,26 @@ export async function processQueuedMessage(
     return { status: "failed", messageId, error: "Snapshot del destinatario ausente." };
   }
 
+  const buttonUrl = await resolveButtonUrl(
+    {
+      employee_id: recipient.employee_id,
+      rfc: recipient.rfc,
+      nombre: recipient.nombre,
+      apellidos: null,
+      telefono_normalizado: recipient.telefono_normalizado,
+    },
+    metadata.button_url ?? undefined,
+    bulkSendId,
+  );
+  if (!buttonUrl) {
+    const err = "No se pudo generar el link del contrato.";
+    await markMessageFailed(messageId, bulkSendId, err);
+    return { status: "failed", messageId, error: err };
+  }
+
   const built = buildBulkTemplateMessage(recipient, templateName, {
     headerImageUrl: process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE_URL,
-    buttonUrl: metadata.button_url ?? undefined,
+    buttonUrl,
   });
 
   if (!built.ok) {
