@@ -10,7 +10,7 @@ type StoredTemplate = {
   id: string;
   name: string;
   status: TemplateStatus;
-  components: Array<{ type: string; text?: string }>;
+  components: Array<{ type: string; text?: string; buttons?: Array<{ type: string; url?: string }> }>;
 };
 
 type Props = {
@@ -65,7 +65,13 @@ export function MessageTemplateStep({
 
   const activeTemplate = templates.find((t) => t.name === templateName);
   const statusInfo = activeTemplate ? templateStatusInfo(activeTemplate.status) : null;
-  const canContinue = !!templateName && (statusInfo ? statusInfo.canSend : true);
+  const needsButtonUrl = activeTemplate?.components.some(
+    (c) => c.type === "BUTTONS" && c.buttons?.some((b) => b.type === "URL"),
+  ) ?? false;
+  const canContinue =
+    !!templateName &&
+    (statusInfo ? statusInfo.canSend : true) &&
+    (!needsButtonUrl || buttonUrl.trim().length > 0);
 
   const bodyText = activeTemplate
     ? activeTemplate.components.find((c) => c.type === "BODY")?.text?.replace(/\{\{1\}\}/g, "[Nombre]").replace(/\{\{2\}\}/g, "[Empleador]").replace(/\{\{3\}\}/g, "[Monto]") ?? PREVIEW_TEXT
@@ -101,8 +107,10 @@ export function MessageTemplateStep({
                 placeholder="https://tudominio.com/solicitar/abc"
                 className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
               />
-              <p className="text-xs text-text-muted">
-                Solo si la plantilla tiene un botón URL dinámico. El backend extrae el sufijo final.
+              <p className={needsButtonUrl ? "text-xs text-amber-700" : "text-xs text-text-muted"}>
+                {needsButtonUrl
+                  ? "La plantilla seleccionada tiene un botón URL. Este campo es requerido."
+                  : "Solo si la plantilla tiene un botón URL dinámico. El backend extrae el sufijo final."}
               </p>
             </div>
 
