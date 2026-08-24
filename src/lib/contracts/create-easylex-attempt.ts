@@ -121,6 +121,9 @@ export async function createEasyLexAttempt(
   const fileName = `contrato_${employee.rfc}_${attemptId.slice(0, 8)}`;
   const validation = buildValidationConfig(companySettings);
 
+  // El TTL de la app coincide con la expiración real del documento en EasyLex.
+  const expiresAt = new Date(now.getTime() + LINK_TTL_HOURS * 60 * 60 * 1000);
+
   const client = new EasyLexClient();
   const easylexResult = await client.createDocument({
     fileName,
@@ -134,6 +137,7 @@ export async function createEasyLexAttempt(
     ],
     pdfBuffer,
     callbackUrl,
+    expirationDate: expiresAt.toISOString(),
     validation,
   });
 
@@ -160,8 +164,6 @@ export async function createEasyLexAttempt(
 
     throw new Error(`Error al crear contrato en EasyLex: ${easylexResult.error}`);
   }
-
-  const expiresAt = new Date(now.getTime() + LINK_TTL_HOURS * 60 * 60 * 1000);
 
   const { data, error } = await supabase
     .from("contract_attempts")
