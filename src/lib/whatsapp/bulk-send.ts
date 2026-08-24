@@ -17,6 +17,8 @@ export type BulkSendParams = {
   /** Estado operativo a enviar en bloque cuando mode === "status". */
   status?: string;
   templateName?: string;
+  /** URL del botón dinámico ({{1}}) si la plantilla lo declara. */
+  buttonUrl?: string;
 };
 
 /**
@@ -149,6 +151,7 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
     for (const emp of batch) {
       const built = buildBulkTemplateMessage(emp, templateName, {
         headerImageUrl: process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE_URL,
+        buttonUrl: params.buttonUrl,
       });
 
       if (!built.ok) {
@@ -551,6 +554,7 @@ export async function enqueueBulkSend(
         ...(dedupEnabled ? { dedup_key: buildDedupKey(emp.employee_id, templateName, now) } : {}),
         metadata: {
           template_name: templateName,
+          button_url: params.buttonUrl ?? null,
           recipient: {
             employee_id: emp.employee_id,
             nombre: emp.nombre ?? null,
@@ -650,6 +654,7 @@ export async function processQueuedMessage(
   }
 
   const metadata = (claimed.metadata ?? {}) as {
+    button_url?: string | null;
     recipient?: {
       employee_id: string;
       nombre: string | null;
@@ -669,6 +674,7 @@ export async function processQueuedMessage(
 
   const built = buildBulkTemplateMessage(recipient, templateName, {
     headerImageUrl: process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE_URL,
+    buttonUrl: metadata.button_url ?? undefined,
   });
 
   if (!built.ok) {

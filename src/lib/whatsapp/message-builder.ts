@@ -1,5 +1,6 @@
 import type { TemplateComponent } from "@/lib/whatsapp/client";
 import { normalizePhoneForMeta } from "@/lib/whatsapp/phone-utils";
+import { signingUrlSuffix } from "@/lib/contracts/send-contract-link";
 
 /**
  * Construcción del payload de un mensaje de plantilla.
@@ -40,7 +41,7 @@ function formatMonto(monto: number | null): string {
 export function buildBulkTemplateMessage(
   recipient: BulkRecipient,
   templateName: string = DEFAULT_BULK_TEMPLATE,
-  options: { headerImageUrl?: string | null } = {},
+  options: { headerImageUrl?: string | null; buttonUrl?: string | null } = {},
 ): BuiltTemplateMessage {
   const to = normalizePhoneForMeta(recipient.telefono_normalizado);
 
@@ -72,6 +73,15 @@ export function buildBulkTemplateMessage(
     components.unshift({
       type: "header",
       parameters: [{ type: "image", image: { link: options.headerImageUrl } }],
+    });
+  }
+
+  if (options.buttonUrl) {
+    components.push({
+      type: "button",
+      sub_type: "url",
+      index: "0",
+      parameters: [{ type: "text", text: signingUrlSuffix(options.buttonUrl) }],
     });
   }
 

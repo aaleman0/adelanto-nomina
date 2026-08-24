@@ -69,6 +69,7 @@ export const BulkSendBodySchema = z
     employeeIds: z.array(uuidParam()).max(5000).optional(),
     status: z.enum(BULK_SEND_TARGET_STATUSES).optional(),
     templateName: z.string().trim().min(1).max(512).optional(),
+    buttonUrl: z.string().trim().url().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.mode === "import" && !value.importId) {

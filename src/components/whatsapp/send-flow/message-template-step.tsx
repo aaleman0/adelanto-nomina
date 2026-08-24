@@ -15,7 +15,9 @@ type StoredTemplate = {
 
 type Props = {
   templateName: string;
+  buttonUrl: string;
   onTemplateChange: (name: string) => void;
+  onButtonUrlChange: (url: string) => void;
   onNext: () => void;
   onBack: () => void;
 };
@@ -34,7 +36,9 @@ function templateStatusInfo(status: TemplateStatus) {
 
 export function MessageTemplateStep({
   templateName,
+  buttonUrl,
   onTemplateChange,
+  onButtonUrlChange,
   onNext,
   onBack,
 }: Props) {
@@ -85,10 +89,22 @@ export function MessageTemplateStep({
               {bodyText}
             </div>
 
-            {/* El botón del mensaje NO es configurable por envío: en WhatsApp los
-                botones se definen en la plantilla aprobada (texto + URL), no se
-                pasan al enviar. Se quitó el control que dejaba fijar un botón
-                arbitrario porque nunca llegaba al mensaje. */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-text-muted" htmlFor="button-url">
+                URL del botón dinámico
+              </label>
+              <input
+                id="button-url"
+                type="url"
+                value={buttonUrl}
+                onChange={(e) => onButtonUrlChange(e.target.value)}
+                placeholder="https://tudominio.com/solicitar/abc"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
+              />
+              <p className="text-xs text-text-muted">
+                Solo si la plantilla tiene un botón URL dinámico. El backend extrae el sufijo final.
+              </p>
+            </div>
 
             {templates.length > 1 && (
               <div>
