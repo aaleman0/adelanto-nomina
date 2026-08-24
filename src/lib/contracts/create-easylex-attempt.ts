@@ -165,6 +165,11 @@ export async function createEasyLexAttempt(
     throw new Error(`Error al crear contrato en EasyLex: ${easylexResult.error}`);
   }
 
+  const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const publicSigningUrl = appBaseUrl
+    ? `${appBaseUrl.replace(/\/+$/, "")}/firmar/${easylexResult.signerId}`
+    : easylexResult.signingUrl;
+
   const { data, error } = await supabase
     .from("contract_attempts")
     .insert({
@@ -172,7 +177,7 @@ export async function createEasyLexAttempt(
       contract_request_id: contractRequest.id,
       attempt_number: attemptNumber,
       easylex_contract_id: easylexResult.documentId,
-      signing_url: easylexResult.signingUrl,
+      signing_url: publicSigningUrl,
       status: "generado",
       expires_at: expiresAt.toISOString(),
       generated_at: now.toISOString(),
@@ -180,7 +185,8 @@ export async function createEasyLexAttempt(
         provider: "easylex",
         document_id: easylexResult.documentId,
         signer_id: easylexResult.signerId,
-        signing_url: easylexResult.signingUrl,
+        signing_url: publicSigningUrl,
+        easylex_signing_url: easylexResult.signingUrl,
         expires_at: expiresAt.toISOString(),
         raw: easylexResult.rawResponse,
       },
@@ -194,7 +200,8 @@ export async function createEasyLexAttempt(
     attemptId,
     documentId: easylexResult.documentId,
     signerId: easylexResult.signerId,
-    signingUrl: easylexResult.signingUrl,
+    signingUrl: publicSigningUrl,
+    easylexSigningUrl: easylexResult.signingUrl,
     correlationId,
     validation,
   });
