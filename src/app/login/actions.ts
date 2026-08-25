@@ -4,11 +4,24 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createSessionClient } from "@/lib/supabase/session";
 
+function isPublicHost(host: string | null): boolean {
+  if (!host) return false;
+  // Ignorar hosts internos o IPs, que no sirven para redirigir un navegador.
+  if (/^(0\.0\.0\.0|127\.0\.0\.1|localhost|::1)/i.test(host)) return false;
+  // En Railway el host público siempre tiene al menos un punto y un TLD.
+  return host.includes(".");
+}
+
 async function getAppOrigin() {
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? "https";
-  const host = h.get("x-forwarded-host") ?? h.get("host");
-  return host ? `${proto}://${host}` : process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const forwardedHost = h.get("x-forwarded-host");
+  const host = h.get("host");
+
+  if (isPublicHost(forwardedHost)) return `${proto}://${forwardedHost}`;
+  if (isPublicHost(host)) return `${proto}://${host}`;
+
+  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 }
 
 /**
