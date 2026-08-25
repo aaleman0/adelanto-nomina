@@ -132,6 +132,8 @@ Un empleado sin CLABE activa **no recibe mensaje**, aunque su oferta sea válida
 
 Solo aparecen como origen las importaciones en estado `aplicada`.
 
+El operador no configura el botón ni el link. Si la plantilla tiene botón URL dinámico, el backend genera o reutiliza el contrato de cada empleado y manda a Meta el sufijo del link correspondiente.
+
 ### Desde la API
 
 Validar sin enviar:

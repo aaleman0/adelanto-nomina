@@ -26,6 +26,15 @@ describe("BulkSendBodySchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("ignora buttonUrl legado para que el backend genere el link por empleado", () => {
+    const result = BulkSendBodySchema.parse({
+      mode: "manual",
+      employeeIds: [UUID],
+      buttonUrl: "https://easylex.com/documento/firma/",
+    });
+    expect("buttonUrl" in result).toBe(false);
+  });
+
   it("rechaza sin mode y señala el campo", () => {
     const result = BulkSendBodySchema.safeParse({});
     expect(result.success).toBe(false);

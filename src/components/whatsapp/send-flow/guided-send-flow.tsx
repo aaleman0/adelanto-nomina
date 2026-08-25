@@ -56,7 +56,6 @@ export function GuidedSendFlow() {
   const [importMeta, setImportMeta] = useState<RecentImport | null>(null);
   const [manualIds, setManualIds] = useState<string[]>([]);
   const [templateName, setTemplateName] = useState(DEFAULT_TEMPLATE);
-  const [buttonUrl, setButtonUrl] = useState("");
   const [validation, setValidation] = useState<ValidationSummary | null>(null);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
@@ -70,7 +69,6 @@ export function GuidedSendFlow() {
     setImportMeta(null);
     setManualIds([]);
     setTemplateName(DEFAULT_TEMPLATE);
-    setButtonUrl("");
     setValidation(null);
     setSelectedEmployeeIds(new Set());
     setSending(false);
@@ -89,9 +87,6 @@ export function GuidedSendFlow() {
         mode === "import"
           ? { mode: "import", importId: selectedImportId, ...basePayload }
           : { mode: "manual", ...basePayload };
-      if (buttonUrl.trim()) {
-        (payload as Record<string, unknown>).buttonUrl = buttonUrl.trim();
-      }
 
       const res = await fetch("/api/whatsapp/bulk", {
         method: "POST",
@@ -138,7 +133,7 @@ export function GuidedSendFlow() {
     } finally {
       setSending(false);
     }
-  }, [mode, selectedImportId, selectedEmployeeIds, templateName, buttonUrl, toastify, addNotification]);
+  }, [mode, selectedImportId, selectedEmployeeIds, templateName, toastify, addNotification]);
 
   if (step === 5 && result) {
     return <SendResult result={result} templateName={templateName} onNewSend={resetFlow} />;
@@ -184,9 +179,7 @@ export function GuidedSendFlow() {
           <SectionHeader step={2} title="Mensaje" />
           <MessageTemplateStep
             templateName={templateName}
-            buttonUrl={buttonUrl}
             onTemplateChange={setTemplateName}
-            onButtonUrlChange={setButtonUrl}
             onNext={() => setStep(3)}
             onBack={() => setStep(1)}
           />

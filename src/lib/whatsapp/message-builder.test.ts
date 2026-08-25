@@ -78,6 +78,21 @@ describe("buildBulkTemplateMessage", () => {
     expect(result.components[0].type).toBe("body");
   });
 
+  it("añade el parámetro del botón URL usando solo el sufijo del link", () => {
+    const result = buildBulkTemplateMessage(base, DEFAULT_BULK_TEMPLATE, {
+      buttonUrl: "https://adelanto-nomina.com/firmar/sig-test-123",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.components.at(-1)).toEqual({
+      type: "button",
+      sub_type: "url",
+      index: "0",
+      parameters: [{ type: "text", text: "sig-test-123" }],
+    });
+  });
+
   it("produce el mismo mensaje para el envío inline y para el worker", () => {
     // Es la razón de existir del módulo: ambos caminos comparten esta función,
     // así que un cambio de formato no puede divergir entre uno y otro.

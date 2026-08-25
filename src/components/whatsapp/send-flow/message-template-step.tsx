@@ -15,9 +15,7 @@ type StoredTemplate = {
 
 type Props = {
   templateName: string;
-  buttonUrl: string;
   onTemplateChange: (name: string) => void;
-  onButtonUrlChange: (url: string) => void;
   onNext: () => void;
   onBack: () => void;
 };
@@ -36,9 +34,7 @@ function templateStatusInfo(status: TemplateStatus) {
 
 export function MessageTemplateStep({
   templateName,
-  buttonUrl,
   onTemplateChange,
-  onButtonUrlChange,
   onNext,
   onBack,
 }: Props) {
@@ -87,23 +83,6 @@ export function MessageTemplateStep({
 
             <div className="rounded-lg border border-border bg-surface p-3 text-sm text-text-primary leading-relaxed">
               {bodyText}
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-text-muted" htmlFor="button-url">
-                URL del botón dinámico
-              </label>
-              <input
-                id="button-url"
-                type="url"
-                value={buttonUrl}
-                onChange={(e) => onButtonUrlChange(e.target.value)}
-                placeholder="https://tudominio.com/solicitar/abc"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
-              />
-              <p className="text-xs text-text-muted">
-                Opcional. Si lo dejas vacío, el backend genera el link de contrato específico de cada empleado. Si lo llenas, se usará la misma URL para todos.
-              </p>
             </div>
 
             {templates.length > 1 && (

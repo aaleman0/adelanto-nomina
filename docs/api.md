@@ -267,11 +267,12 @@ El bloqueo se hace con `isProduction()` al inicio del handler, antes de leer el 
 `action` por defecto es `send`.
 
 ```json
-{ "mode": "import", "importId": "uuid", "templateName": "adelanto_nomina_v2",
-  "buttonConfig": { "text": "Solicitar", "url": "https://…" } }
+{ "mode": "import", "importId": "uuid", "templateName": "adelanto_nomina_v2" }
 ```
 
 Validaciones manuales, cada una devuelve `400`: `mode` requerido y dentro del enum; `importId` obligatorio si `mode === "import"`; `employeeIds` no vacío si `mode === "manual"`.
+
+El botón URL de la plantilla no se recibe desde el cliente: el backend genera o reutiliza el contrato por empleado y manda a Meta el sufijo dinámico correcto del link de firma. Si llega un `buttonUrl` legado en el body, se ignora.
 
 `action=validate` — no envía nada:
 ```json
