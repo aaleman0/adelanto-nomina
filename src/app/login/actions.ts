@@ -1,7 +1,15 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createSessionClient } from "@/lib/supabase/session";
+
+async function getAppOrigin() {
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  return host ? `${proto}://${host}` : process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+}
 
 /**
  * Server Action: inicia el flujo OAuth con Google.
@@ -18,7 +26,8 @@ export async function signInWithGoogle(formData: FormData) {
     provider: "google",
     options: {
       // Callback interno que Supabase llama tras autenticar con Google.
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent(next)}`,
+      // Usa el host de la petición para no depender de NEXT_PUBLIC_APP_URL embebido.
+      redirectTo: `${await getAppOrigin()}/auth/callback?next=${encodeURIComponent(next)}`,
       // Forzar la pantalla de selección de cuenta de Google en cada login.
       queryParams: { prompt: "select_account" },
     },
