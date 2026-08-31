@@ -14,6 +14,7 @@ const navigation: NavEntry[] = [
   { section: "Flujo" },
   { href: "/", label: "Operación", icon: "D" },
   { href: "/imports", label: "Importar", icon: "I" },
+  { href: "/cycles", label: "Ciclos", icon: "C" },
   { href: "/contracts", label: "Contratos", icon: "C" },
   { section: "Mensajería" },
   { label: "WhatsApp", icon: "W", prefix: "/whatsapp", items: [
