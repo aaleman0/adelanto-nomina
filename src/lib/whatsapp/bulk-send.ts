@@ -3,7 +3,7 @@ import { getWhatsAppClient } from "@/lib/whatsapp/client";
 import { getEmployeesEligibility } from "@/lib/whatsapp/eligibility";
 import { getEmployeesFromImport } from "@/lib/whatsapp/imports";
 import { buildBulkTemplateMessage, DEFAULT_BULK_TEMPLATE } from "@/lib/whatsapp/message-builder";
-import { requestContractFromWhatsApp, type RequestContractInput } from "@/lib/contracts/request-contract";
+import { buildSolicitarUrl } from "@/lib/contracts/solicitar-token";
 import { logger } from "@/lib/logger";
 
 const BATCH_SIZE = 100;
@@ -25,31 +25,22 @@ async function resolveButtonUrl(
     logger.warn("whatsapp.bulk_send.missing_rfc", { employeeId: emp.employee_id, bulkSendId });
     return null;
   }
-  const input: RequestContractInput = {
-    subscriberId: emp.telefono_normalizado ?? emp.employee_id,
-    rfc: emp.rfc,
-    telefonoNormalizado: emp.telefono_normalizado,
-    firstName: emp.nombre,
-    lastName: emp.apellidos,
-    rawPayload: { source: "bulk_send", bulkSendId, employeeId: emp.employee_id },
-  };
-  const result = await requestContractFromWhatsApp(input, {
-    skipSend: true,
-    skipRecord: true,
-    skipLog: true,
-    source: "backend",
-  });
-  if (result.ok && result.link_easylex) {
-    return result.link_easylex;
+  // Decisión #2: el botón del mensaje de oferta lleva al AUTO-SERVICIO
+  // `/solicitar/<token>`. El contrato se genera —y se gasta la firma de EasyLex—
+  // SOLO cuando el empleado abre el link y confirma (muestra interés). Antes se
+  // generaba por CADA envío, gastando una firma incluso para quien no firmaba.
+  // Requiere: NEXT_PUBLIC_APP_URL (dominio público), SOLICITAR_TOKEN_SECRET, y la
+  // plantilla de oferta con la base del botón = `<dominio>/solicitar/`.
+  try {
+    return buildSolicitarUrl(emp.employee_id);
+  } catch (error) {
+    logger.warn("whatsapp.bulk_send.solicitar_url_failed", {
+      employeeId: emp.employee_id,
+      bulkSendId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
   }
-  logger.warn("whatsapp.bulk_send.contract_link_failed", {
-    employeeId: emp.employee_id,
-    rfc: emp.rfc,
-    status: result.status,
-    message: result.message,
-    bulkSendId,
-  });
-  return null;
 }
 
 export type BulkSendMode = "import" | "manual" | "status";

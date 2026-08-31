@@ -7,6 +7,10 @@ import {
   type BackofficeContractAction,
   runBackofficeContractAction,
 } from "@/lib/contracts/backoffice-actions";
+import {
+  parseRequestContractPayload,
+  requestContractFromWhatsApp,
+} from "@/lib/contracts/request-contract";
 import { deliverSignedContract } from "@/lib/contracts/deliver-signed-contract";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/roles";
@@ -17,6 +21,51 @@ export async function regenerateContractLinkAction(formData: FormData) {
 
 export async function retryContractFlowAction(formData: FormData) {
   await runContractAction(formData, "retry");
+}
+
+/**
+ * "Solicitar contrato" desde el backoffice: dispara la generación del contrato
+ * que antes iniciaba el empleado por WhatsApp (vía ManyChat, ya retirado). Genera
+ * el documento en EasyLex y le envía el link de firma al empleado. Si ya hay un
+ * link vigente, `requestContractFromWhatsApp` lo reutiliza (no gasta otra firma).
+ *
+ * Es el disparador operativo que faltaba: sin él, no había forma de arrancar un
+ * contrato desde la UI.
+ */
+export async function requestContractAction(formData: FormData) {
+  const employeeId = readFormValue(formData, "employee_id");
+  const rfc = readFormValue(formData, "rfc");
+  const telefono = readFormValue(formData, "telefono_normalizado");
+
+  if (!employeeId || !rfc) {
+    redirect("/");
+  }
+
+  // Las server actions no pasan por `src/proxy.ts`: el rol se valida aquí.
+  const auth = await requireRole("operaciones");
+  if (!auth.ok) {
+    redirect(`/contracts/${employeeId}?action_status=forbidden`);
+  }
+
+  const detailPath = `/contracts/${employeeId}`;
+  let status: string;
+  try {
+    const input = parseRequestContractPayload({
+      // El operador dispara la solicitud a nombre del empleado; el teléfono
+      // normalizado hace de identificador de contacto (wa_id).
+      subscriber_id: telefono ?? rfc,
+      rfc,
+      telefono_normalizado: telefono ?? undefined,
+    });
+    const result = await requestContractFromWhatsApp(input);
+    status = result.status;
+  } catch {
+    status = "contract_error";
+  }
+
+  revalidatePath("/");
+  revalidatePath(detailPath);
+  redirect(`${detailPath}?action_status=${status}`);
 }
 
 /**

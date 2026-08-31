@@ -103,5 +103,42 @@ function getActionFeedback(status: string | undefined) {
     };
   }
 
+  if (status === "contract_ready") {
+    return {
+      tone: "success" as const,
+      message:
+        "Contrato generado. El link de firma se envió al empleado por WhatsApp; si el envío falla, puedes copiarlo o abrirlo desde las acciones.",
+    };
+  }
+
+  if (status === "contract_link_failed") {
+    return {
+      tone: "warning" as const,
+      message:
+        "El contrato se generó, pero el link de firma no se pudo crear (proveedor no disponible). Quedó en cola para reintentar.",
+    };
+  }
+
+  if (status === "no_offer") {
+    return {
+      tone: "warning" as const,
+      message: "El empleado no tiene una oferta vigente para generar contrato.",
+    };
+  }
+
+  if (status === "not_eligible") {
+    return {
+      tone: "warning" as const,
+      message: "La oferta del empleado no está disponible para solicitar adelanto.",
+    };
+  }
+
+  if (status === "contract_error") {
+    return {
+      tone: "danger" as const,
+      message: "No se pudo generar el contrato. Revisa el timeline o inténtalo de nuevo.",
+    };
+  }
+
   return undefined;
 }

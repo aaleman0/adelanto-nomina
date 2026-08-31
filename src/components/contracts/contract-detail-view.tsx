@@ -3,6 +3,7 @@ import {
   regenerateContractLinkAction,
   retryContractFlowAction,
   resendSignedContractAction,
+  requestContractAction,
 } from "@/app/contracts/actions";
 import { Card } from "@/components/ui/card";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
@@ -181,6 +182,24 @@ function ActionsCard({ control }: { control: ContractControlRow }) {
           />
         )}
 
+        {/* Solicitar contrato: ARRANCA el contrato desde el backoffice (genera
+            en EasyLex + envía el link de firma). Es el disparador que antes
+            hacía el empleado por WhatsApp; se ofrece mientras no esté firmado. */}
+        {!isSigned && (
+          <form action={requestContractAction}>
+            <input name="employee_id" type="hidden" value={control.employee_id} />
+            <input name="rfc" type="hidden" value={control.rfc ?? ""} />
+            <input name="telefono_normalizado" type="hidden" value={control.telefono_normalizado ?? ""} />
+            <RoleGate minimum="operaciones" mode="disable">
+              <ConfirmSubmitButton
+                confirmMessage="Se generará el contrato en EasyLex y se le enviará el link de firma al empleado por WhatsApp. Si ya hay un link vigente, se reutiliza (no gasta otra firma). ¿Continuar?"
+              >
+                Solicitar contrato
+              </ConfirmSubmitButton>
+            </RoleGate>
+          </form>
+        )}
+
         <form action={regenerateContractLinkAction}>
           <input name="contract_request_id" type="hidden" value={control.contract_request_id ?? ""} />
           <input name="employee_id" type="hidden" value={control.employee_id} />
@@ -259,7 +278,7 @@ function ActionsCard({ control }: { control: ContractControlRow }) {
       </div>
       <p className="mt-3 text-sm text-text-muted">
         {!hasRequest
-          ? "Las acciones se habilitan cuando el empleado solicita desde WhatsApp."
+          ? 'Aún no hay solicitud. Usa "Solicitar contrato" para generarlo y enviarle el link de firma al empleado.'
           : isSigned
             ? "Este contrato ya está firmado. Puedes descargar la copia archivada o reenviarla al empleado por WhatsApp."
             : "Si el link sigue vigente, el sistema lo reutiliza. Si venció o hubo error, crea un nuevo intento."}
