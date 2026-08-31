@@ -22,6 +22,13 @@ import { createMiddlewareClient } from "@/lib/supabase/middleware-client";
 const PUBLIC_PATHS = ["/login", "/auth/callback"];
 
 /**
+ * Prefijos de página pública (sin sesión). `/solicitar/<token>` es el
+ * auto-servicio del EMPLEADO (que no tiene cuenta): la autenticación es el token
+ * firmado del link, no una sesión de backoffice.
+ */
+const PUBLIC_PATH_PREFIXES = ["/solicitar/"];
+
+/**
  * Prefijos de API que no requieren sesión.
  *
  * No son rutas abiertas: cada una se autentica por su cuenta —los webhooks por
@@ -43,6 +50,7 @@ function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.includes(pathname)) return true;
   if (PUBLIC_API_EXACT.includes(pathname)) return true;
   if (PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true;
+  if (PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true;
   return false;
 }
 
