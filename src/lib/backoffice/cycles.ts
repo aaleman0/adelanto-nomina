@@ -53,7 +53,11 @@ function requestStatus(embedded: EmbeddedRequest): string | null {
 
 function estadoFrom(reqStatus: string | null): CycleEstado {
   if (reqStatus === "firmado") return "firmado";
-  if (reqStatus) return "en_proceso"; // recibida | generando | link_generado | error
+  // Solo los estados ACTIVOS cuentan como "en proceso". Una solicitud `error` o
+  // `reemplazada` (contrato de un ciclo superado por otro) no está en proceso.
+  if (reqStatus === "recibida" || reqStatus === "generando" || reqStatus === "link_generado") {
+    return "en_proceso";
+  }
   return "sin_contrato";
 }
 

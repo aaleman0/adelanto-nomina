@@ -81,6 +81,7 @@ type AdvanceOffer = {
   is_current: boolean;
   status: string;
   source_hash: string | null;
+  source_batch_id: string | null;
 };
 
 type ApplyStats = {
@@ -425,7 +426,7 @@ async function getCurrentOffer(employeeId: string) {
   const { data, error } = await supabase
     .from("advance_offers")
     .select(
-      "id, employee_id, monto_prestamo_autorizado, estatus_p_esta_q, estatus_conversion, estatus_cliente, is_current, status, source_hash",
+      "id, employee_id, monto_prestamo_autorizado, estatus_p_esta_q, estatus_conversion, estatus_cliente, is_current, status, source_hash, source_batch_id",
     )
     .eq("employee_id", employeeId)
     .eq("is_current", true)
@@ -438,6 +439,53 @@ async function getCurrentOffer(employeeId: string) {
   return data as AdvanceOffer | null;
 }
 
+/**
+ * Exportada para pruebas: ¿la oferta NO necesita tocarse? Solo se salta cuando se
+ * REAPLICA el MISMO lote con datos sin cambios (idempotente). Un lote nuevo (otro
+ * `source_batch_id`) es un CICLO nuevo y NO se salta, aunque el hash coincida —
+ * así el empleado recurrente obtiene oferta fresca y vuelve a ser elegible.
+ */
+export function isUnchangedReapply(
+  currentOffer: { source_batch_id: string | null; source_hash: string | null } | null,
+  batchId: string,
+  sourceHash: string,
+): boolean {
+  return (
+    !!currentOffer &&
+    currentOffer.source_batch_id === batchId &&
+    currentOffer.source_hash === sourceHash
+  );
+}
+
+/**
+ * Cierra el contrato del ciclo ANTERIOR al reemplazar la oferta de un empleado:
+ * la solicitud ACTIVA (recibida/generando/link_generado) pasa a `reemplazada` y
+ * sus intentos vivos (generando/generado) a `expirado`. Libera el índice
+ * `contract_requests_one_active_per_employee_idx` para el ciclo nuevo. Las
+ * solicitudes `firmado` NO se tocan: se conserva la evidencia de la firma.
+ */
+async function supersedePreviousContract(offerId: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+
+  const { data: reqs, error: reqErr } = await supabase
+    .from("contract_requests")
+    .update({ status: "reemplazada" })
+    .eq("offer_id", offerId)
+    .in("status", ["recibida", "generando", "link_generado"])
+    .select("id");
+  if (reqErr) throw reqErr;
+
+  const requestIds = (reqs ?? []).map((r) => r.id as string);
+  if (requestIds.length === 0) return;
+
+  const { error: attErr } = await supabase
+    .from("contract_attempts")
+    .update({ status: "expirado" })
+    .in("contract_request_id", requestIds)
+    .in("status", ["generando", "generado"]);
+  if (attErr) throw attErr;
+}
+
 async function syncOffer(
   row: RawImportRow,
   employeeId: string,
@@ -447,7 +495,12 @@ async function syncOffer(
   const supabase = getSupabaseAdmin();
   const sourceHash = row.row_hash ?? hashJson(normalized);
 
-  if (currentOffer?.source_hash === sourceHash) {
+  // Reaplicar el MISMO lote con datos sin cambios es idempotente (no se toca
+  // nada). Pero un lote NUEVO (otro `source_batch_id`) es un CICLO nuevo: aunque
+  // el monto no cambie, se crea una oferta fresca (`vigente`) y se cierra el
+  // contrato del ciclo anterior, para que el empleado recurrente vuelva a ser
+  // elegible y se pueda volver a enviar/solicitar.
+  if (isUnchangedReapply(currentOffer, row.batch_id, sourceHash)) {
     return { changed: false, created: false, replaced: false };
   }
 
@@ -465,6 +518,12 @@ async function syncOffer(
     if (replaceError) {
       throw replaceError;
     }
+
+    // Cerrar el contrato del ciclo anterior: pasa la solicitud ACTIVA (y sus
+    // intentos vivos) a un estado terminal. Sin esto, el índice
+    // `contract_requests_one_active_per_employee_idx` impediría generar el
+    // contrato del ciclo nuevo. Las solicitudes ya `firmado` NO se tocan.
+    await supersedePreviousContract(currentOffer.id);
   }
 
   const { data: newOffer, error: createError } = await supabase
