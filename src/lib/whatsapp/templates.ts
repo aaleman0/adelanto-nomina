@@ -48,7 +48,14 @@ async function fetchAllMetaTemplates(
     const tmplRes = await fetch(nextUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    const tmplJson = await tmplRes.json();
+    // La respuesta se anota a mano para cortar la inferencia circular:
+    // `nextUrl` se re-asigna desde este JSON y a la vez alimenta el `fetch` de
+    // arriba, así que sin anotación TypeScript no puede resolver el tipo (TS7022).
+    const tmplJson: {
+      data?: MetaTemplate[];
+      paging?: { next?: string | null };
+      error?: { message?: string };
+    } = await tmplRes.json();
 
     if (!tmplRes.ok) {
       return { ok: false, error: tmplJson?.error?.message ?? `HTTP ${tmplRes.status}` };
@@ -129,6 +136,31 @@ export async function syncTemplatesFromMeta(): Promise<SyncResult> {
   } catch (err) {
     return { ok: false, synced: 0, error: err instanceof Error ? err.message : "Error inesperado." };
   }
+}
+
+/**
+ * Componentes de UNA plantilla ya sincronizada desde Meta, por nombre.
+ *
+ * El envío lo usa para saber qué acepta realmente la plantilla (cabecera de
+ * imagen, botón de URL, cuántas variables) en vez de adivinarlo por el nombre.
+ * Devuelve null si la plantilla no está sincronizada todavía; en ese caso el
+ * constructor del mensaje cae a sus reglas por nombre y el envío sigue.
+ */
+export async function getTemplateComponents(
+  name: string,
+): Promise<MetaTemplateComponent[] | null> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("whatsapp_templates")
+    .select("components")
+    .eq("name", name)
+    .maybeSingle();
+
+  // Un fallo de lectura no debe tumbar el envío: se degrada a las reglas por nombre.
+  if (error || !data) return null;
+
+  return (data.components as MetaTemplateComponent[] | null) ?? null;
 }
 
 export async function getStoredTemplates(): Promise<StoredTemplate[]> {

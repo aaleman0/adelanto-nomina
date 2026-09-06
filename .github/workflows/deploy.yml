@@ -1,0 +1,122 @@
+name: Deploy
+
+# Despliegue a Cloud Run.
+#
+# Se dispara al empujar a `main` (producción) y también a mano desde la pestaña
+# Actions, para poder redesplegar sin un commit nuevo.
+#
+# Autenticación por Workload Identity Federation: GitHub obtiene un token corto
+# de GCP y NO hay ninguna llave de service account guardada en el repo.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      entorno:
+        description: Entorno al que desplegar
+        type: choice
+        options: [production, staging]
+        default: production
+
+# Dos despliegues simultáneos al mismo entorno se pisarían. El segundo espera
+# (no se cancela: cancelar a media subida de imagen deja basura en el registro).
+concurrency:
+  group: deploy-${{ inputs.entorno || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Construir y desplegar
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.entorno || 'production' }}
+
+    permissions:
+      contents: read
+      id-token: write # requerido por Workload Identity Federation
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Puerta de calidad: nunca se despliega algo que no compila o falla pruebas.
+      # Se repite aquí a propósito y no se confía solo en el CI del PR: a `main`
+      # pueden llegar commits directos o merges que nadie validó juntos.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Tests unitarios
+        run: pnpm test run
+
+      - name: Autenticarse en Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Permitir a Docker publicar en Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Construir y publicar la imagen
+        env:
+          IMAGEN: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPO }}/adelantos-admin
+        run: |
+          # NEXT_PUBLIC_APP_URL se INLINEA en el bundle del navegador durante el
+          # build: por eso va como build-arg y no basta ponerlo en runtime.
+          # El runner es amd64, que es la única arquitectura que corre Cloud Run.
+          docker build \
+            --build-arg NEXT_PUBLIC_APP_URL="${{ vars.NEXT_PUBLIC_APP_URL }}" \
+            --tag "$IMAGEN:${{ github.sha }}" \
+            --tag "$IMAGEN:latest" \
+            .
+          docker push "$IMAGEN:${{ github.sha }}"
+          docker push "$IMAGEN:latest"
+
+      - name: Desplegar en Cloud Run
+        env:
+          IMAGEN: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPO }}/adelantos-admin
+        run: |
+          # Se despliega la imagen del COMMIT, no `latest`: así se sabe con
+          # exactitud qué código está corriendo y se puede volver atrás.
+          gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
+            --image "$IMAGEN:${{ github.sha }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --quiet
+
+      # Comprobación de humo: si el servicio no responde, el despliegue se marca
+      # como fallido y queda a la vista, en vez de "verde" con la app caída.
+      - name: Verificar que el servicio responde
+        run: |
+          URL=$(gcloud run services describe "${{ vars.CLOUD_RUN_SERVICE }}" \
+            --region "${{ vars.GCP_REGION }}" --project "${{ vars.GCP_PROJECT_ID }}" \
+            --format 'value(status.url)')
+          echo "Servicio en: $URL"
+
+          for intento in $(seq 1 10); do
+            codigo=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$URL/api/health" || echo 000)
+            echo "  intento $intento → HTTP $codigo"
+            # 200 = sano. 503 = arriba pero con una dependencia degradada
+            # (p. ej. Supabase): el despliegue en sí funcionó, así que no se
+            # falla por eso; queda registrado para revisarlo.
+            if [ "$codigo" = "200" ] || [ "$codigo" = "503" ]; then
+              echo "El servicio responde."
+              exit 0
+            fi
+            sleep 6
+          done
+
+          echo "El servicio no respondió tras el despliegue." >&2
+          exit 1

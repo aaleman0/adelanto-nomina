@@ -430,21 +430,52 @@ async function handleContractLinkFailure(params: {
   return result;
 }
 
+const EMPLOYEE_COLUMNS =
+  "id, rfc, curp, nombre, apellido_paterno, apellido_materno, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador, estado_civil, nacionalidad, lugar_origen, fecha_nacimiento, domicilio";
+
+/**
+ * Empleado por RFC.
+ *
+ * El RFC debería ser único, pero en la práctica se han colado filas repetidas
+ * (importaciones antiguas, altas manuales de prueba). Antes esto usaba
+ * `maybeSingle()`, que ANTE UN DUPLICADO LANZA: el empleado tocaba "Sí" en
+ * WhatsApp y todo el pipeline reventaba con un error incomprensible.
+ *
+ * Ahora se resuelve de forma determinista: si hay varias filas, gana la que
+ * tiene la oferta del ciclo vigente —que es la que el operador está trabajando—
+ * y, si ninguna la tiene, la más reciente. Se registra el duplicado para poder
+ * limpiarlo, pero no se detiene al empleado por un problema de datos nuestro.
+ */
 async function getEmployeeByRfc(rfc: string) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("employees")
-    .select(
-      "id, rfc, curp, nombre, apellido_paterno, apellido_materno, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador, estado_civil, nacionalidad, lugar_origen, fecha_nacimiento, domicilio",
-    )
+    .select(EMPLOYEE_COLUMNS)
     .eq("rfc", rfc)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
 
   if (error) {
     throw error;
   }
 
-  return data as Employee | null;
+  const filas = (data ?? []) as Employee[];
+  if (filas.length === 0) return null;
+  if (filas.length === 1) return filas[0];
+
+  logger.warn("employees.duplicate_rfc", {
+    rfc,
+    encontrados: filas.length,
+    detalle: "Varias filas de empleado con el mismo RFC; se usa la de la oferta vigente.",
+  });
+
+  const { data: ofertas } = await supabase
+    .from("advance_offers")
+    .select("employee_id")
+    .in("employee_id", filas.map((f) => f.id))
+    .eq("is_current", true);
+
+  const conOfertaVigente = new Set((ofertas ?? []).map((o) => o.employee_id as string));
+  return filas.find((f) => conOfertaVigente.has(f.id)) ?? filas[0];
 }
 
 async function getCurrentOffer(employeeId: string) {

@@ -136,10 +136,55 @@ spec:
                 secretKeyRef:
                   name: easylex-webhook-secret
                   key: latest
-            # + el resto de WhatsApp/EasyLex (phone_number_id, business_account_id,
-            #   webhook_verify_token, access_key_id, base_url, signing_link_base_url,
-            #   callback_url, contract_template) — completa según docs/configuracion.md,
-            #   con valueFrom para los secretos y value para lo no sensible.
+            - name: EASYLEX_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: easylex-access-key-id
+                  key: latest
+            # Token compartido con Meta para verificar el webhook. Es un secreto:
+            # con él, un tercero podría hacerse pasar por el endpoint al registrar.
+            - name: WHATSAPP_WEBHOOK_VERIFY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: whatsapp-webhook-verify-token
+                  key: latest
+            # Firma los enlaces de auto-servicio /solicitar/<token>. Sin esto NO se
+            # generan los enlaces y cada envío se marca como fallido.
+            - name: SOLICITAR_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: solicitar-token-secret
+                  key: latest
+            # --- WhatsApp: identificadores (no son secretos) -------------------
+            # Sin PHONE_NUMBER_ID no se puede enviar NADA.
+            - name: WHATSAPP_PHONE_NUMBER_ID
+              value: "TU-PHONE-NUMBER-ID"
+            # Necesario para sincronizar las plantillas desde Meta.
+            - name: WHATSAPP_BUSINESS_ACCOUNT_ID
+              value: "TU-BUSINESS-ACCOUNT-ID"
+            - name: WHATSAPP_BUSINESS_NUMBER
+              value: "+52..."
+            # Imagen de cabecera de las plantillas que la declaran. Debe ser una
+            # URL pública y estable: Meta la descarga en cada envío.
+            - name: WHATSAPP_TEMPLATE_HEADER_IMAGE_URL
+              value: https://TU-DOMINIO/portada-adelanto.png
+            # --- EasyLex ------------------------------------------------------
+            # ⚠️ Sin esto el código cae a sandboxapi.easylex.com y los contratos se
+            # crearían en el ambiente de pruebas SIN avisar. En producción es
+            # obligatorio ponerlo explícito.
+            - name: EASYLEX_BASE_URL
+              value: https://api.easylex.com
+            # ⚠️ Base del enlace de firma. Si queda vacía, /firmar/<signerId>
+            # responde "no encontrado" y el empleado no puede firmar.
+            - name: EASYLEX_SIGNING_LINK_BASE_URL
+              value: https://easylex.com/documento/firma
+            # Donde EasyLex avisa que el empleado ya firmó.
+            - name: EASYLEX_CALLBACK_URL
+              value: https://TU-DOMINIO/api/webhooks/easylex/sign
+            # --- Cola ---------------------------------------------------------
+            # En Cloud Run el envío masivo se drena por Cloud Tasks, no inline.
+            - name: QUEUE_DRIVER
+              value: cloud-tasks
           # --- Credenciales de Google (autollenado del contrato) --------------
           # Son ARCHIVOS, no env vars: se montan desde Secret Manager. No se
           # pueden montar dentro de /app (taparía la app), por eso van a

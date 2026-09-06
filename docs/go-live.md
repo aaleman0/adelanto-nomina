@@ -185,6 +185,26 @@ Van primero porque tienen tiempos de espera ajenos.
       `EASYLEX_SIGNING_LINK_BASE_URL=https://easylex.com/documento/firma` (los defaults
       apuntan a sandbox/dominios muertos). Botón de la plantilla `adelanto_contrato_listo`
       con base `https://easylex.com/documento/firma/` + `{{1}}`.
+### Chatbot de WhatsApp (botones Sí/No) — ver [whatsapp-chatbot.md](whatsapp-chatbot.md)
+
+- [ ] 🧑 **Suscribir el campo `messages`** en el webhook de Meta. Es el paso que se
+      olvida: sin él Meta verifica la URL pero **nunca avisa** cuando el empleado toca
+      un botón, y el chatbot queda mudo aunque el mensaje sí se entregue.
+- [ ] 🧑 `WHATSAPP_APP_SECRET` en el entorno (App → Configuración → Básica en Meta).
+      Con `WEBHOOK_ENFORCE_SIGNATURES=true` y sin este valor, el webhook **rechaza
+      todo** en producción.
+- [ ] 🧑 `SOLICITAR_TOKEN_SECRET` en el entorno. Sin él, cada envío se marca como
+      fallido antes de salir (no puede firmar el enlace de auto-servicio).
+- [ ] **Sincronizar plantillas** (Ajustes → Plantillas → "Sincronizar con Meta") una vez
+      que Meta apruebe la plantilla de oferta. El envío decide qué mandar —imagen,
+      número de variables, si lleva botón de URL— leyendo la definición sincronizada;
+      sin sincronizar cae al comportamiento de las plantillas viejas y Meta rechaza
+      el mensaje.
+- [ ] Probar el juego completo con UN empleado: llega la oferta → "Sí, lo quiero" →
+      llega el enlace de firma → abre dentro de 2 h. Y con otro: "No, gracias" → llega
+      el agradecimiento y la oferta queda `rechazada`.
+- [ ] Confirmar en logs `whatsapp.chatbot.inbound` con `kind: "si" | "no"`.
+
 - [ ] Post-deploy: correr `pnpm verify:rls` contra producción.
 - [ ] Probar el login: solo las cuentas de `ALLOWED_EMAILS` deben entrar.
 - [ ] Enviar un mensaje de prueba y confirmar en logs `queue.driver.selected { kind: 'cloud-tasks' }`.

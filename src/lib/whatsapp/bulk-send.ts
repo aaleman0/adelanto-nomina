@@ -2,7 +2,8 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getWhatsAppClient } from "@/lib/whatsapp/client";
 import { getEmployeesEligibility } from "@/lib/whatsapp/eligibility";
 import { getEmployeesFromImport } from "@/lib/whatsapp/imports";
-import { buildBulkTemplateMessage, DEFAULT_BULK_TEMPLATE } from "@/lib/whatsapp/message-builder";
+import { buildBulkTemplateMessage, describeTemplateShape, DEFAULT_BULK_TEMPLATE } from "@/lib/whatsapp/message-builder";
+import { getTemplateComponents } from "@/lib/whatsapp/templates";
 import { buildSolicitarUrl } from "@/lib/contracts/solicitar-token";
 import { logger } from "@/lib/logger";
 
@@ -179,31 +180,42 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
     });
   }
 
+  // Forma real de la plantilla (una sola lectura para todo el envío). De aquí
+  // sale si lleva botón de URL: las plantillas de RESPUESTA RÁPIDA —las del
+  // chatbot Sí/No— no lo llevan, y para esas NO hay link que generar: el
+  // empleado contesta con un botón y el webhook decide qué sigue.
+  const shape = describeTemplateShape(await getTemplateComponents(templateName));
+
   // 4. Enviar mensajes en batches
   for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
     const batch = eligible.slice(i, i + BATCH_SIZE);
 
     for (const emp of batch) {
-      const buttonUrl = await resolveButtonUrl(emp, params.buttonUrl, bulkSendId);
-      if (!buttonUrl) {
-        const err = "No se pudo generar el link del contrato.";
-        progress.failed++;
-        progress.errors.push({ employeeId: emp.employee_id, rfc: emp.rfc, error: err });
-        try {
-          await recordMessage({ supabase, bulkSendId, emp, status: "failed", error: err });
-        } catch (recordError) {
-          progress.errors.push({
-            employeeId: emp.employee_id,
-            rfc: emp.rfc,
-            error: `Error al registrar mensaje: ${recordError instanceof Error ? recordError.message : 'Error desconocido'}`,
-          });
+      let buttonUrl: string | null = null;
+
+      if (shape.hasUrlButton) {
+        buttonUrl = await resolveButtonUrl(emp, params.buttonUrl, bulkSendId);
+        if (!buttonUrl) {
+          const err = "No se pudo generar el link del contrato.";
+          progress.failed++;
+          progress.errors.push({ employeeId: emp.employee_id, rfc: emp.rfc, error: err });
+          try {
+            await recordMessage({ supabase, bulkSendId, emp, status: "failed", error: err });
+          } catch (recordError) {
+            progress.errors.push({
+              employeeId: emp.employee_id,
+              rfc: emp.rfc,
+              error: `Error al registrar mensaje: ${recordError instanceof Error ? recordError.message : 'Error desconocido'}`,
+            });
+          }
+          continue;
         }
-        continue;
       }
 
       const built = buildBulkTemplateMessage(emp, templateName, {
         headerImageUrl: process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE_URL,
         buttonUrl,
+        shape,
       });
 
       if (!built.ok) {
@@ -724,26 +736,35 @@ export async function processQueuedMessage(
     return { status: "failed", messageId, error: "Snapshot del destinatario ausente." };
   }
 
-  const buttonUrl = await resolveButtonUrl(
-    {
-      employee_id: recipient.employee_id,
-      rfc: recipient.rfc,
-      nombre: recipient.nombre,
-      apellidos: null,
-      telefono_normalizado: recipient.telefono_normalizado,
-    },
-    metadata.button_url ?? undefined,
-    bulkSendId,
-  );
-  if (!buttonUrl) {
-    const err = "No se pudo generar el link del contrato.";
-    await markMessageFailed(messageId, bulkSendId, err);
-    return { status: "failed", messageId, error: err };
+  // Misma regla que en el envío inline: solo se arma el link cuando la plantilla
+  // declara botón de URL. Con una plantilla de respuesta rápida no hay link que
+  // generar, y exigirlo marcaría como fallido un mensaje perfectamente válido.
+  const shape = describeTemplateShape(await getTemplateComponents(templateName));
+
+  let buttonUrl: string | null = null;
+  if (shape.hasUrlButton) {
+    buttonUrl = await resolveButtonUrl(
+      {
+        employee_id: recipient.employee_id,
+        rfc: recipient.rfc,
+        nombre: recipient.nombre,
+        apellidos: null,
+        telefono_normalizado: recipient.telefono_normalizado,
+      },
+      metadata.button_url ?? undefined,
+      bulkSendId,
+    );
+    if (!buttonUrl) {
+      const err = "No se pudo generar el link del contrato.";
+      await markMessageFailed(messageId, bulkSendId, err);
+      return { status: "failed", messageId, error: err };
+    }
   }
 
   const built = buildBulkTemplateMessage(recipient, templateName, {
     headerImageUrl: process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE_URL,
     buttonUrl,
+    shape,
   });
 
   if (!built.ok) {
