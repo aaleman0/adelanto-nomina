@@ -207,31 +207,31 @@ export function NotificationBell({ placement = "default" }: { placement?: "defau
   };
 
   const typeDot: Record<NotificationType, string> = {
-    success: "bg-emerald-500",
-    error: "bg-red-500",
-    warning: "bg-amber-500",
-    info: "bg-blue-500",
+    success: "bg-[var(--success)]",
+    error: "bg-[var(--danger)]",
+    warning: "bg-[var(--warning)]",
+    info: "bg-[var(--neutral)]",
   };
 
   return (
     <div data-notification-bell className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`relative flex h-10 w-10 items-center justify-center rounded-lg transition ${placement === "sidebar" ? "text-sidebar-text-muted hover:bg-white/10 hover:text-white" : "hover:bg-surface-muted"}`}
+        className={`relative flex h-10 w-10 items-center justify-center rounded-lg transition ${placement === "sidebar" ? "text-sidebar-text-muted hover:bg-sidebar-hover hover:text-sidebar-text" : "hover:bg-surface-muted"}`}
         aria-label={`${unreadCount} notificaciones sin leer`}
       >
         <svg className={`h-5 w-5 ${placement === "sidebar" ? "text-current" : "text-text-muted"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-semibold text-white">
+          <span className="absolute -top-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--danger)] text-xs font-semibold text-white">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>
 
       {isOpen && (
-        <div className={`absolute z-50 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-border bg-white shadow-lg ${placement === "sidebar" ? "bottom-full left-0 mb-2" : "right-0 top-full mt-2"}`}>
+        <div className={`absolute z-50 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface shadow-lg ${placement === "sidebar" ? "bottom-full left-0 mb-2" : "right-0 top-full mt-2"}`}>
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <h3 className="font-semibold text-text-primary">Notificaciones</h3>
             <div className="flex gap-2">

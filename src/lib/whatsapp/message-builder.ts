@@ -32,6 +32,7 @@ export const DEFAULT_BULK_TEMPLATE = "adelanto_nomina_v2";
 
 /** Plantilla legada: solo 2 variables de cuerpo (nombre y monto). */
 const LEGACY_TEMPLATE = "adelanto_nomina";
+const TEMPLATES_WITH_IMAGE_HEADER = new Set(["adelanto_nomina_v2", "adelanto_nomina_v3"]);
 
 function formatMonto(monto: number | null): string {
   if (monto === null || monto === undefined) return "N/A";
@@ -67,9 +68,10 @@ export function buildBulkTemplateMessage(
     },
   ];
 
-  // La cabecera de imagen solo aplica a la plantilla v2, que la declara.
-  // Enviarla en la legada haría que Meta rechace el mensaje.
-  if (options.headerImageUrl && templateName === DEFAULT_BULK_TEMPLATE) {
+  // Solo algunas plantillas declaran cabecera de imagen. Enviarla a una que no
+  // la tenga haría que Meta rechace el mensaje; omitirla en una que sí la tenga
+  // produce el error inverso ("expected IMAGE").
+  if (options.headerImageUrl && TEMPLATES_WITH_IMAGE_HEADER.has(templateName)) {
     components.unshift({
       type: "header",
       parameters: [{ type: "image", image: { link: options.headerImageUrl } }],

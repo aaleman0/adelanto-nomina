@@ -17,13 +17,13 @@ type AuditResult = {
 };
 
 const ISSUE_META: Record<PhoneIssue, { label: string; color: string; fixable: boolean }> = {
-  ok: { label: "Correcto", color: "text-emerald-700 bg-emerald-50 border-emerald-200", fixable: false },
-  long_distance: { label: "Larga distancia", color: "text-amber-700 bg-amber-50 border-amber-200", fixable: true },
-  missing_prefix: { label: "Sin prefijo 52", color: "text-amber-700 bg-amber-50 border-amber-200", fixable: true },
-  has_plus: { label: "Tiene +", color: "text-amber-700 bg-amber-50 border-amber-200", fixable: true },
-  too_short: { label: "Muy corto", color: "text-red-700 bg-red-50 border-red-200", fixable: false },
-  too_long: { label: "Muy largo", color: "text-red-700 bg-red-50 border-red-200", fixable: false },
-  null_or_empty: { label: "Sin teléfono", color: "text-red-700 bg-red-50 border-red-200", fixable: false },
+  ok: { label: "Correcto", color: "text-success border-[var(--success-border)]", fixable: false },
+  long_distance: { label: "Larga distancia", color: "text-warning border-[var(--warning-border)]", fixable: true },
+  missing_prefix: { label: "Sin prefijo 52", color: "text-warning border-[var(--warning-border)]", fixable: true },
+  has_plus: { label: "Tiene +", color: "text-warning border-[var(--warning-border)]", fixable: true },
+  too_short: { label: "Muy corto", color: "text-danger border-[var(--danger-border)]", fixable: false },
+  too_long: { label: "Muy largo", color: "text-danger border-[var(--danger-border)]", fixable: false },
+  null_or_empty: { label: "Sin teléfono", color: "text-danger border-[var(--danger-border)]", fixable: false },
 };
 
 const ISSUE_ORDER: PhoneIssue[] = [
@@ -108,15 +108,15 @@ export function PhoneAuditPanel() {
       </Card>
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="note note-danger py-1 text-sm text-danger">
           {error}
         </div>
       )}
 
       {fixResult && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+        <div className="note note-success py-1 text-sm text-success">
           {fixResult.fixed} teléfono{fixResult.fixed !== 1 ? "s" : ""} corregido{fixResult.fixed !== 1 ? "s" : ""}.
-          {fixResult.errors > 0 && <span className="text-amber-700"> {fixResult.errors} error{fixResult.errors !== 1 ? "es" : ""}.</span>}
+          {fixResult.errors > 0 && <span className="text-warning"> {fixResult.errors} error{fixResult.errors !== 1 ? "es" : ""}.</span>}
         </div>
       )}
 
@@ -124,8 +124,8 @@ export function PhoneAuditPanel() {
         <>
           <div className="grid grid-cols-3 gap-3">
             <StatCard label="Total" value={result.total} />
-            <StatCard label="Correctos" value={result.ok_count} color="text-emerald-600" />
-            <StatCard label="Problemas" value={result.issues} color={result.issues > 0 ? "text-red-600" : "text-text-primary"} />
+            <StatCard label="Correctos" value={result.ok_count} color="text-success" />
+            <StatCard label="Problemas" value={result.issues} color={result.issues > 0 ? "text-danger" : "text-text-primary"} />
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -149,8 +149,8 @@ export function PhoneAuditPanel() {
           </div>
 
           {fixableCount > 0 && (
-            <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm text-amber-900">
+            <div className="flex items-center justify-between note note-warning py-1">
+              <p className="text-sm text-warning">
                 {fixableCount} teléfono{fixableCount !== 1 ? "s" : ""} se pueden corregir automáticamente.
               </p>
               <Button variant="secondary" disabled={fixing || !canFix} onClick={applyFixes} title={canFix ? undefined : "Requiere rol administrador."}>
@@ -184,7 +184,7 @@ export function PhoneAuditPanel() {
                         {meta.label}
                       </span>
                       <span className="text-text-muted">
-                        {row.suggested_fix ? <span className="text-emerald-700">→ {row.suggested_fix}</span> : "Manual"}
+                        {row.suggested_fix ? <span className="text-success">→ {row.suggested_fix}</span> : "Manual"}
                       </span>
                     </div>
                   );

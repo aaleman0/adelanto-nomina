@@ -87,7 +87,7 @@ export function RecipientStep({
         <Card className="p-4">
           <h3 className="text-sm font-medium text-text-muted">Selecciona una importación</h3>
           {loadingImports && <div className="mt-3 space-y-2"><div className="h-12 animate-pulse rounded-lg bg-surface-muted" /><div className="h-12 animate-pulse rounded-lg bg-surface-muted" /></div>}
-          {importsError && <p className="mt-3 text-sm text-red-600">{importsError}</p>}
+          {importsError && <p className="mt-3 text-sm text-danger">{importsError}</p>}
           {!loadingImports && !importsError && imports.length === 0 && (
             <p className="mt-3 text-sm text-text-muted">No hay importaciones aplicadas. <a href="/imports" className="text-primary underline">Ir a Importaciones</a></p>
           )}

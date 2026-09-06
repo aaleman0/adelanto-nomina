@@ -16,9 +16,9 @@ export default function WhatsAppError({
 
   return (
     <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
-      <div className="mb-4 grid h-14 w-14 place-items-center rounded-full bg-red-100">
+      <div className="mb-4 grid h-14 w-14 place-items-center rounded-full">
         <svg
-          className="h-7 w-7 text-red-600"
+          className="h-7 w-7 text-danger"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"

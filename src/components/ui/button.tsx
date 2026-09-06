@@ -3,11 +3,14 @@ import { LetterWave } from "./letter-wave";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
+// Botones planos y de esquina recta (editorial). El primario lleva el único
+// acento (verde); secundario es una línea fina; ghost es texto. Sin sombras ni
+// desplazamientos.
 const variantClasses: Record<ButtonVariant, string> = {
   primary: "bg-primary text-white hover:bg-primary-hover",
-  secondary: "border border-primary-border bg-surface text-primary hover:bg-primary-light",
-  ghost: "border border-border bg-surface text-text-primary hover:bg-surface-muted",
-  danger: "bg-danger text-white hover:bg-red-700",
+  secondary: "border border-border-strong text-text-primary hover:bg-surface-muted",
+  ghost: "text-text-primary hover:bg-surface-muted",
+  danger: "bg-danger text-white hover:opacity-90",
 };
 
 export function Button({
@@ -23,8 +26,8 @@ export function Button({
   return (
     <button
       className={[
-        "inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:shadow-none",
-        "disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex h-10 items-center justify-center gap-2 rounded-none px-4 text-sm font-semibold transition-colors duration-150",
+        "disabled:cursor-not-allowed disabled:opacity-45",
         variantClasses[variant],
         className,
       ].join(" ")}

@@ -18,7 +18,7 @@ export default async function CyclesPage() {
     <AppShell>
       <PageHeader title="Ciclos" />
       {loadError ? (
-        <Card className="border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <Card className="border-[var(--danger-border)] p-4 text-sm text-danger">
           No se pudieron cargar los ciclos. Revisa la conexión con la base de datos.
         </Card>
       ) : (

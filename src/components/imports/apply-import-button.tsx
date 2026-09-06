@@ -50,7 +50,7 @@ export function ApplyImportButton({ batchId }: { batchId: string }) {
       >
         {isApplying ? "Aplicando..." : "Aplicar"}
       </Button>
-      {result?.error ? <p className="text-xs text-red-600">{result.error}</p> : null}
+      {result?.error ? <p className="text-xs text-danger">{result.error}</p> : null}
       {result && !result.error ? (
         <p className="text-xs text-text-muted">{result.changedRows ?? 0} cambios · {result.unchangedRows ?? 0} sin cambios</p>
       ) : null}

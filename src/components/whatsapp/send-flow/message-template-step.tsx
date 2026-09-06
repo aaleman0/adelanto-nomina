@@ -78,7 +78,7 @@ export function MessageTemplateStep({
               <p className="text-sm font-medium text-text-primary">Mensaje a enviar</p>
               <p className="text-xs text-text-muted">Plantilla: <code className="font-mono">{templateName || DEFAULT_TEMPLATE}</code></p>
               {activeTemplate && <StatusBadge status={activeTemplate.status} />}
-              {statusInfo && !statusInfo.canSend && <p className="mt-2 text-xs text-amber-700">{statusInfo.message}</p>}
+              {statusInfo && !statusInfo.canSend && <p className="mt-2 text-xs text-warning">{statusInfo.message}</p>}
             </div>
 
             <div className="rounded-lg border border-border bg-surface p-3 text-sm text-text-primary leading-relaxed">
@@ -117,9 +117,9 @@ export function MessageTemplateStep({
 function StatusBadge({ status }: { status: TemplateStatus }) {
   const { label } = templateStatusInfo(status);
   const cls =
-    status === "APPROVED" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-    status === "PENDING" ? "bg-amber-50 text-amber-700 border-amber-200" :
-    status === "REJECTED" ? "bg-red-50 text-red-700 border-red-200" :
-    "bg-surface-muted text-text-muted border-border";
-  return <span className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>;
+    status === "APPROVED" ? "text-success" :
+    status === "PENDING" ? "text-warning" :
+    status === "REJECTED" ? "text-danger" :
+    "text-text-muted";
+  return <span className={`inline-flex text-xs font-medium uppercase tracking-wide ${cls}`}>{label}</span>;
 }

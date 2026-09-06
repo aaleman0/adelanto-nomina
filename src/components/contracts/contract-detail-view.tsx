@@ -36,13 +36,13 @@ export function ContractDetailView({
   return (
     <div className="flex flex-col gap-6">
       {actionFeedback ? (
-        <div className={["rounded-xl border px-4 py-3 text-sm", getFeedbackClasses(actionFeedback.tone)].join(" ")}>
+        <div className={["note py-1 text-sm", getFeedbackClasses(actionFeedback.tone)].join(" ")}>
           {actionFeedback.message}
         </div>
       ) : null}
 
       {eligibilityReason ? (
-        <div className="rounded-xl border border-[var(--warning)]/30 bg-warning-bg px-4 py-3 text-sm text-warning">
+        <div className="note note-warning py-1 text-sm text-warning">
           <span className="font-semibold">No elegible:</span> {eligibilityReason}
         </div>
       ) : null}
@@ -387,8 +387,8 @@ function getTimelineTone(status: string | null, eventType: string): StatusTone {
 }
 
 function getFeedbackClasses(tone: StatusTone) {
-  if (tone === "success") return "border-green-200 bg-green-50 text-green-900";
-  if (tone === "warning") return "border-amber-200 bg-amber-50 text-amber-900";
-  if (tone === "danger") return "border-red-200 bg-red-50 text-red-900";
-  return "border-border bg-surface-muted text-text-primary";
+  if (tone === "success") return "note-success text-success";
+  if (tone === "warning") return "note-warning text-warning";
+  if (tone === "danger") return "note-danger text-danger";
+  return "note-info text-text-muted";
 }

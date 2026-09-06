@@ -103,7 +103,7 @@ function BulkHistoryInner() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+      <div className="note note-danger py-1 text-sm text-danger">
         <p>{error}</p>
         <button
           onClick={() => {
@@ -113,7 +113,7 @@ function BulkHistoryInner() {
               .catch((err: Error) => setError(err.message))
               .finally(() => setLoading(false));
           }}
-          className="mt-2 text-sm font-medium text-red-600 underline"
+          className="mt-2 text-sm font-medium text-danger underline"
         >
           Reintentar
         </button>
@@ -214,8 +214,8 @@ function BulkHistoryInner() {
                 </div>
                 <span className="text-center text-text-muted capitalize">{row.mode === "import" ? "Importación" : "Manual"}</span>
                 <span className="text-center text-text-primary">{row.eligible_count ?? "-"}</span>
-                <span className="text-center text-emerald-600">{row.sent_count ?? "-"}</span>
-                <span className={`text-center ${(row.failed_count ?? 0) > 0 ? "text-red-600" : "text-text-muted"}`}>
+                <span className="text-center text-success">{row.sent_count ?? "-"}</span>
+                <span className={`text-center ${(row.failed_count ?? 0) > 0 ? "text-danger" : "text-text-muted"}`}>
                   {row.failed_count ?? "-"}
                 </span>
                 <div className="flex justify-center">

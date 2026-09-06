@@ -25,7 +25,7 @@ const statusOptions: Array<{
 ];
 
 const selectCls =
-  "h-10 w-full rounded-lg border border-border bg-white/70 px-3 text-sm text-text-primary outline-none transition focus:border-primary focus:bg-white";
+  "h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text-primary outline-none transition focus:border-primary focus:bg-surface";
 
 export function ContractControlFilters({
   filters,

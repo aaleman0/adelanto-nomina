@@ -64,10 +64,10 @@ export function ErrorFallback({
   onReset?: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-6 py-10 text-center">
-      <div className="mb-4 grid h-12 w-12 place-items-center rounded-full bg-red-100">
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-[var(--danger-border)] bg-surface px-6 py-10 text-center">
+      <div className="mb-4 grid h-12 w-12 place-items-center rounded-full bg-danger-bg">
         <svg
-          className="h-6 w-6 text-red-600"
+          className="h-6 w-6 text-danger"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -80,24 +80,24 @@ export function ErrorFallback({
           />
         </svg>
       </div>
-      <h2 className="mb-1 text-base font-bold text-red-800">
+      <h2 className="mb-1 text-base font-bold text-danger">
         {section ? `Error en ${section}` : "Algo salió mal"}
       </h2>
-      <p className="mb-4 max-w-sm text-sm text-red-600">
+      <p className="mb-4 max-w-sm text-sm text-text-muted">
         {error?.message ?? "Ocurrió un error inesperado. Por favor intenta de nuevo."}
       </p>
       <div className="flex gap-3">
         {onReset && (
           <button
             onClick={onReset}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover"
           >
             Reintentar
           </button>
         )}
         <button
           onClick={() => window.location.reload()}
-          className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+          className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-text-primary transition hover:bg-surface-muted"
         >
           Recargar página
         </button>

@@ -108,7 +108,7 @@ export function EligibilitySummary({
 
       {loadState === "error" && (
         <Card className="p-6 text-center">
-          <p className="text-sm text-red-600">{loadError}</p>
+          <p className="text-sm text-danger">{loadError}</p>
           <Button variant="secondary" className="mt-3" onClick={validate}>Reintentar</Button>
         </Card>
       )}
@@ -123,7 +123,7 @@ export function EligibilitySummary({
           </div>
 
           {validation.eligible === 0 && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            <div className="note note-danger py-1 text-sm text-danger">
               No hay empleados elegibles. Verifica que tengan oferta vigente y teléfono registrado.
             </div>
           )}
@@ -169,7 +169,7 @@ export function EligibilitySummary({
                         <td className="hidden px-3 py-2 font-mono text-xs text-text-muted sm:table-cell">{emp.rfc || "—"}</td>
                         <td className="hidden px-3 py-2 text-text-primary md:table-cell">{emp.monto_prestamo_autorizado ? fmt.format(emp.monto_prestamo_autorizado) : "—"}</td>
                         <td className="px-3 py-2">
-                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${emp.eligible ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+                          <span className={`inline-flex text-xs font-medium uppercase tracking-wide ${emp.eligible ? "text-success" : "text-danger"}`}>
                             {emp.eligible ? "Elegible" : emp.reason || "No elegible"}
                           </span>
                         </td>
@@ -195,8 +195,8 @@ export function EligibilitySummary({
 
 function SummaryCard({ label, value, tone }: { label: string; value: number; tone?: "ok" | "warn" | "neutral" }) {
   const cls =
-    tone === "ok" ? "text-emerald-600" :
-    tone === "warn" ? "text-amber-600" :
+    tone === "ok" ? "text-success" :
+    tone === "warn" ? "text-warning" :
     "text-text-primary";
   return (
     <div className="rounded-xl border border-border bg-surface p-3 text-center">

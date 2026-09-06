@@ -88,7 +88,7 @@ export function OperationsCockpit({ rows, total }: { rows: ContractControlRow[];
               Mostrando los <span className="font-semibold text-text-secondary">{queue.length}</span> más urgentes de {total}. <Link href="/contracts" className="text-primary hover:underline">Ver todos</Link>.
             </p>
           )}
-          <label className="mt-4 flex h-11 items-center gap-3 rounded-lg border border-border bg-white/55 px-3 transition focus-within:border-[var(--color-3)] focus-within:bg-white">
+          <label className="mt-4 flex h-11 items-center gap-3 rounded-lg border border-border bg-surface px-3 transition focus-within:border-[var(--color-3)] focus-within:bg-surface">
             <svg className="h-4 w-4 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
             <input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-text-disabled" placeholder="Filtrar la cola cargada…" />
             <kbd className="hidden shrink-0 rounded border border-border px-1.5 py-0.5 font-data text-[10px] text-text-muted xl:inline">/</kbd>
@@ -228,7 +228,7 @@ function Inspector({ row }: { row: ContractControlRow }) {
           </span>
         )}
 
-        <Link href={`/contracts/${row.employee_id}`} className="button-contrast flex h-10 items-center justify-center rounded-lg bg-[var(--color-5)] text-sm font-semibold transition hover:-translate-y-0.5 hover:bg-[var(--color-4)]">Abrir expediente</Link>
+        <Link href={`/contracts/${row.employee_id}`} className="button-contrast flex h-10 items-center justify-center rounded-lg bg-[var(--color-5)] text-sm font-semibold transition hover:bg-[var(--color-4)]">Abrir expediente</Link>
       </div>
     </div>
   );

@@ -1,3 +1,5 @@
+// Métrica editorial: etiqueta pequeña en versalitas + número grande. Sin caja.
+// El color solo aparece en tonos semánticos; neutral es tinta.
 export function Metric({
   label,
   value,
@@ -8,16 +10,16 @@ export function Metric({
   tone?: "neutral" | "success" | "warning" | "danger";
 }) {
   const valueColor = {
-    success: "text-emerald-600",
-    warning: "text-amber-600",
-    danger: "text-red-600",
+    success: "text-primary",
+    warning: "text-warning",
+    danger: "text-danger",
     neutral: "text-text-primary",
   }[tone];
 
   return (
     <div>
-      <p className="text-sm text-text-muted">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold tracking-tight ${valueColor}`}>{value}</p>
+      <p className="text-[11px] uppercase tracking-[0.16em] text-text-muted">{label}</p>
+      <p className={`mt-3 text-4xl font-bold leading-none tracking-tight tabular-nums ${valueColor}`}>{value}</p>
     </div>
   );
 }

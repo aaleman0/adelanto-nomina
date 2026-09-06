@@ -36,7 +36,7 @@ function StepIndicator({ current }: { current: FlowStep }) {
         return (
           <div key={step} className="flex items-center">
             {idx > 0 && <span className={["mx-1 h-px w-6 sm:w-10", step < current ? "bg-primary" : "bg-border"].join(" ")} />}
-            <span className={["flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium", isActive ? "bg-primary text-white" : step < current ? "bg-emerald-500 text-white" : "bg-surface-muted text-text-muted"].join(" ")}>
+            <span className={["flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium", isActive ? "bg-primary text-white" : step < current ? "bg-[var(--success)] text-white" : "bg-surface-muted text-text-muted"].join(" ")}>
               {step}
             </span>
           </div>

@@ -79,7 +79,7 @@ export function CompanySettingsForm() {
           los usa. <strong className="text-text-primary">Los campos vacíos salen en blanco en el contrato.</strong>
         </p>
         {!loading && faltantes > 0 && (
-          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p className="mt-3 note note-warning py-1 text-sm text-warning">
             Faltan <strong>{faltantes}</strong> {faltantes === 1 ? "campo" : "campos"} por llenar.
           </p>
         )}
@@ -106,8 +106,8 @@ export function CompanySettingsForm() {
       {msg && (
         <div
           className={[
-            "rounded-lg border px-4 py-3 text-sm",
-            msg.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800",
+            "note py-1 text-sm",
+            msg.ok ? "note-success text-success" : "note-danger text-danger",
           ].join(" ")}
         >
           {msg.text}
@@ -142,7 +142,7 @@ function Field({
       <span className="flex items-center gap-2 text-text-secondary">
         {label}
         {!loading && empty && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">Falta</span>
+          <span className="text-[11px] font-medium uppercase tracking-wide text-warning">Falta</span>
         )}
       </span>
       <input

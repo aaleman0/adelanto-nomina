@@ -27,7 +27,7 @@ export default async function Home() {
         title="Operación"
         action={
           <Link
-            className="button-contrast inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--color-5)] px-4 text-sm font-semibold transition hover:-translate-y-0.5 hover:bg-[var(--color-4)] hover:shadow-md"
+            className="button-contrast inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--color-5)] px-4 text-sm font-semibold transition hover:bg-[var(--color-4)]"
             href="/imports"
           >
             <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -38,9 +38,9 @@ export default async function Home() {
         }
       />
       {result.setupError ? (
-        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <section className="note note-warning py-1 text-sm text-warning">
           <p className="font-medium">Falta configurar Supabase local</p>
-          <p className="mt-1 text-amber-700">Configura variables de Supabase para ver datos reales del backoffice.</p>
+          <p className="mt-1 text-warning">Configura variables de Supabase para ver datos reales del backoffice.</p>
         </section>
       ) : null}
       <PipelineOverview metrics={result.metrics} signed={kpis.firmados} total={kpis.totalElegibles} />

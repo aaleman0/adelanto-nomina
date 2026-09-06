@@ -97,10 +97,10 @@ export function EmployeeSearchBar({ selected, onSelect, onClear }: Props) {
   if (selected) {
     const fullName = [selected.nombre, selected.apellidos].filter(Boolean).join(" ") || "—";
     return (
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--success-border)] px-4 py-3">
         <div className="flex items-center gap-3">
           {/* Avatar inicial */}
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-muted text-sm font-bold text-success">
             {(selected.nombre?.[0] ?? selected.apellidos?.[0] ?? "?").toUpperCase()}
           </span>
           <div>
@@ -112,7 +112,7 @@ export function EmployeeSearchBar({ selected, onSelect, onClear }: Props) {
                 <span className="font-mono">{selected.telefono_normalizado}</span>
               )}
               {selected.monto_prestamo_autorizado && (
-                <span className="ml-1 font-semibold text-emerald-700">
+                <span className="ml-1 font-semibold text-success">
                   · {fmt.format(selected.monto_prestamo_autorizado)}
                 </span>
               )}
@@ -122,7 +122,7 @@ export function EmployeeSearchBar({ selected, onSelect, onClear }: Props) {
         <button
           type="button"
           onClick={onClear}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-text-muted transition hover:bg-red-100 hover:text-red-600"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-text-muted transition hover:bg-[var(--danger-bg)] hover:text-danger"
           title="Quitar selección"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -198,7 +198,7 @@ export function EmployeeSearchBar({ selected, onSelect, onClear }: Props) {
                     </p>
                   </div>
                   {emp.monto_prestamo_autorizado != null && (
-                    <span className="shrink-0 text-xs font-bold text-emerald-600">
+                    <span className="shrink-0 text-xs font-bold text-success">
                       {fmt.format(emp.monto_prestamo_autorizado)}
                     </span>
                   )}

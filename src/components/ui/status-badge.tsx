@@ -1,10 +1,19 @@
 export type StatusTone = "neutral" | "success" | "warning" | "danger";
 
-const toneClasses: Record<StatusTone, string> = {
-  neutral: "bg-surface-muted text-text-secondary",
-  success: "bg-emerald-50 text-emerald-700",
-  warning: "bg-amber-50 text-amber-700",
-  danger: "bg-red-50 text-red-700",
+// Estado como marca de forma + palabra (sin pastilla/caja). El color solo
+// distingue; en neutral el punto es un aro hueco y el texto va apagado.
+const dotClasses: Record<StatusTone, string> = {
+  neutral: "border border-border-strong bg-transparent",
+  success: "bg-primary",
+  warning: "bg-warning",
+  danger: "bg-danger",
+};
+
+const textClasses: Record<StatusTone, string> = {
+  neutral: "text-text-muted",
+  success: "text-primary",
+  warning: "text-warning",
+  danger: "text-danger",
 };
 
 export function StatusBadge({
@@ -15,12 +24,8 @@ export function StatusBadge({
   tone?: StatusTone;
 }) {
   return (
-    <span
-      className={[
-        "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium leading-none capitalize",
-        toneClasses[tone],
-      ].join(" ")}
-    >
+    <span className={["inline-flex items-center gap-2 text-sm capitalize", textClasses[tone]].join(" ")}>
+      <span className={["h-2 w-2 shrink-0 rounded-full", dotClasses[tone]].join(" ")} aria-hidden="true" />
       {status}
     </span>
   );

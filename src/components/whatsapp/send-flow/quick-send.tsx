@@ -115,7 +115,7 @@ export function QuickSend() {
           Encolados {state.queued} envíos. Se procesan en segundo plano; revisa el historial para el resultado.
         </p>
       )}
-      {state.status === "error" && <p className="mt-3 text-sm text-red-600">{state.message}</p>}
+      {state.status === "error" && <p className="mt-3 text-sm text-danger">{state.message}</p>}
 
       <p className="mt-3 text-xs text-text-muted">
         ¿Necesitas elegir plantilla, filtrar empleados o probar? Usa el asistente completo abajo.

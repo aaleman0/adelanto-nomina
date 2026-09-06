@@ -35,6 +35,32 @@ export type SyncResult = {
   error?: string;
 };
 
+async function fetchAllMetaTemplates(
+  accessToken: string,
+  businessAccountId: string,
+): Promise<{ ok: true; templates: MetaTemplate[] } | { ok: false; error: string }> {
+  const templates: MetaTemplate[] = [];
+  let nextUrl:
+    | string
+    | null = `${BASE_URL}/${businessAccountId}/message_templates?fields=id,name,status,category,language,components&limit=100`;
+
+  while (nextUrl) {
+    const tmplRes = await fetch(nextUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const tmplJson = await tmplRes.json();
+
+    if (!tmplRes.ok) {
+      return { ok: false, error: tmplJson?.error?.message ?? `HTTP ${tmplRes.status}` };
+    }
+
+    templates.push(...((tmplJson?.data ?? []) as MetaTemplate[]));
+    nextUrl = tmplJson?.paging?.next ?? null;
+  }
+
+  return { ok: true, templates };
+}
+
 export async function syncTemplatesFromMeta(): Promise<SyncResult> {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -64,18 +90,12 @@ export async function syncTemplatesFromMeta(): Promise<SyncResult> {
       return { ok: false, synced: 0, error: phoneJson?.error?.message ?? `HTTP ${phoneRes.status}` };
     }
 
-    // Obtener templates desde el WhatsApp Business Account ID.
-    const tmplRes = await fetch(
-      `${BASE_URL}/${businessAccountId}/message_templates?fields=id,name,status,category,language,components&limit=100`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
-    const tmplJson = await tmplRes.json();
-
-    if (!tmplRes.ok) {
-      return { ok: false, synced: 0, error: tmplJson?.error?.message ?? `HTTP ${tmplRes.status}` };
+    const templatesResult = await fetchAllMetaTemplates(accessToken, businessAccountId);
+    if (!templatesResult.ok) {
+      return { ok: false, synced: 0, error: templatesResult.error };
     }
 
-    const metaTemplates: MetaTemplate[] = tmplJson?.data ?? [];
+    const metaTemplates = templatesResult.templates;
     const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
 

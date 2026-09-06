@@ -44,7 +44,7 @@ export function CycleTable({ rows }: { rows: CycleListRow[] }) {
                 <DataTableCell>{formatDate(r.appliedAt)}</DataTableCell>
                 <DataTableCell>{r.total}</DataTableCell>
                 <DataTableCell>
-                  <span className={r.firmados > 0 ? "font-semibold text-emerald-600" : "text-text-muted"}>
+                  <span className={r.firmados > 0 ? "font-semibold text-success" : "text-text-muted"}>
                     {r.firmados} / {r.total}
                   </span>
                 </DataTableCell>

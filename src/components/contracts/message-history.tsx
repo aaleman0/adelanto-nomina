@@ -50,7 +50,7 @@ export function MessageHistory({ employeeId }: { employeeId: string }) {
       <h3 className="text-sm font-medium text-text-muted">Historial de mensajes</h3>
       <div className="mt-3">
         {loading && <p className="text-sm text-text-muted">Cargando...</p>}
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         {!loading && !error && messages.length === 0 && (
           <p className="text-sm text-text-muted">Sin mensajes registrados.</p>
         )}

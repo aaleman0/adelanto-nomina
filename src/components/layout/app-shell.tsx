@@ -66,7 +66,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
           user={{ displayName, email: user?.email ?? "", avatarUrl, role }}
         >
           <main className="flex min-h-0 flex-1 flex-col bg-transparent text-text-primary">
-            <div className="panel-scroll flex min-h-0 w-full flex-1 flex-col gap-5 px-4 py-4 sm:px-6 lg:px-7">
+            <div className="panel-scroll flex min-h-0 w-full flex-1 flex-col gap-6 px-5 py-8 sm:px-8 lg:px-14">
               <HealthBanner />
               {children}
             </div>
@@ -78,7 +78,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
 }
 
 export function PageHeader({ title = "Panel operativo", action }: { title?: string; action?: ReactNode }) {
-  return <header className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between"><h1 className="font-display text-2xl font-semibold tracking-[-0.03em] text-text-primary">{title}</h1>{action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}</header>;
+  return <header className="flex shrink-0 flex-col gap-4 pb-2 md:flex-row md:items-end md:justify-between"><h1 className="font-display text-4xl font-bold leading-[1.02] tracking-[-0.02em] text-text-primary sm:text-5xl">{title}</h1>{action ? <div className="flex shrink-0 items-center gap-3">{action}</div> : null}</header>;
 }
 
 export function PlaceholderPage({ title }: { title: string }) {

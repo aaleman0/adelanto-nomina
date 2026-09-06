@@ -47,7 +47,7 @@ export function CycleDetailView({
   return (
     <div className="flex flex-col gap-6">
       {actionFeedback ? (
-        <div className={["rounded-xl border px-4 py-3 text-sm", feedbackClasses(actionFeedback.tone)].join(" ")}>
+        <div className={["note py-1 text-sm", feedbackClasses(actionFeedback.tone)].join(" ")}>
           {actionFeedback.message}
         </div>
       ) : null}
@@ -140,8 +140,8 @@ export function CycleDetailView({
 }
 
 function feedbackClasses(tone: StatusTone) {
-  if (tone === "success") return "border-green-200 bg-green-50 text-green-900";
-  if (tone === "warning") return "border-amber-200 bg-amber-50 text-amber-900";
-  if (tone === "danger") return "border-red-200 bg-red-50 text-red-900";
-  return "border-border bg-surface-muted text-text-primary";
+  if (tone === "success") return "note-success text-success";
+  if (tone === "warning") return "note-warning text-warning";
+  if (tone === "danger") return "note-danger text-danger";
+  return "note-info text-text-muted";
 }

@@ -94,34 +94,51 @@ export default async function SolicitarPage({ params, searchParams }: PageProps)
 
   return (
     <Shell>
-      <div className="rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
-        <p className="text-sm text-text-muted">{nombre ? `Hola, ${nombre}` : "Hola"}</p>
-        <h1 className="mt-1 text-lg font-semibold text-text-primary">Tu adelanto de nómina está listo</h1>
-        <div className="my-5 rounded-xl bg-surface-muted py-5">
-          <p className="text-xs uppercase tracking-wide text-text-muted">Monto</p>
-          <p className="mt-1 text-3xl font-bold text-text-primary">{money(monto)}</p>
-        </div>
-        <p className="text-sm text-text-muted">
-          Al continuar, se genera tu contrato y pasarás a firmarlo con tu identificación (INE) desde tu celular.
+      <p className="text-sm tracking-wide text-white/55">{nombre ? `Hola, ${nombre}` : "Hola"}</p>
+      <h1 className="mt-3 font-display text-3xl font-bold leading-[1.05] tracking-[-0.02em] text-white sm:text-4xl">
+        Tu adelanto de nómina está listo
+      </h1>
+
+      <div className="mt-10 border-t border-white/15 pt-8">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Monto autorizado</p>
+        <p className="mt-3 font-display text-5xl font-bold leading-none tracking-[-0.03em] tabular-nums text-white sm:text-7xl">
+          {money(monto)}
         </p>
-        <form action={solicitarContratoAction} className="mt-5">
-          <input type="hidden" name="token" value={token} />
-          <button
-            type="submit"
-            className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-primary px-6 text-base font-semibold text-white transition hover:bg-primary-hover"
-          >
-            Solicitar y firmar
-          </button>
-        </form>
       </div>
+
+      <p className="mt-8 max-w-sm text-[15px] leading-relaxed text-white/60">
+        Al continuar se genera tu contrato y pasas a firmarlo con tu identificación (INE) desde tu celular.
+      </p>
+
+      <form action={solicitarContratoAction} className="mt-10">
+        <input type="hidden" name="token" value={token} />
+        <button
+          type="submit"
+          className="group inline-flex h-14 w-full items-center justify-center gap-3 bg-[#159f6d] px-6 text-base font-semibold text-white transition-colors hover:bg-[#0f7f58] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white sm:w-auto sm:px-12"
+        >
+          Solicitar y firmar
+          <span aria-hidden="true" className="transition-transform group-hover:translate-x-1">→</span>
+        </button>
+      </form>
     </Shell>
   );
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-surface-muted px-4 py-10">
-      <div className="w-full max-w-sm">{children}</div>
+    <main className="flex min-h-screen flex-col bg-[#0c0c0b] px-6 py-8 text-white sm:px-10">
+      <header className="flex shrink-0 items-center justify-between">
+        <span className="font-display text-[13px] font-bold uppercase tracking-[0.06em] text-white/80">
+          Adelanto Nómina<sup className="text-[0.6em] font-semibold">®</sup>
+        </span>
+        <span className="text-[11px] uppercase tracking-[0.18em] text-white/35">Auto-servicio</span>
+      </header>
+      <div className="flex flex-1 flex-col justify-center py-12">
+        <div className="mx-auto w-full max-w-lg">{children}</div>
+      </div>
+      <footer className="shrink-0 text-[11px] uppercase tracking-[0.16em] text-white/35">
+        Proceso seguro · Firma con INE
+      </footer>
     </main>
   );
 }
@@ -135,14 +152,14 @@ function StateCard({
   title: string;
   message: string;
 }) {
-  const ring =
-    tone === "ok" ? "border-emerald-200" : tone === "warn" ? "border-amber-200" : "border-red-200";
-  const dot = tone === "ok" ? "bg-emerald-500" : tone === "warn" ? "bg-amber-500" : "bg-red-500";
+  const dot = tone === "ok" ? "bg-[#159f6d]" : tone === "warn" ? "bg-[#d8a72a]" : "bg-[#d9584a]";
   return (
-    <div className={["rounded-2xl border bg-surface p-6 text-center shadow-sm", ring].join(" ")}>
-      <span className={["mx-auto block h-3 w-3 rounded-full", dot].join(" ")} />
-      <h1 className="mt-3 text-lg font-semibold text-text-primary">{title}</h1>
-      <p className="mt-2 text-sm text-text-muted">{message}</p>
+    <div>
+      <span className={["block h-3 w-3 rounded-full", dot].join(" ")} aria-hidden="true" />
+      <h1 className="mt-5 font-display text-3xl font-bold leading-[1.05] tracking-[-0.02em] text-white sm:text-4xl">
+        {title}
+      </h1>
+      <p className="mt-4 max-w-md text-[15px] leading-relaxed text-white/60">{message}</p>
     </div>
   );
 }

@@ -43,13 +43,13 @@ export function SendConfirmation({
         </div>
 
         {error && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div className="note note-danger mt-4 py-1 text-sm text-danger">
             {error}
           </div>
         )}
 
         {!canSend && (
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <div className="note note-warning mt-4 py-1 text-sm text-warning">
             Tu rol no permite enviar mensajes. Necesitas el rol de operaciones.
           </div>
         )}

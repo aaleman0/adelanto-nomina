@@ -29,9 +29,9 @@ export default async function ImportsPage() {
     <AppShell>
       <PageHeader title="Importaciones" />
       {importsResult.setupError ? (
-        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <section className="note note-warning py-1 text-sm text-warning">
           <p className="font-medium">Falta configurar Supabase local</p>
-          <p className="mt-1 text-amber-700">Configura SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY para ver importaciones.</p>
+          <p className="mt-1 text-warning">Configura SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY para ver importaciones.</p>
         </section>
       ) : null}
       <ImportUploadForm />

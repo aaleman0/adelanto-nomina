@@ -11,7 +11,7 @@ configuración. Detalle por tema en [Configuración](configuracion.md),
 
 ---
 
-## Estado actual — resumen (act. 2026-07-30)
+## Estado actual — resumen (act. 2026-08-26)
 
 El **flujo completo está terminado y probado** en código (importar → WhatsApp →
 contrato EasyLex → firma → webhook → entrega del PDF al empleado → backoffice).
@@ -33,6 +33,41 @@ Lo que falta es **aprovisionamiento y despliegue**.
 - [ ] Montar credenciales de Google (`google_oauth_client.json` + `token.json`) en el contenedor — sin ellas no se genera ningún contrato.
 
 > **Hechos 2026-07-31:** bug de formato del monto en la plantilla **corregido**; identidad del acreedor **convertida a placeholders editables** con respaldo. Verificación con `scripts/verify-contracts-batch.ts` (veredicto `LIMPIO`). Detalle en [EasyLex y contratos](easylex-contratos.md#plantilla-del-contrato-placeholders-y-arreglos).
+
+### Estado operativo actual para pruebas (2026-08-26)
+
+Hoy el flujo ya se considera **funcional para pruebas operativas manuales**:
+
+- [x] Se envía el mensaje de WhatsApp.
+- [x] El botón abre el link correcto del firmante en EasyLex.
+- [x] El contrato se genera con el acreedor, banco, cuenta, CLABE y testigos.
+- [x] El cálculo económico del contrato ya quedó consistente con el texto legal:
+      `total = monto + (monto * 0.07) + (monto * 0.07 * 0.16)`.
+- [x] Ese total ya sale bien en:
+      - `Monto total del pago`
+      - `BUENO POR`
+      - el pagaré
+
+### Pendientes que NO bloquean la prueba manual actual
+
+- [ ] **Confirmación automática de firma en portal/backoffice.** Por ahora la firma
+      se valida manualmente en EasyLex. Para automatizarla sigue pendiente el
+      callback público de EasyLex (`EASYLEX_CALLBACK_URL`) y el secreto del webhook.
+- [ ] **Calidad de datos del empleado.** Algunos contratos de prueba aún pueden
+      traer datos personales incorrectos o heredados del dataset (ej. fecha de
+      nacimiento). No rompe el flujo técnico, pero sí la fidelidad documental.
+- [ ] **Formato visual y redacción fina del contrato.** Siguen pendientes ajustes
+      no bloqueantes en formato de fechas y ciertos textos históricos de la
+      plantilla (por ejemplo cláusulas donde hoy la redacción es funcional pero
+      mejorable).
+
+### Qué sigue cuando se retome esta etapa
+
+1. Configurar `EASYLEX_CALLBACK_URL` público.
+2. Configurar `EASYLEX_WEBHOOK_SECRET` y el mismo secreto en EasyLex.
+3. Ejecutar una firma real y verificar cambio automático a `firmado` en DB.
+4. Corregir/normalizar campos personales del empleado (especialmente
+   `fecha_nacimiento`) para que el contrato quede fino, no solo funcional.
 
 *WhatsApp:*
 - [ ] Token **permanente** (System User); el temporal caduca sin aviso.

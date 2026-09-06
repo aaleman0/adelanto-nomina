@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { NotificationBell } from "@/components/ui/notifications";
 import { UserControls } from "./user-controls";
 
@@ -15,108 +15,225 @@ export type NavSection = { section: string; minimumRole?: UserRole };
 export type NavEntry = NavItem | NavGroup | NavSection;
 const isGroup = (entry: NavEntry): entry is NavGroup => "items" in entry;
 const isSection = (entry: NavEntry): entry is NavSection => "section" in entry;
-const SIDEBAR_STORAGE_KEY = "backoffice-sidebar-collapsed";
-const sidebarListeners = new Set<() => void>();
-
-function subscribeToSidebar(callback: () => void) {
-  sidebarListeners.add(callback);
-  window.addEventListener("storage", callback);
-  return () => {
-    sidebarListeners.delete(callback);
-    window.removeEventListener("storage", callback);
-  };
-}
-
-function getSidebarSnapshot() {
-  return localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true";
-}
-
-function getSidebarServerSnapshot() {
-  return false;
-}
-
-function setSidebarCollapsed(collapsed: boolean) {
-  localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
-  sidebarListeners.forEach((listener) => listener());
-}
 
 type SidebarUser = { displayName?: string; email: string; avatarUrl?: string; role?: UserRole };
-
-export function SidebarFrame({ children, navigation, user }: { children: React.ReactNode; navigation: NavEntry[]; user: SidebarUser }) {
-  const collapsed = useSyncExternalStore(subscribeToSidebar, getSidebarSnapshot, getSidebarServerSnapshot);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const toggle = () => setSidebarCollapsed(!collapsed);
-  return (
-    <div className="app-viewport flex bg-background">
-      <aside className={`hidden h-full shrink-0 flex-col border-r border-[var(--sidebar-border)] bg-sidebar text-sidebar-text transition-[width] duration-300 lg:flex ${collapsed ? "w-[72px]" : "w-[224px]"}`}>
-        <div className={`flex h-16 shrink-0 items-center border-b border-[var(--sidebar-border)] ${collapsed ? "justify-center" : "justify-end px-4"}`}>
-          <MenuButton open={!collapsed} onClick={toggle} label={collapsed ? "Expandir menú" : "Colapsar menú"} />
-        </div>
-        <nav className={`panel-scroll flex flex-1 flex-col gap-1 py-4 ${collapsed ? "px-3" : "px-3"}`} aria-label="Navegación principal">
-          {navigation.map((entry, index) => isSection(entry) ? <SectionHeader key={`s-${entry.section}`} section={entry} collapsed={collapsed} first={index === 0} /> : isGroup(entry) ? <Group key={entry.prefix} group={entry} collapsed={collapsed} /> : <Item key={entry.href} item={entry} collapsed={collapsed} />)}
-        </nav>
-        <div className={`shrink-0 border-t border-[var(--sidebar-border)] p-3 ${collapsed ? "flex justify-center" : ""}`}><SidebarFooter collapsed={collapsed} user={user} /></div>
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-14 shrink-0 items-center border-b border-border bg-surface px-4 lg:hidden">
-          <MenuButton open={mobileOpen} onClick={() => setMobileOpen((current) => !current)} label={mobileOpen ? "Cerrar menú" : "Abrir menú"} dark />
-          <span className="ml-3 font-display text-sm font-semibold text-text-primary">Centro de operación</span>
-        </div>
-        {mobileOpen ? (
-          <nav className="absolute inset-x-0 top-14 z-40 max-h-[calc(100dvh-3.5rem)] overflow-auto border-b border-[var(--sidebar-border)] bg-sidebar p-3 shadow-xl lg:hidden">
-            {navigation.map((entry, index) => isSection(entry) ? <SectionHeader key={`s-${entry.section}`} section={entry} collapsed={false} first={index === 0} /> : isGroup(entry) ? <Group key={entry.prefix} group={entry} collapsed={false} onNavigate={() => setMobileOpen(false)} /> : <Item key={entry.href} item={entry} collapsed={false} onNavigate={() => setMobileOpen(false)} />)}
-            <div className="mt-3 border-t border-[var(--sidebar-border)] pt-3"><SidebarFooter collapsed={false} user={user} /></div>
-          </nav>
-        ) : null}
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function SidebarFooter({ collapsed, user }: { collapsed: boolean; user: SidebarUser }) {
-  return <div className={`flex items-center ${collapsed ? "flex-col gap-2" : "gap-2"}`}><NotificationBell placement="sidebar" /><UserControls collapsed={collapsed} displayName={user.displayName} email={user.email} avatarUrl={user.avatarUrl} role={user.role} /></div>;
-}
-
-function SectionHeader({ section, collapsed, first }: { section: NavSection; collapsed: boolean; first: boolean }) {
-  // Colapsado no hay espacio para el texto: se muestra un separador fino, salvo
-  // el primero (arriba del todo no hace falta).
-  if (collapsed) {
-    return first ? null : <div className="my-2 border-t border-white/10" />;
-  }
-  return (
-    <p className={`px-3 pb-1 font-data text-[10px] uppercase tracking-[.16em] text-sidebar-text-muted ${first ? "pt-0" : "pt-4"}`}>
-      {section.section}
-    </p>
-  );
-}
-
-function Item({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boolean; onNavigate?: () => void }) {
-  const pathname = usePathname();
-  const active = isItemActive(pathname, item.href);
-  return <Link href={item.href} onClick={onNavigate} title={collapsed ? item.label : undefined} className={`group relative flex h-11 items-center rounded-lg transition ${collapsed ? "justify-center" : "gap-3 px-3"} ${active ? "bg-sidebar-active text-sidebar-text-active" : "text-sidebar-text-muted hover:bg-sidebar-hover hover:text-white"}`}><Icon name={item.icon} />{collapsed ? null : <span className="truncate text-[13px] font-semibold">{item.label}</span>}{active ? <span className="absolute -left-3 h-5 w-0.5 bg-[var(--color-2)]" /> : null}</Link>;
-}
 
 function isItemActive(pathname: string, href: string) {
   if (["/", "/whatsapp", "/settings", "/settings/whatsapp"].includes(href)) return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function Group({ group, collapsed, onNavigate }: { group: NavGroup; collapsed: boolean; onNavigate?: () => void }) {
+const nn = (n: number) => String(n).padStart(2, "0");
+const staggerVar = (i: number) => ({ "--i": i } as CSSProperties);
+
+/**
+ * Shell editorial: barra superior mínima (marca · Menú) + menú a pantalla
+ * completa (tipo Grafik) con entrada escalonada y salida animada. Conserva el
+ * nombre y la firma para no tocar el resto del app.
+ */
+export function SidebarFrame({ children, navigation, user }: { children: React.ReactNode; navigation: NavEntry[]; user: SidebarUser }) {
   const pathname = usePathname();
-  const active = group.items.some((item) => isItemActive(pathname, item.href));
-  const [open, setOpen] = useState(active);
-  const expanded = active || open;
-  if (collapsed) return <Link href={group.items[0].href} title={group.label} className={`flex h-11 items-center justify-center rounded-lg ${active ? "bg-sidebar-active text-sidebar-text-active" : "text-sidebar-text-muted hover:bg-sidebar-hover hover:text-white"}`}><Icon name={group.icon} /></Link>;
-  return <div><button type="button" onClick={() => setOpen((current) => !current)} className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left transition ${active ? "bg-white/10 text-white" : "text-sidebar-text-muted hover:bg-sidebar-hover hover:text-white"}`}><Icon name={group.icon} /><span className="flex-1 text-[13px] font-semibold">{group.label}</span><svg className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg></button>{expanded ? <div className="ml-5 border-l border-white/10 py-1 pl-3">{group.items.map((item) => <Item key={item.href} item={item} collapsed={false} onNavigate={onNavigate} />)}</div> : null}</div>;
+  // `mounted` mantiene el overlay en el DOM durante la animación de salida; el
+  // propio overlay pide su desmontaje vía onExited al terminar el fade.
+  const [mounted, setMounted] = useState(false);
+
+  return (
+    <div className="app-viewport flex flex-col bg-background text-text-primary">
+      <header className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4 sm:px-8 lg:px-14">
+        <Link href="/" className="font-display text-[15px] font-bold uppercase tracking-[0.06em] text-text-primary">
+          Adelanto Nómina<sup className="text-[0.6em] font-semibold">®</sup>
+        </Link>
+        <div className="flex items-center gap-4">
+          <NotificationBell placement="sidebar" />
+          <button
+            type="button"
+            onClick={() => setMounted(true)}
+            aria-haspopup="dialog"
+            aria-expanded={mounted}
+            className="inline-flex items-center gap-2 text-[14px] font-semibold uppercase tracking-[0.14em] text-text-primary hover:text-primary"
+          >
+            <span className="inline-block h-2.5 w-2.5 bg-current" aria-hidden="true" />
+            Menú
+          </button>
+        </div>
+      </header>
+
+      {children}
+
+      {mounted ? (
+        <MenuOverlay navigation={navigation} user={user} pathname={pathname} onExited={() => setMounted(false)} />
+      ) : null}
+    </div>
+  );
 }
 
-function MenuButton({ open, onClick, label, dark = false }: { open: boolean; onClick: () => void; label: string; dark?: boolean }) {
-  return <button type="button" onClick={onClick} aria-label={label} aria-expanded={open} className={`relative grid h-10 w-10 place-items-center rounded-lg transition ${dark ? "text-text-primary hover:bg-surface-muted" : "text-sidebar-text-muted hover:bg-white/10 hover:text-white"}`}><span className="relative h-4 w-5"><span className={`absolute left-0 top-0 h-0.5 w-5 rounded bg-current transition-all duration-300 ${open ? "top-[7px] rotate-45" : ""}`} /><span className={`absolute left-0 top-[7px] h-0.5 w-5 rounded bg-current transition-all duration-300 ${open ? "scale-x-0 opacity-0" : ""}`} /><span className={`absolute left-0 top-[14px] h-0.5 w-5 rounded bg-current transition-all duration-300 ${open ? "top-[7px] -rotate-45" : ""}`} /></span></button>;
+function MenuOverlay({
+  navigation,
+  user,
+  pathname,
+  onExited,
+}: {
+  navigation: NavEntry[];
+  user: SidebarUser;
+  pathname: string;
+  onExited: () => void;
+}) {
+  const [visible, setVisible] = useState(false);
+
+  // Enter: pintar una vez en opacidad 0 y luego activar la transición (doble
+  // rAF). Esc cierra. Se bloquea el scroll del fondo mientras el menú vive.
+  useEffect(() => {
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setVisible(true));
+    });
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setVisible(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, []);
+
+  const requestClose = () => setVisible(false);
+
+  // Precalcula las filas con su índice de escalonado (i) y el número de destino.
+  const rows: Array<
+    | { kind: "section"; key: string; label: string; i: number }
+    | { kind: "group"; key: string; group: NavGroup; no: number; i: number }
+    | { kind: "item"; key: string; item: NavItem; no: number; i: number }
+  > = [];
+  let stagger = 1;
+  let dest = 0;
+  for (const entry of navigation) {
+    const i = stagger++;
+    if (isSection(entry)) rows.push({ kind: "section", key: `s-${entry.section}`, label: entry.section, i });
+    else if (isGroup(entry)) rows.push({ kind: "group", key: entry.prefix, group: entry, no: ++dest, i });
+    else rows.push({ kind: "item", key: entry.href, item: entry, no: ++dest, i });
+  }
+  const footerI = stagger;
+
+  return (
+    <div
+      className="menu-overlay fixed inset-0 z-50 flex flex-col bg-background text-text-primary"
+      data-visible={visible ? "true" : "false"}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Menú"
+      onTransitionEnd={(e) => {
+        if (e.propertyName === "opacity" && e.target === e.currentTarget && !visible) onExited();
+      }}
+    >
+      <header className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4 sm:px-8 lg:px-14">
+        <span className="font-display text-[15px] font-bold uppercase tracking-[0.06em]">
+          Adelanto Nómina<sup className="text-[0.6em] font-semibold">®</sup>
+        </span>
+        <button
+          type="button"
+          onClick={requestClose}
+          className="inline-flex items-center gap-2 text-[14px] font-semibold uppercase tracking-[0.14em] transition-colors hover:text-primary"
+        >
+          <span aria-hidden="true" className="text-lg leading-none">✕</span>
+          Cerrar
+        </button>
+      </header>
+
+      <div className="panel-scroll min-h-0 flex-1">
+        <div className="flex min-h-full flex-col justify-center px-5 py-8 sm:px-8 lg:px-14">
+          <nav aria-label="Secciones" className="w-full max-w-4xl">
+            {rows.map((row) =>
+              row.kind === "section" ? (
+                <div key={row.key} className="menu-stagger mt-8 mb-1 flex items-center gap-4 first:mt-0" style={staggerVar(row.i)}>
+                  <span className="whitespace-nowrap text-[11px] uppercase tracking-[0.18em] text-text-muted">{row.label}</span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              ) : row.kind === "group" ? (
+                <MenuGroupRow key={row.key} group={row.group} no={row.no} i={row.i} pathname={pathname} onNavigate={requestClose} />
+              ) : (
+                <MenuItemRow
+                  key={row.key}
+                  item={row.item}
+                  no={row.no}
+                  i={row.i}
+                  active={isItemActive(pathname, row.item.href)}
+                  onNavigate={requestClose}
+                />
+              ),
+            )}
+          </nav>
+        </div>
+      </div>
+
+      <footer className="menu-stagger flex shrink-0 items-center justify-between gap-4 border-t border-border px-5 py-4 sm:px-8 lg:px-14" style={staggerVar(footerI)}>
+        <UserControls collapsed={false} displayName={user.displayName} email={user.email} avatarUrl={user.avatarUrl} role={user.role} />
+        <span className="hidden shrink-0 text-xs text-text-muted sm:inline">
+          <kbd className="border border-border-strong px-1.5 py-0.5 font-sans text-[11px] not-italic text-text-primary">Esc</kbd>
+          <span className="ml-2">para cerrar</span>
+        </span>
+      </footer>
+    </div>
+  );
 }
 
-function Icon({ name }: { name: string }) {
-  const paths: Record<string, string> = { D: "M4 5h6v6H4V5Zm10 0h6v4h-6V5ZM4 15h6v4H4v-4Zm10-2h6v6h-6v-6Z", I: "M12 3v12m0 0 4-4m-4 4-4-4M5 19h14", C: "M6 3h8l4 4v14H6V3Zm8 0v5h4M9 12h6M9 16h6", W: "M5 18l-1 3 3-1a9 9 0 1 0-2-2Zm4-7h.01M12 11h.01M15 11h.01", S: "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm0-12v2m0 13v2m8.5-8.5h-2m-13 0h-2m14.5-6-1.5 1.5m-9 9L6 18m12 0-1.5-1.5m-9-9L6 6" };
-  return <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name] ?? paths.D} /></svg>;
+function MenuItemRow({ item, no, i, active, onNavigate }: { item: NavItem; no: number; i: number; active: boolean; onNavigate: () => void }) {
+  return (
+    <div className="menu-stagger" style={staggerVar(i)}>
+      <Link href={item.href} onClick={onNavigate} className="menu-navitem group flex items-baseline gap-5 py-2">
+        <span className={["min-w-[2.6ch] pt-[0.4em] text-[13px] font-medium tabular-nums", active ? "text-primary" : "text-text-disabled group-hover:text-primary"].join(" ")}>
+          {nn(no)}
+        </span>
+        <span
+          className={[
+            "font-display text-[clamp(2rem,4.6vw,3.15rem)] font-bold leading-[1.04] tracking-[-0.02em]",
+            active ? "text-primary" : "text-text-primary group-hover:text-primary",
+          ].join(" ")}
+        >
+          {item.label}
+        </span>
+        {active ? (
+          <span className="inline-flex items-center gap-2 self-center whitespace-nowrap pl-1 text-[11px] uppercase tracking-[0.12em] text-primary">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
+            en pantalla
+          </span>
+        ) : (
+          <span className="menu-arrow self-center font-display text-2xl text-primary" aria-hidden="true">→</span>
+        )}
+      </Link>
+    </div>
+  );
+}
+
+function MenuGroupRow({ group, no, i, pathname, onNavigate }: { group: NavGroup; no: number; i: number; pathname: string; onNavigate: () => void }) {
+  const active = group.items.some((it) => isItemActive(pathname, it.href));
+  return (
+    <div className="menu-stagger" style={staggerVar(i)}>
+      <div className="flex items-baseline gap-5 py-2">
+        <span className={["min-w-[2.6ch] pt-[0.4em] text-[13px] font-medium tabular-nums", active ? "text-primary" : "text-text-disabled"].join(" ")}>{nn(no)}</span>
+        <span className={["font-display text-[clamp(2rem,4.6vw,3.15rem)] font-bold leading-[1.04] tracking-[-0.02em]", active ? "text-primary" : "text-text-primary"].join(" ")}>
+          {group.label}
+        </span>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-x-6 gap-y-1 pl-[calc(2.6ch+1.25rem)]">
+        {group.items.map((sub) => {
+          const subActive = isItemActive(pathname, sub.href);
+          return (
+            <Link
+              key={sub.href}
+              href={sub.href}
+              onClick={onNavigate}
+              className={["py-1 text-[15px] transition-colors hover:text-primary", subActive ? "font-semibold text-text-primary" : "text-text-muted"].join(" ")}
+            >
+              {sub.label}
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

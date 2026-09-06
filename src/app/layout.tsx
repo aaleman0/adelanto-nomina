@@ -1,19 +1,21 @@
 import type { Metadata } from "next";
-import { Manrope, Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
+import { Archivo, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/toast";
 
-const manrope = Manrope({
+// Grotesca suiza, una sola familia en toda la jerarquía (peso/tamaño hacen el
+// trabajo). Mono solo para datos técnicos puntuales (RFC, ids).
+const archivo = Archivo({
   subsets: ["latin"],
-  variable: "--font-manrope",
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-archivo",
   display: "swap",
 });
 
-const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk", display: "swap" });
 const plexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Backoffice Adelantos",
+  title: "Adelanto Nómina",
   description: "Panel operativo para adelantos de nómina.",
 };
 
@@ -23,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`h-full antialiased ${manrope.variable} ${spaceGrotesk.variable} ${plexMono.variable}`}>
+    <html lang="es" className={`h-full antialiased ${archivo.variable} ${plexMono.variable}`}>
       <body className="min-h-full">
         <ToastProvider>{children}</ToastProvider>
       </body>

@@ -16,7 +16,7 @@ export function CopyLinkButton({ value }: { value: string }) {
       className={[
         "inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition-all",
         copied
-          ? "border-emerald-300 bg-emerald-100 text-emerald-700"
+          ? "border-[var(--success-border)] bg-surface text-success"
           : "border-border bg-surface text-text-primary hover:border-primary-border hover:bg-primary-light hover:text-primary",
       ].join(" ")}
       onClick={copy}

@@ -16,8 +16,8 @@ export function SendResult({ result, templateName, onNewSend }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className={`p-6 text-center ${queued || allOk ? "bg-emerald-50/30 border-emerald-200" : "bg-amber-50/30 border-amber-200"}`}>
-        <p className={`text-lg font-medium ${queued || allOk ? "text-emerald-800" : "text-amber-800"}`}>
+      <Card className={`p-6 text-center ${queued || allOk ? "border-[var(--success-border)]" : "border-[var(--warning-border)]"}`}>
+        <p className={`text-lg font-medium ${queued || allOk ? "text-success" : "text-warning"}`}>
           {queued ? "Envíos encolados" : allOk ? "Mensajes enviados" : "Envío completado con errores"}
         </p>
         {queued ? (
@@ -30,9 +30,9 @@ export function SendResult({ result, templateName, onNewSend }: Props) {
               {result.sent} enviado{result.sent !== 1 ? "s" : ""} · {result.failed} error{result.failed !== 1 ? "es" : ""}
             </p>
             <div className="mt-4 grid grid-cols-3 gap-3">
-              <Stat label="Enviados" value={result.sent} color={allOk ? "text-emerald-700" : "text-amber-700"} />
+              <Stat label="Enviados" value={result.sent} color={allOk ? "text-success" : "text-warning"} />
               <Stat label="Procesados" value={result.total} />
-              <Stat label="Errores" value={result.failed} color={result.failed > 0 ? "text-red-600" : "text-text-muted"} />
+              <Stat label="Errores" value={result.failed} color={result.failed > 0 ? "text-danger" : "text-text-muted"} />
             </div>
           </>
         )}
@@ -46,7 +46,7 @@ export function SendResult({ result, templateName, onNewSend }: Props) {
             {result.errors.map((e, i) => (
               <div key={i} className="flex gap-4 py-2 text-xs">
                 <span className="w-28 shrink-0 font-mono text-text-muted">{e.rfc ?? e.employeeId}</span>
-                <span className="text-red-600">{e.error}</span>
+                <span className="text-danger">{e.error}</span>
               </div>
             ))}
           </div>

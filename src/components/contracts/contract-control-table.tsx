@@ -143,7 +143,7 @@ export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
                   </DataTableCell>
                   <DataTableCell>
                     <Link
-                      className="inline-flex h-8 items-center rounded-lg border border-primary-border bg-primary-light px-3 text-xs font-semibold text-primary transition hover:border-primary hover:bg-white hover:text-primary-hover"
+                      className="inline-flex h-8 items-center rounded-lg border border-primary-border bg-primary-light px-3 text-xs font-semibold text-primary transition hover:border-primary hover:bg-surface hover:text-primary-hover"
                       href={`/contracts/${row.employee_id}`}
                     >
                       Abrir expediente
@@ -165,7 +165,7 @@ export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
       <div className="grid gap-3 p-4 lg:hidden">
         {rows.length > 0 ? rows.map((row) => (
           <Link
-            className={`rounded-lg border border-border border-l-4 bg-surface p-4 text-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-sm ${getPriorityBorder(row.operational_status)}`}
+            className={`rounded-lg border border-border border-l-4 bg-surface p-4 text-sm transition hover:border-primary ${getPriorityBorder(row.operational_status)}`}
             href={`/contracts/${row.employee_id}`}
             key={row.employee_id}
           >
@@ -191,11 +191,11 @@ export function ContractControlTable({ rows }: { rows: ContractControlRow[] }) {
             <span className="text-sm font-medium text-text-primary">{selectedCount} seleccionado{selectedCount !== 1 ? "s" : ""}</span>
             <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-text-muted underline hover:text-text-primary">Limpiar</button>
             {bulk.status === "done" && (
-              <span className={["text-xs", bulk.sent > 0 ? "text-emerald-600" : "text-amber-700"].join(" ")}>
+              <span className={["text-xs", bulk.sent > 0 ? "text-success" : "text-warning"].join(" ")}>
                 {bulk.sent > 0 ? `Enviado a ${bulk.sent}${bulk.failed > 0 ? ` · ${bulk.failed} con error` : ""}.` : "No se pudo enviar."}
               </span>
             )}
-            {bulk.status === "error" && <span className="text-xs text-red-600">{bulk.message}</span>}
+            {bulk.status === "error" && <span className="text-xs text-danger">{bulk.message}</span>}
           </div>
           <Button
             onClick={sendSelected}

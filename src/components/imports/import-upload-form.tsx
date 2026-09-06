@@ -61,7 +61,7 @@ export function ImportUploadForm() {
       <div className="flex items-center gap-3"><span className="font-data grid h-7 w-7 place-items-center rounded-full bg-[var(--color-5)] text-xs text-white">01</span><h2 className="font-display text-lg font-semibold text-text-primary">Selecciona el archivo</h2></div>
 
       <form className="mt-4 flex flex-col gap-4" onSubmit={handleSubmit}>
-        <label className="group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-white/40 px-6 py-10 text-center transition hover:-translate-y-0.5 hover:border-primary hover:bg-white hover:shadow-sm">
+        <label className="group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface px-6 py-10 text-center transition hover:border-primary hover:bg-surface">
           {fileName ? (
             <>
               <p className="font-medium text-text-primary">{fileName}</p>
@@ -85,7 +85,7 @@ export function ImportUploadForm() {
 
         <div className="border-t border-border pt-4"><p className="mb-3 text-xs text-text-muted">Validaremos estructura, filas y duplicados antes de aplicar cualquier dato.</p><Button wave={!isUploading && canImport} className="w-full sm:w-fit" disabled={isUploading || !canImport} type="submit" title={canImport ? undefined : "Requiere rol operaciones."}>
           {isUploading ? "Validando..." : "Subir y validar"}
-        </Button>{!canImport && <p className="mt-2 text-xs text-amber-700">Tu rol no permite importar. Necesitas el rol de operaciones.</p>}</div>
+        </Button>{!canImport && <p className="mt-2 text-xs text-warning">Tu rol no permite importar. Necesitas el rol de operaciones.</p>}</div>
       </form>
 
       {result ? <ImportResultPanel result={result} /> : null}
@@ -97,9 +97,9 @@ export function ImportUploadForm() {
 function ImportResultPanel({ result }: { result: ImportResult }) {
   if (result.error) {
     return (
-      <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+      <div className="note note-danger mt-4 py-1 text-sm text-danger">
         <p className="font-medium">No se pudo validar el archivo</p>
-        <p className="mt-1 text-red-700">{result.error}</p>
+        <p className="mt-1 text-danger">{result.error}</p>
       </div>
     );
   }
@@ -108,11 +108,11 @@ function ImportResultPanel({ result }: { result: ImportResult }) {
   const isOk = invalidRows === 0;
 
   return (
-    <div className={["mt-4 rounded-xl border p-4", isOk ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"].join(" ")}>
-      <p className={["text-sm font-medium", isOk ? "text-emerald-900" : "text-amber-900"].join(" ")}>
+    <div className={["note mt-4 py-1", isOk ? "note-success" : "note-warning"].join(" ")}>
+      <p className={["text-sm font-medium", isOk ? "text-success" : "text-warning"].join(" ")}>
         {isOk ? "Archivo validado correctamente" : "Validación con errores parciales"}
       </p>
-      <p className={["mt-1 text-sm", isOk ? "text-emerald-700" : "text-amber-700"].join(" ")}>
+      <p className={["mt-1 text-sm", isOk ? "text-success" : "text-warning"].join(" ")}>
         {isOk
           ? "Listo para aplicar. Revisa el resumen antes de continuar."
           : "Corrige el CSV y vuelve a subirlo, o aplica solo las filas válidas."}
@@ -126,9 +126,9 @@ function ImportResultPanel({ result }: { result: ImportResult }) {
       </div>
 
       {result.missingColumns && result.missingColumns.length > 0 ? (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
-          <p className="font-medium text-red-800">Columnas faltantes</p>
-          <p className="mt-1 text-red-700">{result.missingColumns.join(", ")}</p>
+        <div className="note note-danger mt-4 py-1 text-sm">
+          <p className="font-medium text-danger">Columnas faltantes</p>
+          <p className="mt-1 text-danger">{result.missingColumns.join(", ")}</p>
         </div>
       ) : null}
     </div>

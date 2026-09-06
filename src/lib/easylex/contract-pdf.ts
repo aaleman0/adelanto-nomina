@@ -3,6 +3,7 @@ import {
   type ContractData as ContractPlaceholders,
 } from "@/lib/google/contract-pdf";
 import type { CompanySettings } from "@/lib/company-settings";
+import { calculateLoanTotals } from "@/lib/contracts/loan-totals";
 import { montoEnLetra } from "@/lib/easylex/monto-en-letra";
 
 /* ─── Types ─── */
@@ -69,6 +70,7 @@ const withDefault = (value: string | undefined, fallback: string) => value?.trim
 export function buildContractPlaceholders(data: ContractData): ContractPlaceholders {
   const { dia, mes, anio } = formatDate(data.fechaFirma);
   const cs = data.companySettings;
+  const totals = calculateLoanTotals(data.monto);
 
   return {
     nombre_completo: data.nombreCompleto,
@@ -78,8 +80,10 @@ export function buildContractPlaceholders(data: ContractData): ContractPlacehold
     fecha_nacimiento: data.fechaNacimiento ?? "",
     rfc: data.rfc,
     domicilio: data.domicilio ?? "",
-    monto_numero: formatMonto(data.monto),
-    monto_letra: montoEnLetra(data.monto),
+    monto_numero: formatMonto(totals.principal),
+    monto_letra: montoEnLetra(totals.principal),
+    total_pago_numero: formatMonto(totals.total),
+    total_pago_letra: montoEnLetra(totals.total),
     banco_acreedor: cs.acreedor_banco ?? "",
     cuenta_acreedor: cs.acreedor_cuenta ?? "",
     clabe_acreedor: cs.acreedor_clabe ?? "",

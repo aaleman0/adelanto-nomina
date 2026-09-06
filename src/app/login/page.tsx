@@ -25,73 +25,47 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const errorMessage = params?.error ? decodeURIComponent(params.error) : null;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4">
-      <div className="w-full max-w-sm">
-        {/* Logo / marca */}
-        <div className="mb-8 text-center">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 shadow-lg shadow-indigo-200 mb-4">
-            <svg
-              className="h-7 w-7 text-white"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.75}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-            Backoffice Adelantos
-          </h1>
-          <p className="mt-1.5 text-sm text-[var(--text-muted)]">
-            Accede con tu cuenta corporativa de Google.
-          </p>
-        </div>
+    <div className="flex min-h-screen flex-col bg-background text-text-primary">
+      <header className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4 sm:px-8 lg:px-14">
+        <span className="font-display text-[15px] font-bold uppercase tracking-[0.06em]">
+          Adelanto Nómina<sup className="text-[0.6em] font-semibold">®</sup>
+        </span>
+        <span className="text-[11px] uppercase tracking-[0.18em] text-text-muted">Acceso</span>
+      </header>
 
-        {/* Card */}
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-sm">
+      <main className="flex flex-1 items-center px-5 py-16 sm:px-8 lg:px-14">
+        <div className="w-full max-w-xl">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-text-muted">Panel interno</p>
+          <h1 className="mt-4 font-display text-5xl font-bold leading-[1.02] tracking-[-0.02em] sm:text-6xl">
+            Backoffice de adelantos
+          </h1>
+          <p className="mt-5 max-w-md text-[15px] leading-relaxed text-text-muted">
+            Accede con tu cuenta corporativa de Google. Solo las cuentas autorizadas tienen acceso al equipo operativo.
+          </p>
+
           {/* Error de configuración del servidor (variables de entorno faltantes) */}
-          {setupError && (
-            <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-              <p className="text-sm font-semibold text-amber-800">Configuración incompleta</p>
-              <p className="mt-1 text-xs text-amber-700 font-mono whitespace-pre-wrap break-all">
-                {setupError}
-              </p>
+          {setupError ? (
+            <div className="mt-8 border-l-2 border-danger pl-4">
+              <p className="text-sm font-semibold text-danger">Configuración incompleta</p>
+              <p className="mt-1 whitespace-pre-wrap break-all font-mono text-xs text-text-muted">{setupError}</p>
             </div>
-          )}
+          ) : null}
 
           {/* Error de autenticación */}
-          {errorMessage && (
-            <div className="mb-6 flex items-start gap-3 rounded-xl border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3">
-              <svg
-                className="h-4 w-4 text-[var(--danger)] mt-0.5 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-              <p className="text-sm text-[var(--danger)]">{errorMessage}</p>
+          {errorMessage ? (
+            <div className="mt-8 border-l-2 border-danger pl-4">
+              <p className="text-sm text-danger">{errorMessage}</p>
             </div>
-          )}
+          ) : null}
 
-          {/* Botón Google */}
-          <form>
+          {/* Botón Google como control editorial (subrayado, sin caja) */}
+          <form className="mt-12">
             {/* Pasamos el next como campo oculto para recuperarlo en el action */}
             <input type="hidden" name="next" value={nextPath} />
             <button
               formAction={signInWithGoogle}
               type="submit"
-              className="flex w-full items-center justify-center gap-3 rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-sm font-semibold text-[var(--text-primary)] shadow-sm transition hover:bg-[var(--surface-muted)] hover:border-[var(--border-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] active:scale-[0.98]"
+              className="group inline-flex items-center gap-3 border-b-2 border-text-primary pb-2 text-lg font-semibold text-text-primary transition-colors hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
             >
               {/* Ícono oficial de Google */}
               <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
@@ -113,18 +87,15 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 />
               </svg>
               Continuar con Google
+              <span aria-hidden="true" className="transition-transform group-hover:translate-x-1">→</span>
             </button>
           </form>
-
-          <p className="mt-5 text-center text-xs text-[var(--text-disabled)]">
-            Solo cuentas autorizadas tienen acceso.
-          </p>
         </div>
+      </main>
 
-        <p className="mt-6 text-center text-xs text-[var(--text-disabled)]">
-          Panel interno · Uso exclusivo del equipo operativo
-        </p>
-      </div>
+      <footer className="shrink-0 border-t border-border px-5 py-4 text-[11px] uppercase tracking-[0.16em] text-text-muted sm:px-8 lg:px-14">
+        Uso exclusivo del equipo operativo
+      </footer>
     </div>
   );
 }

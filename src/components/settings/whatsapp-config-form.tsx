@@ -76,7 +76,7 @@ export function WhatsAppConfigForm() {
         <h3 className="text-sm font-medium text-text-muted">Estado de conexión</h3>
         <div className="mt-3 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className={["h-2.5 w-2.5 rounded-full", connStatus === "ok" ? "bg-emerald-500" : connStatus === "error" ? "bg-red-500" : connStatus === "testing" ? "bg-amber-400" : "bg-border"].join(" ")} />
+            <span className={["h-2.5 w-2.5 rounded-full", connStatus === "ok" ? "bg-[var(--success)]" : connStatus === "error" ? "bg-[var(--danger)]" : connStatus === "testing" ? "bg-[var(--warning)]" : "bg-border"].join(" ")} />
             <span className="text-sm text-text-primary">
               {connStatus === "idle" && "Sin verificar"}
               {connStatus === "testing" && "Verificando..."}
@@ -85,7 +85,7 @@ export function WhatsAppConfigForm() {
             </span>
           </div>
           {connInfo && <span className="text-sm text-text-muted">{connInfo.displayName} · {connInfo.phoneNumber}</span>}
-          {connError && <span className="text-sm text-red-600">{connError}</span>}
+          {connError && <span className="text-sm text-danger">{connError}</span>}
           <Button variant="secondary" disabled={connStatus === "testing"} onClick={handleTest}>
             {connStatus === "testing" ? "Verificando..." : "Probar"}
           </Button>
@@ -120,7 +120,7 @@ export function WhatsAppConfigForm() {
           <Field label="Webhook Verify Token" name="webhook_verify_token" placeholder="token" value={form.webhook_verify_token} onChange={handleChange} />
 
           {saveMsg && (
-            <div className={["rounded-lg border px-4 py-3 text-sm", saveMsg.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"].join(" ")}>
+            <div className={["note py-1 text-sm", saveMsg.ok ? "note-success text-success" : "note-danger text-danger"].join(" ")}>
               {saveMsg.text}
             </div>
           )}

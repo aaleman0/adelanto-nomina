@@ -25,7 +25,7 @@ export default async function ContractsPage({ searchParams }: ContractsPageProps
     <AppShell>
       <PageHeader title="Contratos" />
       {result.setupError ? (
-        <section className="rounded-base border border-red-200 bg-red-50 p-5 text-sm text-red-800">
+        <section className="note note-danger py-1 text-sm text-danger">
           <p className="font-semibold">No se pudo leer la vista de control de contratos</p>
           <p className="mt-2">{result.setupError}</p>
         </section>

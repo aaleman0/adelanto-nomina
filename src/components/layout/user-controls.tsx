@@ -25,7 +25,7 @@ export function UserControls({ displayName, email, avatarUrl, role, collapsed = 
 
   return (
     <div className={`min-w-0 ${collapsed ? "" : "flex-1"}`} data-user-controls>
-      <button type="button" aria-expanded={open} aria-haspopup="dialog" aria-label="Abrir perfil" onClick={() => setOpen(true)} className={`flex h-10 items-center rounded-lg text-sidebar-text transition hover:bg-white/10 ${collapsed ? "w-10 justify-center" : "w-full gap-2 px-2"}`}>
+      <button type="button" aria-expanded={open} aria-haspopup="dialog" aria-label="Abrir perfil" onClick={() => setOpen(true)} className={`flex h-10 items-center rounded-lg text-sidebar-text transition hover:bg-sidebar-hover ${collapsed ? "w-10 justify-center" : "w-full gap-2 px-2"}`}>
         <Avatar avatarUrl={avatarUrl} initials={initials} label={displayName ?? email} />
         {collapsed ? null : <><span className="min-w-0 flex-1 truncate text-left text-xs font-semibold">{displayName ?? email ?? "Operador"}</span><svg className="h-3.5 w-3.5 shrink-0 text-sidebar-text-muted" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.17 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" /></svg></>}
       </button>

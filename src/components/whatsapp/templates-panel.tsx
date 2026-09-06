@@ -88,9 +88,9 @@ export function TemplatesPanel() {
       )}
 
       {loadState === "error" && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <div className="note note-danger py-1 text-sm text-danger">
           <p>{loadError}</p>
-          <button onClick={() => { setLoadState("loading"); setLoadError(null); fetchTemplates(); }} className="mt-2 text-sm font-medium text-red-600 underline">
+          <button onClick={() => { setLoadState("loading"); setLoadError(null); fetchTemplates(); }} className="mt-2 text-sm font-medium text-danger underline">
             Reintentar
           </button>
         </div>
@@ -146,9 +146,9 @@ export function TemplatesPanel() {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    APPROVED: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    PENDING: "bg-amber-50 text-amber-700 border-amber-200",
-    REJECTED: "bg-red-50 text-red-700 border-red-200",
+    APPROVED: "text-success border-[var(--success-border)]",
+    PENDING: "text-warning border-[var(--warning-border)]",
+    REJECTED: "text-danger border-[var(--danger-border)]",
     DISABLED: "bg-surface-muted text-text-muted border-border",
   };
   return (

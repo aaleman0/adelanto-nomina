@@ -103,17 +103,17 @@ function ToastItem({ t, onRemove }: { t: Toast; onRemove: (id: string) => void }
   }, [t.id, t.duration, onRemove]);
 
   const styles: Record<ToastVariant, string> = {
-    success: "bg-emerald-50 border-emerald-200 text-emerald-900",
-    error: "bg-red-50 border-red-200 text-red-900",
-    warning: "bg-amber-50 border-amber-200 text-amber-900",
-    info: "bg-blue-50 border-blue-200 text-blue-900",
+    success: "bg-surface border-[var(--success-border)] text-success",
+    error: "bg-surface border-[var(--danger-border)] text-danger",
+    warning: "bg-surface border-[var(--warning-border)] text-warning",
+    info: "bg-surface border-border text-text-primary",
   };
 
   const iconColor: Record<ToastVariant, string> = {
-    success: "text-emerald-600",
-    error: "text-red-600",
-    warning: "text-amber-600",
-    info: "text-blue-600",
+    success: "text-success",
+    error: "text-danger",
+    warning: "text-warning",
+    info: "text-text-muted",
   };
 
   return (

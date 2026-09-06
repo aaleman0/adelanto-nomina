@@ -83,7 +83,7 @@ export function SendWhatsAppButton({
       </Button>
 
       {state.status === "done" && (
-        <p className={["text-xs", state.sent > 0 ? "text-emerald-600" : "text-amber-700"].join(" ")}>
+        <p className={["text-xs", state.sent > 0 ? "text-success" : "text-warning"].join(" ")}>
           {state.sent > 0
             ? `Enviado (${state.sent}).`
             : state.failed > 0
@@ -91,7 +91,7 @@ export function SendWhatsAppButton({
               : "Sin destinatarios elegibles."}
         </p>
       )}
-      {state.status === "error" && <p className="text-xs text-red-600">{state.message}</p>}
+      {state.status === "error" && <p className="text-xs text-danger">{state.message}</p>}
     </div>
   );
 }

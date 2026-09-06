@@ -95,7 +95,7 @@ function BulkDetailInner({ id }: { id: string }) {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+      <div className="note note-danger py-1 text-sm text-danger">
         <p>{error}</p>
         <button
           onClick={() => {
@@ -105,7 +105,7 @@ function BulkDetailInner({ id }: { id: string }) {
               .catch((err: Error) => setError(err.message))
               .finally(() => setLoading(false));
           }}
-          className="mt-2 text-sm font-medium text-red-600 underline"
+          className="mt-2 text-sm font-medium text-danger underline"
         >
           Reintentar
         </button>
@@ -218,7 +218,7 @@ function Metric({ label, value, tone }: { label: string; value: number; tone?: "
   return (
     <div className="rounded-xl border border-border bg-surface p-3 text-center">
       <p className="text-xs text-text-muted">{label}</p>
-      <p className={`mt-1 text-xl font-semibold ${tone === "danger" ? "text-red-600" : "text-text-primary"}`}>{value}</p>
+      <p className={`mt-1 text-xl font-semibold ${tone === "danger" ? "text-danger" : "text-text-primary"}`}>{value}</p>
     </div>
   );
 }

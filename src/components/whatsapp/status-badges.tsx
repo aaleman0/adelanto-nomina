@@ -1,11 +1,11 @@
 /** Shared status badge components for WhatsApp module */
 
 const deliveryStyleMap: Record<string, string> = {
-  sent: "bg-blue-50 text-blue-700 ring-blue-200",
-  delivered: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  read: "bg-indigo-50 text-indigo-700 ring-indigo-200",
-  failed: "bg-red-50 text-red-700 ring-red-200",
-  click: "bg-violet-50 text-violet-700 ring-violet-200",
+  sent: "bg-surface-muted text-text-secondary ring-border",
+  delivered: "text-success ring-[var(--success-border)]",
+  read: "bg-surface-muted text-text-secondary ring-border",
+  failed: "text-danger ring-[var(--danger-border)]",
+  click: "bg-surface-muted text-text-secondary ring-border",
 };
 
 const deliveryLabels: Record<string, string> = {
@@ -28,9 +28,9 @@ export function DeliveryBadge({ status }: { status: string | null }) {
 }
 
 const bulkStatusStyleMap: Record<string, string> = {
-  completed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  sending: "bg-amber-50 text-amber-700 ring-amber-200",
-  failed: "bg-red-50 text-red-700 ring-red-200",
+  completed: "text-success ring-[var(--success-border)]",
+  sending: "text-warning ring-[var(--warning-border)]",
+  failed: "text-danger ring-[var(--danger-border)]",
 };
 
 const bulkStatusLabels: Record<string, string> = {

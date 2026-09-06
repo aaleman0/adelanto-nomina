@@ -52,13 +52,20 @@ describe("buildBulkTemplateMessage", () => {
     expect(result.variables["3"]).toBe("N/A");
   });
 
-  it("añade la cabecera de imagen solo en la plantilla v2", () => {
+  it("añade la cabecera de imagen en las plantillas que la declaran", () => {
     const conImagen = buildBulkTemplateMessage(base, DEFAULT_BULK_TEMPLATE, {
       headerImageUrl: "https://cdn.example.com/x.png",
     });
     expect(conImagen.ok).toBe(true);
     if (!conImagen.ok) return;
     expect(conImagen.components[0].type).toBe("header");
+
+    const v3 = buildBulkTemplateMessage(base, "adelanto_nomina_v3", {
+      headerImageUrl: "https://cdn.example.com/x.png",
+    });
+    expect(v3.ok).toBe(true);
+    if (!v3.ok) return;
+    expect(v3.components[0].type).toBe("header");
 
     // En la plantilla legada la cabecera no está declarada: enviarla haría que
     // Meta rechazara el mensaje.
