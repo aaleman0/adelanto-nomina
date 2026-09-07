@@ -48,9 +48,11 @@ export default async function FirmarPage({ params }: FirmarPageProps) {
         tono="alto"
         titulo="Este enlace ya venció"
         texto={
+          // Antes invitaba a responder "SÍ" para obtener otro enlace. Ya no
+          // aplica: el adelanto solo se puede pedir dentro de la ventana que
+          // abre la empresa al enviar la oferta, no en cualquier momento.
           "Los enlaces de firma duran 2 horas por seguridad.\n\n" +
-          "Para conseguir uno nuevo, responde \u201cSÍ\u201d en el WhatsApp donde te " +
-          "llegó tu adelanto. Te lo mandamos al momento."
+          "Tu empresa te avisará cuando el adelanto vuelva a estar disponible."
         }
       />
     );

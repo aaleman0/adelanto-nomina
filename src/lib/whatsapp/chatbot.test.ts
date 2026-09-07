@@ -7,6 +7,8 @@ import {
   UNKNOWN_NUMBER_MESSAGE,
   variantesDeTelefono,
   mensajeDemasiadoViejo,
+  VENTANA_OFERTA_MS,
+  VENTANA_CERRADA_MESSAGE,
   extractButtonReply,
   siSuccessMessage,
   noMessage,
@@ -225,5 +227,27 @@ describe("mensajeDemasiadoViejo", () => {
 
   it("un reloj adelantado no descarta el mensaje", () => {
     expect(mensajeDemasiadoViejo(String(Math.floor((ahora + 60_000) / 1000)), ahora)).toBe(false);
+  });
+});
+
+/**
+ * La ventana la abre la EMPRESA al enviar la oferta y dura lo mismo que el
+ * enlace. Fuera de ella el empleado no puede pedir el adelanto por su cuenta:
+ * la idea del cliente es ofrecerlo cuando él quiere, no dejarlo disponible de
+ * forma permanente.
+ */
+describe("ventana para pedir el adelanto", () => {
+  it("dura lo mismo que el enlace de firma (una sola fuente de verdad)", () => {
+    expect(VENTANA_OFERTA_MS).toBe(2 * 60 * 60 * 1000);
+  });
+
+  it("el aviso de ventana cerrada no invita a pedirlo por su cuenta", () => {
+    expect(VENTANA_CERRADA_MESSAGE).toMatch(/empresa/i);
+    expect(VENTANA_CERRADA_MESSAGE).not.toMatch(/responde|escribe|toca/i);
+  });
+
+  it("el aviso explica el plazo sin jerga", () => {
+    expect(VENTANA_CERRADA_MESSAGE).toMatch(/2 horas/);
+    expect(VENTANA_CERRADA_MESSAGE).not.toMatch(/webhook|token|API|null/i);
   });
 });

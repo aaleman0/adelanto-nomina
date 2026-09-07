@@ -2,6 +2,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getWhatsAppClient } from "@/lib/whatsapp/client";
 import { normalizePhoneFromCsv } from "@/lib/whatsapp/phone-utils";
 import { parseRequestContractPayload, requestContractFromWhatsApp } from "@/lib/contracts/request-contract";
+import { LINK_TTL_HOURS } from "@/lib/contracts/link-ttl";
 import { logger } from "@/lib/logger";
 
 /**
@@ -62,6 +63,11 @@ export const ALREADY_SIGNED_MESSAGE = (firstName: string) =>
   `✅ Ya firmaste tu contrato${firstName ? `, ${firstName}` : ""}. No necesitas hacer nada más. ¡Gracias!`;
 export const ALREADY_REQUESTED_MESSAGE = (firstName: string) =>
   `Ya solicitaste tu adelanto${firstName ? `, ${firstName}` : ""}. Revisa el mensaje anterior con tu enlace de firma.`;
+export const VENTANA_CERRADA_MESSAGE =
+  "El plazo para pedir este adelanto ya cerró ⏳\n\n" +
+  "La oferta estuvo disponible por 2 horas. Tu empresa te avisará cuando vuelva " +
+  "a estar abierta.";
+
 export const NO_OFFER_MESSAGE =
   "Por ahora no tienes un adelanto disponible para solicitar. Si crees que es un error, contacta a tu empresa.";
 export const GENERATION_ERROR_MESSAGE =
@@ -244,6 +250,44 @@ async function findEmployeeForPhone(from: string): Promise<FoundEmployee | null>
   return { employee: emps[0] as FoundEmployee["employee"], offer: null };
 }
 
+/**
+ * ¿Sigue abierta la ventana para pedir el adelanto?
+ *
+ * Regla del negocio: la ventana la abre la EMPRESA al enviar la oferta y dura lo
+ * mismo que el enlace de firma. Fuera de ella el empleado no puede pedirlo por su
+ * cuenta —la idea es que el adelanto se ofrezca cuando la empresa quiere, no que
+ * quede disponible de forma permanente para pedirlo en cualquier momento—.
+ *
+ * Se mide desde el ENVÍO registrado (`bulk_contract_offer`), no desde la oferta:
+ * una oferta puede llevar semanas vigente en la base sin habérsele enviado.
+ *
+ * Si no hay registro de envío, se deja pasar: puede ser un alta manual o una
+ * prueba, y bloquear ahí dejaría a alguien sin su adelanto por un hueco de datos.
+ * Queda en el log para poder detectarlo.
+ */
+export const VENTANA_OFERTA_MS = LINK_TTL_HOURS * 60 * 60 * 1000;
+
+async function ventanaSigueAbierta(employeeId: string, offerId: string | null): Promise<boolean> {
+  const supabase = getSupabaseAdmin();
+  let q = supabase
+    .from("whatsapp_contract_messages")
+    .select("created_at")
+    .eq("employee_id", employeeId)
+    .eq("message_type", "bulk_contract_offer")
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (offerId) q = q.eq("offer_id", offerId);
+
+  const { data } = await q;
+  const enviadoEn = (data ?? [])[0]?.created_at as string | undefined;
+
+  if (!enviadoEn) {
+    logger.info("whatsapp.chatbot.sin_registro_de_envio", { employeeId });
+    return true;
+  }
+  return Date.now() - new Date(enviadoEn).getTime() <= VENTANA_OFERTA_MS;
+}
+
 // --- Ramas del flujo ---
 
 async function handleSi(from: string, found: FoundEmployee): Promise<void> {
@@ -343,8 +387,18 @@ export async function handleOfferReply(from: string, reply: OfferReply): Promise
     await getWhatsAppClient().sendTextMessage(from, UNKNOWN_NUMBER_MESSAGE);
     return;
   }
-  if (reply === "si") await handleSi(from, found);
-  else await handleNo(from, found);
+  if (reply === "si") {
+    // La ventana solo limita PEDIR. Rechazar fuera de plazo es inofensivo y no
+    // tiene sentido negárselo a quien se tomó la molestia de contestar.
+    if (!(await ventanaSigueAbierta(found.employee.id, found.offer?.id ?? null))) {
+      logger.info("whatsapp.chatbot.ventana_cerrada", { employeeId: found.employee.id });
+      await getWhatsAppClient().sendTextMessage(from, VENTANA_CERRADA_MESSAGE);
+      return;
+    }
+    await handleSi(from, found);
+  } else {
+    await handleNo(from, found);
+  }
 }
 
 /**
