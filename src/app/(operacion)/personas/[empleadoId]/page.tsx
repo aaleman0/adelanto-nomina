@@ -3,6 +3,7 @@ import { Screen } from "@/ui/screen";
 import { BlockTitle, Card, Datum, Stack, Sunken } from "@/ui/surface";
 import { Status } from "@/ui/status";
 import { ProblemNote, SuccessNote } from "@/ui/states";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getContractDetailData } from "@/lib/backoffice/contract-detail";
 import { validateEligibility } from "@/lib/whatsapp/eligibility";
 import { getCurrentActor, hasRole } from "@/lib/auth/roles";
@@ -43,6 +44,19 @@ export default async function ExpedientePage({ params, searchParams }: Props) {
 
   // "Firmado" se cree por la evidencia de la firma, no solo por el estado
   // calculado: un ciclo nuevo puede reemplazar la oferta y la firma persiste.
+  // ¿Existe ya la copia archivada del PDF? No basta con que esté firmado: el
+  // archivado depende de que EasyLex nos entregue el documento, y hoy responde
+  // con un error. Sin este dato el botón de descarga se ofrecía y llevaba a una
+  // página de error en crudo.
+  const { data: ultimoIntento } = await getSupabaseAdmin()
+    .from("contract_attempts")
+    .select("signed_pdf_path")
+    .eq("contract_request_id", control.contract_request_id ?? "")
+    .order("attempt_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const pdfArchivado = Boolean(ultimoIntento?.signed_pdf_path);
+
   const firmado =
     control.operational_status === "firmado" ||
     Boolean(control.contract_signed_at || control.attempt_signed_at);
@@ -152,6 +166,7 @@ export default async function ExpedientePage({ params, searchParams }: Props) {
 
         <AccionesExpediente
           employeeId={control.employee_id}
+          pdfArchivado={pdfArchivado}
           contractRequestId={control.contract_request_id}
           rfc={control.rfc}
           telefono={control.telefono_normalizado}

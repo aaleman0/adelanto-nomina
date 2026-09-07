@@ -24,6 +24,8 @@ type Props = {
   rfc: string | null;
   telefono: string | null;
   firmado: boolean;
+  /** ¿Existe ya la copia archivada del PDF firmado? */
+  pdfArchivado: boolean;
   haySolicitud: boolean;
   puedeOperar: boolean;
   principal: AccionPrincipal;
@@ -50,6 +52,7 @@ export function AccionesExpediente({
   rfc,
   telefono,
   firmado,
+  pdfArchivado,
   haySolicitud,
   puedeOperar,
   principal,
@@ -164,6 +167,7 @@ export function AccionesExpediente({
         <DescargaPdf
           contractRequestId={contractRequestId}
           firmado={firmado}
+          pdfArchivado={pdfArchivado}
           puedeOperar={puedeOperar}
         />
         <EnlaceDeFirma
@@ -251,12 +255,14 @@ function Accion({
  * firmada de 60 segundos: no puede ser un `fetch`, tiene que navegar.
  */
 function DescargaPdf({
+  pdfArchivado,
   contractRequestId,
   firmado,
   puedeOperar,
 }: {
   contractRequestId: string | null;
   firmado: boolean;
+  pdfArchivado: boolean;
   puedeOperar: boolean;
 }) {
   const motivo = !puedeOperar
@@ -265,7 +271,9 @@ function DescargaPdf({
       ? "El PDF existe cuando la persona ya firmó."
       : !contractRequestId
         ? "No hay solicitud de contrato de la cual sacar el archivo."
-        : null;
+        : !pdfArchivado
+          ? "El contrato está firmado, pero la copia todavía no se pudo archivar: EasyLex no está entregando el PDF. Avisa a soporte."
+          : null;
 
   return (
     <div className="flex min-w-[16rem] flex-1 flex-col gap-2">
