@@ -5,6 +5,7 @@ import {
   FALLBACK_MESSAGE,
   UNSUPPORTED_MESSAGE,
   UNKNOWN_NUMBER_MESSAGE,
+  variantesDeTelefono,
   extractButtonReply,
   siSuccessMessage,
   noMessage,
@@ -155,5 +156,38 @@ describe("mensajes de la conversación", () => {
     for (const m of todos) {
       expect(m).not.toMatch(/webhook|payload|null|undefined|error 4\d\d|API/i);
     }
+  });
+});
+
+/**
+ * Uno de cada tres empleados está guardado SIN el "1" de móvil mexicano, y
+ * WhatsApp siempre manda CON el "1". Buscar por igualdad exacta los dejaba
+ * fuera: respondían y el sistema decía no conocerlos.
+ */
+describe("variantesDeTelefono", () => {
+  it("desde el formato de WhatsApp busca también el guardado sin el 1", () => {
+    const v = variantesDeTelefono("5218713330257");
+    expect(v).toContain("5218713330257");
+    expect(v).toContain("528713330257");
+  });
+
+  it("desde el formato sin el 1 busca también el de WhatsApp", () => {
+    const v = variantesDeTelefono("528713330257");
+    expect(v).toContain("528713330257");
+    expect(v).toContain("5218713330257");
+  });
+
+  it("los dos formatos del MISMO número producen el mismo par", () => {
+    expect(new Set(variantesDeTelefono("5218713330257")))
+      .toEqual(new Set(variantesDeTelefono("528713330257")));
+  });
+
+  it("no inventa variantes para números que no son de México", () => {
+    const v = variantesDeTelefono("14155552671"); // Estados Unidos
+    expect(v).toEqual(["14155552671"]);
+  });
+
+  it("tolera el número con signos o espacios", () => {
+    expect(variantesDeTelefono("+52 1 871 333 0257")).toContain("5218713330257");
   });
 });

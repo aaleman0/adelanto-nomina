@@ -161,14 +161,36 @@ type FoundEmployee = {
   offer: { id: string; status: string; is_eligible: boolean; monto_prestamo_autorizado: number } | null;
 };
 
+/**
+ * Todas las formas en que un mismo número mexicano puede estar guardado.
+ *
+ * WhatsApp manda SIEMPRE `52` + `1` + 10 dígitos, pero en la base conviven las
+ * dos convenciones: con el `1` (móvil) y sin él. No es un detalle menor —hoy
+ * uno de cada tres empleados está guardado sin el `1`—, y buscar por igualdad
+ * exacta los dejaba fuera: respondían al chatbot y el sistema decía no
+ * conocerlos. Se buscan ambas variantes en vez de exigir que los datos estén
+ * perfectos.
+ */
+export function variantesDeTelefono(from: string): string[] {
+  const digitos = (normalizePhoneFromCsv(from) ?? from).replace(/\D/g, "");
+  const variantes = new Set<string>([digitos]);
+
+  if (digitos.startsWith("521") && digitos.length === 13) {
+    variantes.add("52" + digitos.slice(3)); // sin el 1
+  } else if (digitos.startsWith("52") && digitos.length === 12) {
+    variantes.add("521" + digitos.slice(2)); // con el 1
+  }
+  return [...variantes];
+}
+
 async function findEmployeeForPhone(from: string): Promise<FoundEmployee | null> {
   const supabase = getSupabaseAdmin();
-  const normalized = normalizePhoneFromCsv(from) ?? from.replace(/\D/g, "");
+  const posibles = variantesDeTelefono(from);
 
   const { data: emps, error } = await supabase
     .from("employees")
     .select("id, rfc, nombre, telefono_normalizado")
-    .eq("telefono_normalizado", normalized);
+    .in("telefono_normalizado", posibles);
 
   if (error) throw error;
   if (!emps || emps.length === 0) return null;
