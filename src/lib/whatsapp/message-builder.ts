@@ -106,12 +106,15 @@ export function buildBulkTemplateMessage(
 
   // Cuántas variables mandar: lo dice la plantilla si la conocemos. Mandar de
   // más o de menos hace que Meta rechace el mensaje entero.
-  const cuantasVariables =
-    shape && shape.bodyVariables > 0
-      ? shape.bodyVariables
-      : templateName === LEGACY_TEMPLATE
-        ? 2
-        : 3;
+  //
+  // CERO es una respuesta válida, no "no sé": hay plantillas de texto fijo sin
+  // ningún {{n}}. Por eso se pregunta si HAY forma conocida, y solo sin ella se
+  // cae al respaldo por nombre.
+  const cuantasVariables = shape
+    ? shape.bodyVariables
+    : templateName === LEGACY_TEMPLATE
+      ? 2
+      : 3;
 
   // Orden fijo por convención de las plantillas de oferta: nombre, empleador, monto.
   // La legada (2 variables) omite el empleador.
@@ -124,12 +127,16 @@ export function buildBulkTemplateMessage(
     usadas.map((valor, i) => [String(i + 1), valor]),
   );
 
-  const components: TemplateComponent[] = [
-    {
-      type: "body",
-      parameters: usadas.map((value) => ({ type: "text", text: value })),
-    },
-  ];
+  // Una plantilla sin variables no lleva componente de cuerpo: mandarlo vacío
+  // también es un payload que Meta rechaza.
+  const components: TemplateComponent[] = usadas.length
+    ? [
+        {
+          type: "body",
+          parameters: usadas.map((value) => ({ type: "text", text: value })),
+        },
+      ]
+    : [];
 
   // Cabecera de imagen: solo si la plantilla la declara.
   const llevaImagen = shape ? shape.hasImageHeader : TEMPLATES_WITH_IMAGE_HEADER.has(templateName);

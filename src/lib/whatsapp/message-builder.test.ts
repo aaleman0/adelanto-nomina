@@ -202,3 +202,41 @@ describe("buildBulkTemplateMessage con forma de plantilla", () => {
     expect(tres.variables).toEqual({ "1": "Angel", "2": "Orbitware", "3": "4,000" });
   });
 });
+
+/**
+ * Plantilla de texto fijo (cero variables). Existe de verdad
+ * (`adelanto_nomina_oferta`), y cero NO significa "no sé cuántas": mandarle 3
+ * variables, o un componente de cuerpo vacío, hace que Meta rechace el envío.
+ */
+describe("plantilla sin variables", () => {
+  const empleado = {
+    employee_id: "e1",
+    nombre: "Angel",
+    empleador: "Orbitware",
+    rfc: "AEEA940214H78",
+    telefono_normalizado: "5218713330257",
+    monto_prestamo_autorizado: 4000,
+  };
+  const sinVariables = { hasImageHeader: true, hasUrlButton: false, bodyVariables: 0 };
+
+  it("no manda ninguna variable cuando la plantilla no declara ninguna", () => {
+    const r = buildBulkTemplateMessage(empleado, "adelanto_nomina_oferta", { shape: sinVariables });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.variables).toEqual({});
+  });
+
+  it("omite el componente de cuerpo en vez de mandarlo vacío", () => {
+    const r = buildBulkTemplateMessage(empleado, "adelanto_nomina_oferta", { shape: sinVariables });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.components.some((c) => c.type === "body")).toBe(false);
+  });
+
+  it("aun así manda la cabecera de imagen si la plantilla la declara", () => {
+    const r = buildBulkTemplateMessage(empleado, "adelanto_nomina_oferta", {
+      shape: sinVariables,
+      headerImageUrl: "https://ejemplo.com/portada.png",
+    });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.components[0]?.type).toBe("header");
+  });
+});
