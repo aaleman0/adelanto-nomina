@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   classifyOfferReply,
   classifyTextReply,
+  FALLBACK_MESSAGE,
+  UNSUPPORTED_MESSAGE,
+  UNKNOWN_NUMBER_MESSAGE,
   extractButtonReply,
   siSuccessMessage,
   noMessage,
@@ -122,5 +125,35 @@ describe("classifyTextReply", () => {
     expect(classifyTextReply("")).toBeNull();
     expect(classifyTextReply(null)).toBeNull();
     expect(classifyTextReply(undefined)).toBeNull();
+  });
+});
+
+/**
+ * Nadie se queda sin respuesta. El chatbot atiende a gente con prisa desde el
+ * celular: si manda una nota de voz o algo que no entendemos, el silencio la
+ * deja sin saber si su mensaje llegó.
+ */
+describe("mensajes de la conversación", () => {
+  it("el mensaje de ayuda ofrece AMBAS formas de responder (botón y escrito)", () => {
+    expect(FALLBACK_MESSAGE).toMatch(/bot/i);   // menciona los botones
+    expect(FALLBACK_MESSAGE).toMatch(/SÍ/);     // y que puede escribir
+    expect(FALLBACK_MESSAGE).toMatch(/NO/);
+  });
+
+  it("hay respuesta para lo que no es texto (nota de voz, foto…)", () => {
+    expect(UNSUPPORTED_MESSAGE).toMatch(/SÍ/);
+    expect(UNSUPPORTED_MESSAGE).toMatch(/NO/);
+    expect(UNSUPPORTED_MESSAGE.length).toBeGreaterThan(20);
+  });
+
+  it("hay respuesta para un número que no está registrado, y dice qué hacer", () => {
+    expect(UNKNOWN_NUMBER_MESSAGE).toMatch(/empresa/i);
+  });
+
+  it("ningún mensaje al empleado usa jerga técnica", () => {
+    const todos = [FALLBACK_MESSAGE, UNSUPPORTED_MESSAGE, UNKNOWN_NUMBER_MESSAGE];
+    for (const m of todos) {
+      expect(m).not.toMatch(/webhook|payload|null|undefined|error 4\d\d|API/i);
+    }
   });
 });

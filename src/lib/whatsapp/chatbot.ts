@@ -65,7 +65,28 @@ export const NO_OFFER_MESSAGE =
 export const GENERATION_ERROR_MESSAGE =
   "😕 Tuvimos un problema al generar tu contrato. Inténtalo de nuevo en unos minutos o contacta a tu empresa.";
 export const FALLBACK_MESSAGE =
-  "Para continuar, usa los botones de arriba 👆: *Sí, lo quiero* o *No, gracias*.";
+  "No entendí tu respuesta 🤔\n\n" +
+  "Toca uno de los botones de arriba 👆, o escríbeme *SÍ* si quieres tu adelanto, " +
+  "o *NO* si no lo quieres por ahora.";
+
+/**
+ * Para lo que no es texto ni botón (nota de voz, foto, sticker, ubicación…).
+ * Antes estos mensajes se ignoraban en silencio y la persona quedaba esperando
+ * una respuesta que nunca llegaba.
+ */
+export const UNSUPPORTED_MESSAGE =
+  "Por aquí solo puedo leer texto 🙏\n\n" +
+  "Escríbeme *SÍ* si quieres tu adelanto, o *NO* si no lo quieres por ahora.";
+
+/**
+ * El número no corresponde a ningún empleado registrado. Se responde igual —en
+ * vez de callar— porque el silencio deja a la persona sin saber si el mensaje
+ * llegó, y porque muchas veces es un empleado real cuyo teléfono quedó mal
+ * capturado: el mensaje le dice a quién acudir.
+ */
+export const UNKNOWN_NUMBER_MESSAGE =
+  "No encontramos tu número en el sistema 😕\n\n" +
+  "Puede que esté registrado de otra forma. Contacta a tu empresa para revisarlo.";
 
 // --- Clasificación del botón (pura, testeable) ---
 
@@ -266,6 +287,7 @@ export async function handleOfferReply(from: string, reply: OfferReply): Promise
   const found = await findEmployeeForPhone(from);
   if (!found) {
     logger.warn("whatsapp.chatbot.employee_not_found", { fromTail: from.slice(-4) });
+    await getWhatsAppClient().sendTextMessage(from, UNKNOWN_NUMBER_MESSAGE);
     return;
   }
   if (reply === "si") await handleSi(from, found);
@@ -303,5 +325,8 @@ export async function handleInboundMessage(
     return { handled: true, kind: "text_fallback" };
   }
 
-  return { handled: false, kind: msg.type };
+  // Cualquier otro tipo (nota de voz, imagen, sticker, ubicación, documento…):
+  // se contesta con la guía en vez de dejar a la persona esperando.
+  await getWhatsAppClient().sendTextMessage(msg.from, UNSUPPORTED_MESSAGE);
+  return { handled: true, kind: `no_soportado:${msg.type}` };
 }
