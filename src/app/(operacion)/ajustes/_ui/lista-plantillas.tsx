@@ -91,6 +91,10 @@ export function ListaPlantillas() {
    * síncrona dentro del efecto, que es lo que encadena renders.
    */
   const [plantillas, setPlantillas] = useState<Plantilla[] | null>(null);
+  // Cuál se usa para las ofertas. Se guarda en ajustes para que el operador no
+  // tenga que elegir —y equivocarse— en cada envío.
+  const [elegida, setElegida] = useState<string | null>(null);
+  const [fijando, setFijando] = useState<string | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [sincronizando, setSincronizando] = useState(false);
   const [problema, setProblema] = useState<{ mensaje: string; detalle?: string } | null>(null);
@@ -103,7 +107,7 @@ export function ListaPlantillas() {
    * aplica siempre, porque un reintento del operador sí quiere su resultado.
    */
   const cargar = useCallback(async (vigente: () => boolean = () => true) => {
-    const r = await pedirJson<{ templates: Plantilla[] }>("/api/whatsapp/templates", {
+    const r = await pedirJson<{ templates: Plantilla[]; offerTemplate?: string | null }>("/api/whatsapp/templates", {
       cache: "no-store",
     });
     if (!vigente()) return;
@@ -113,7 +117,27 @@ export function ListaPlantillas() {
     }
     setErrorCarga(null);
     setPlantillas(r.datos.templates ?? []);
+    setElegida(r.datos.offerTemplate ?? null);
   }, []);
+
+  /** Fija cuál se usa para las ofertas; el envío pasa a mostrar solo esa. */
+  const fijarParaOfertas = useCallback(
+    async (name: string) => {
+      setFijando(name);
+      const r = await pedirJson<{ offerTemplate: string }>("/api/whatsapp/templates", {
+        method: "POST",
+        ...cuerpoJson({ name }),
+      });
+      setFijando(null);
+      if (!r.ok) {
+        setProblema({ mensaje: "No se pudo fijar la plantilla de ofertas.", detalle: r.mensaje });
+        return;
+      }
+      setElegida(r.datos.offerTemplate);
+      setProblema(null);
+    },
+    [],
+  );
 
   useEffect(() => {
     let vivo = true;
@@ -273,7 +297,24 @@ export function ListaPlantillas() {
                     {describirCategoria(p.category ?? "")} · Idioma {p.language}
                   </p>
                 </div>
-                <Status value={{ label: est.label, tone: est.tone }} />
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <Status value={{ label: est.label, tone: est.tone }} />
+                  {p.name === elegida ? (
+                    <span className="rounded-full bg-done-soft px-3 py-1 text-[14px] font-bold text-done">
+                      Se usa para las ofertas
+                    </span>
+                  ) : est.sirve ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      loading={fijando === p.name}
+                      loadingLabel="Fijando…"
+                      onClick={() => fijarParaOfertas(p.name)}
+                    >
+                      Usar esta para las ofertas
+                    </Button>
+                  ) : null}
+                </div>
               </div>
 
               {cuerpo ? (

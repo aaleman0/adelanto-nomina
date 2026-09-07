@@ -53,6 +53,7 @@ export function PasoPlantilla({
   const [carga, setCarga] = useState<{
     intento: number;
     lista: PlantillaGuardada[] | null;
+    elegida: string | null;
     fallo: string | null;
   } | null>(null);
 
@@ -65,7 +66,16 @@ export function PasoPlantilla({
   // —que ya no funcionan— y las que no son de oferta. No se ocultan: puede
   // haber un caso legítimo, y esconder opciones deja al operador sin entender
   // por qué no encuentra la que buscaba.
-  const plantillas = vigente?.lista
+  // Si un administrador ya fijó cuál es LA plantilla de ofertas, el envío solo
+  // muestra esa: elegir de una lista larga en este paso es una oportunidad de
+  // equivocarse con consecuencia real. Sin ajuste, se ofrece la lista completa.
+  const soloLaElegida = vigente?.elegida
+    ? (vigente.lista ?? []).filter((t) => t.name === vigente.elegida)
+    : null;
+
+  const plantillas = soloLaElegida?.length
+    ? soloLaElegida
+    : vigente?.lista
     ? [...vigente.lista].sort((a, b) => {
         const puntaje = (t: PlantillaGuardada) => {
           if (plantillaLlevaBotonDeEnlace(t.components)) return 2; // obsoleta
@@ -80,14 +90,17 @@ export function PasoPlantilla({
   useEffect(() => {
     let activo = true;
 
-    pedirJson<{ templates: PlantillaGuardada[] }>("/api/whatsapp/templates")
+    pedirJson<{ templates: PlantillaGuardada[]; offerTemplate?: string | null }>("/api/whatsapp/templates")
       .then((r) => {
         if (!activo) return;
         const lista = r.templates ?? [];
-        setCarga({ intento, lista, fallo: null });
-        // Preselección: la de siempre si existe, si no la primera aprobada.
-        // Ahorra el clic del caso normal sin esconder que se puede cambiar.
+        const elegida = r.offerTemplate ?? null;
+        setCarga({ intento, lista, elegida, fallo: null });
+        // Preselección: la que fijó un administrador manda; si no hay ajuste,
+        // la de siempre, y si tampoco, la primera aprobada. Ahorra el clic del
+        // caso normal sin esconder que se puede cambiar.
         const preferida =
+          (elegida ? lista.find((t) => t.name === elegida) : null) ??
           lista.find((t) => t.name === PLANTILLA_POR_OMISION) ??
           lista.find((t) => estaAprobada(t)) ??
           lista[0] ??
@@ -95,7 +108,7 @@ export function PasoPlantilla({
         onSeleccionar(preferida);
       })
       .catch((e: Error) => {
-        if (activo) setCarga({ intento, lista: null, fallo: e.message });
+        if (activo) setCarga({ intento, lista: null, elegida: null, fallo: e.message });
       });
 
     return () => {
