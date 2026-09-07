@@ -15,6 +15,8 @@ import { logger } from "@/lib/logger";
 export type InboundMessage = {
   id: string;
   from: string;
+  /** Momento en que la PERSONA lo envió, en segundos (lo pone Meta). */
+  timestamp?: string;
   type: string;
   text?: { body: string };
   button?: { text?: string; payload?: string };
@@ -138,6 +140,31 @@ export function classifyTextReply(body?: string | null): OfferReply | null {
   if (TEXTO_SI.has(t)) return "si";
   if (TEXTO_NO.has(t)) return "no";
   return null;
+}
+
+/**
+ * Cuánto puede tardar un mensaje en llegar y seguir siendo relevante.
+ *
+ * Meta reintenta la entrega cuando el webhook no responde —por ejemplo durante
+ * un redespliegue—, y se han visto entregas con 4 y 7 horas de retraso. Actuar
+ * sobre un mensaje tan viejo hace daño: contestar una guía de madrugada por un
+ * "hola" de la mañana confunde, y peor, un "Sí, lo quiero" rezagado genera un
+ * contrato —gastando una firma de EasyLex— con un enlace de 2 horas que vence
+ * mientras la persona duerme y nunca lo ve.
+ *
+ * Se descarta en silencio: si la persona sigue interesada, vuelve a tocar el
+ * botón y recibe un enlace fresco que sí alcanza a usar.
+ */
+export const MAX_ANTIGUEDAD_MS = 2 * 60 * 60 * 1000;
+
+export function mensajeDemasiadoViejo(
+  timestamp: string | undefined,
+  ahora = Date.now(),
+): boolean {
+  if (!timestamp) return false; // Sin marca de tiempo no se puede juzgar: se atiende.
+  const enviado = Number(timestamp) * 1000;
+  if (!Number.isFinite(enviado) || enviado <= 0) return false;
+  return ahora - enviado > MAX_ANTIGUEDAD_MS;
 }
 
 /** Extrae la respuesta de botón de un mensaje entrante (plantilla o interactivo). */
@@ -323,6 +350,16 @@ export async function handleOfferReply(from: string, reply: OfferReply): Promise
 export async function handleInboundMessage(
   msg: InboundMessage,
 ): Promise<{ handled: boolean; kind: string }> {
+  if (mensajeDemasiadoViejo(msg.timestamp)) {
+    logger.info("whatsapp.chatbot.mensaje_viejo_descartado", {
+      id: msg.id,
+      enviadoHace: msg.timestamp
+        ? Math.round((Date.now() - Number(msg.timestamp) * 1000) / 60000) + " min"
+        : "?",
+    });
+    return { handled: false, kind: "demasiado_viejo" };
+  }
+
   const button = extractButtonReply(msg);
   if (button) {
     const reply = classifyOfferReply(button.text, button.payload);

@@ -6,6 +6,7 @@ import {
   UNSUPPORTED_MESSAGE,
   UNKNOWN_NUMBER_MESSAGE,
   variantesDeTelefono,
+  mensajeDemasiadoViejo,
   extractButtonReply,
   siSuccessMessage,
   noMessage,
@@ -189,5 +190,38 @@ describe("variantesDeTelefono", () => {
 
   it("tolera el número con signos o espacios", () => {
     expect(variantesDeTelefono("+52 1 871 333 0257")).toContain("5218713330257");
+  });
+});
+
+/**
+ * Meta reintenta la entrega cuando el webhook no responde, y se vieron entregas
+ * con 4 y 7 horas de retraso tras un redespliegue. Actuar sobre un mensaje tan
+ * viejo confunde a la persona y, en el caso del "Sí", gasta una firma de EasyLex
+ * en un enlace que vence mientras duerme.
+ */
+describe("mensajeDemasiadoViejo", () => {
+  const ahora = new Date("2026-09-07T12:00:00Z").getTime();
+  const haceMinutos = (m: number) => String(Math.floor((ahora - m * 60_000) / 1000));
+
+  it("atiende lo reciente", () => {
+    expect(mensajeDemasiadoViejo(haceMinutos(0), ahora)).toBe(false);
+    expect(mensajeDemasiadoViejo(haceMinutos(30), ahora)).toBe(false);
+    expect(mensajeDemasiadoViejo(haceMinutos(119), ahora)).toBe(false);
+  });
+
+  it("descarta lo que rebasa las 2 horas", () => {
+    expect(mensajeDemasiadoViejo(haceMinutos(121), ahora)).toBe(true);
+    expect(mensajeDemasiadoViejo(haceMinutos(60 * 4), ahora)).toBe(true);  // el caso real
+    expect(mensajeDemasiadoViejo(haceMinutos(60 * 7), ahora)).toBe(true);  // el otro caso real
+  });
+
+  it("ante la duda, atiende: sin marca de tiempo o con una ilegible", () => {
+    expect(mensajeDemasiadoViejo(undefined, ahora)).toBe(false);
+    expect(mensajeDemasiadoViejo("no-es-un-numero", ahora)).toBe(false);
+    expect(mensajeDemasiadoViejo("", ahora)).toBe(false);
+  });
+
+  it("un reloj adelantado no descarta el mensaje", () => {
+    expect(mensajeDemasiadoViejo(String(Math.floor((ahora + 60_000) / 1000)), ahora)).toBe(false);
   });
 });
