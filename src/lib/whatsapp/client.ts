@@ -59,11 +59,18 @@ export class WhatsAppClient {
     this.phoneNumberId = phoneNumberId ?? process.env.WHATSAPP_PHONE_NUMBER_ID ?? "";
   }
 
+  /**
+   * `language` es el idioma REAL de la plantilla, no una constante global: cada
+   * plantilla se aprueba en un idioma concreto y Meta rechaza el envío con
+   * "template name does not exist in the translation" si no coincide. Sin este
+   * parámetro, una plantilla creada en inglés era inalcanzable.
+   */
   async sendTemplateMessage(
     to: string,
     templateName: string,
     variables: Record<string, string>,
     components?: TemplateComponent[],
+    language?: string | null,
   ): Promise<SendTemplateResult> {
     if (!this.accessToken || !this.phoneNumberId) {
       return { ok: false, error: "WhatsApp no configurado (token o phone_number_id faltante)." };
@@ -85,7 +92,7 @@ export class WhatsAppClient {
       type: "template",
       template: {
         name: templateName,
-        language: { code: TEMPLATE_LANGUAGE },
+        language: { code: language || TEMPLATE_LANGUAGE },
         components: bodyComponents,
       },
     };

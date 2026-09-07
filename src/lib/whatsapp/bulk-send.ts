@@ -3,7 +3,7 @@ import { getWhatsAppClient } from "@/lib/whatsapp/client";
 import { getEmployeesEligibility } from "@/lib/whatsapp/eligibility";
 import { getEmployeesFromImport } from "@/lib/whatsapp/imports";
 import { buildBulkTemplateMessage, describeTemplateShape, DEFAULT_BULK_TEMPLATE } from "@/lib/whatsapp/message-builder";
-import { getTemplateComponents } from "@/lib/whatsapp/templates";
+import { getTemplateDefinition } from "@/lib/whatsapp/templates";
 import { buildSolicitarUrl } from "@/lib/contracts/solicitar-token";
 import { logger } from "@/lib/logger";
 
@@ -184,7 +184,9 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
   // sale si lleva botón de URL: las plantillas de RESPUESTA RÁPIDA —las del
   // chatbot Sí/No— no lo llevan, y para esas NO hay link que generar: el
   // empleado contesta con un botón y el webhook decide qué sigue.
-  const shape = describeTemplateShape(await getTemplateComponents(templateName));
+  const definicion = await getTemplateDefinition(templateName);
+  const shape = describeTemplateShape(definicion?.components);
+  const idiomaPlantilla = definicion?.language ?? null;
 
   // 4. Enviar mensajes en batches
   for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
@@ -254,6 +256,7 @@ export async function sendBulkMessages(params: BulkSendParams): Promise<BulkSend
         templateName,
         built.variables,
         built.components,
+        idiomaPlantilla,
       );
 
       if (result.ok) {
@@ -739,7 +742,9 @@ export async function processQueuedMessage(
   // Misma regla que en el envío inline: solo se arma el link cuando la plantilla
   // declara botón de URL. Con una plantilla de respuesta rápida no hay link que
   // generar, y exigirlo marcaría como fallido un mensaje perfectamente válido.
-  const shape = describeTemplateShape(await getTemplateComponents(templateName));
+  const definicion = await getTemplateDefinition(templateName);
+  const shape = describeTemplateShape(definicion?.components);
+  const idiomaPlantilla = definicion?.language ?? null;
 
   let buttonUrl: string | null = null;
   if (shape.hasUrlButton) {
@@ -778,6 +783,7 @@ export async function processQueuedMessage(
     templateName,
     built.variables,
     built.components,
+    idiomaPlantilla,
   );
 
   if (!result.ok) {

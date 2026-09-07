@@ -146,21 +146,24 @@ export async function syncTemplatesFromMeta(): Promise<SyncResult> {
  * Devuelve null si la plantilla no está sincronizada todavía; en ese caso el
  * constructor del mensaje cae a sus reglas por nombre y el envío sigue.
  */
-export async function getTemplateComponents(
+export async function getTemplateDefinition(
   name: string,
-): Promise<MetaTemplateComponent[] | null> {
+): Promise<{ components: MetaTemplateComponent[] | null; language: string | null } | null> {
   const supabase = getSupabaseAdmin();
 
   const { data, error } = await supabase
     .from("whatsapp_templates")
-    .select("components")
+    .select("components, language")
     .eq("name", name)
     .maybeSingle();
 
   // Un fallo de lectura no debe tumbar el envío: se degrada a las reglas por nombre.
   if (error || !data) return null;
 
-  return (data.components as MetaTemplateComponent[] | null) ?? null;
+  return {
+    components: (data.components as MetaTemplateComponent[] | null) ?? null,
+    language: (data.language as string | null) ?? null,
+  };
 }
 
 export async function getStoredTemplates(): Promise<StoredTemplate[]> {

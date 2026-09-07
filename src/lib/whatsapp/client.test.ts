@@ -87,3 +87,34 @@ describe("WhatsAppClient.sendDocument", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * El idioma es de CADA plantilla, no una constante global. Meta rechaza el envío
+ * con "template name does not exist in the translation" si no coincide — pasó de
+ * verdad con una plantilla aprobada en inglés mientras el código mandaba es_MX.
+ */
+describe("idioma de la plantilla al enviar", () => {
+  const fetchMock = vi.fn();
+  const client = new WhatsAppClient("token-123", "phone-456");
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ messages: [{ id: "wamid.X" }] }) });
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("usa el idioma que se le pasa, no el global", async () => {
+    await client.sendTemplateMessage("5218713330257", "plantilla_en_ingles", {}, [], "en");
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.template.language.code).toBe("en");
+  });
+
+  it("cae al idioma por defecto cuando la plantilla no declara uno", async () => {
+    await client.sendTemplateMessage("5218713330257", "otra", {}, [], null);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.template.language.code).toBe("es_MX");
+  });
+});
