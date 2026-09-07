@@ -60,6 +60,41 @@ export function verifySharedSecret(
   return safeEqual(received, expected);
 }
 
+/**
+ * Verifica el webhook de EasyLex de forma robusta a los dos esquemas comunes,
+ * porque no está confirmado cuál usan y equivocarse deja el webhook rechazando
+ * todo con 401 en silencio:
+ *
+ *   1. Secreto compartido plano en `x-easylex-signature` (lo documentado).
+ *   2. HMAC-SHA256 del cuerpo crudo con el secreto (hex, con prefijo `sha256=`
+ *      opcional) — el esquema estándar de la mayoría de proveedores.
+ *
+ * Acepta si CUALQUIERA coincide. Ambos exigen conocer el secreto, así que
+ * admitir los dos no debilita la seguridad: solo nos hace inmunes a cuál mande
+ * EasyLex. `rawBody` debe ser el cuerpo EXACTO recibido (`await request.text()`);
+ * si se reserializa el JSON, el HMAC nunca coincide.
+ */
+export function verifyEasylexWebhook(
+  rawBody: string,
+  signatureHeader: string | null,
+  secret: string,
+): boolean {
+  if (!secret || !signatureHeader) return false;
+
+  // 1) Secreto compartido plano.
+  if (safeEqual(signatureHeader, secret)) return true;
+
+  // 2) HMAC-SHA256 del cuerpo, con prefijo `sha256=` opcional.
+  const received = signatureHeader.startsWith("sha256=")
+    ? signatureHeader.slice("sha256=".length)
+    : signatureHeader;
+  const expectedHex = createHmac("sha256", secret)
+    .update(rawBody, "utf8")
+    .digest("hex");
+
+  return safeEqual(received, expectedHex);
+}
+
 export const isProduction = () => process.env.NODE_ENV === "production";
 
 /**

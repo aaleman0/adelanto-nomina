@@ -17,6 +17,17 @@ export const BULK_SEND_STATUSES = ["pending", "sending", "completed", "failed"] 
 export const DELIVERY_STATUSES = ["sent", "delivered", "read", "failed"] as const;
 
 /**
+ * Valores admitidos al filtrar el detalle de un envío por cómo va la entrega.
+ *
+ * Además de los estados de entrega finales, se pueden aislar los dos estados
+ * "en camino" que escribe `bulk-send.ts`: `pending` (fila reclamada, todavía sin
+ * salir) y los encolados, que viven con `delivery_status` en NULL hasta que el
+ * worker los toma. `queued` no es un valor de la columna: es el nombre que se le
+ * da a ese NULL en la consulta (ver el route handler del detalle).
+ */
+export const BULK_DETAIL_DELIVERY_FILTERS = [...DELIVERY_STATUSES, "pending", "queued"] as const;
+
+/**
  * Paginación que **acota** en vez de rechazar.
  *
  * Un `pageSize=999` se recorta a 100, no cae al valor por defecto: es el
@@ -69,17 +80,6 @@ export const BulkSendBodySchema = z
     employeeIds: z.array(uuidParam()).max(5000).optional(),
     status: z.enum(BULK_SEND_TARGET_STATUSES).optional(),
     templateName: z.string().trim().min(1).max(512).optional(),
-    buttonConfig: z
-      .object({
-        // Meta limita el texto de botón a 25 caracteres.
-        text: z.string().trim().min(1).max(25),
-        url: z.string().url("Debe ser una URL válida."),
-      })
-      // El cliente arranca el estado del botón en `null` y lo envía tal cual
-      // cuando no se activa. `null` significa "sin botón", igual que ausente,
-      // así que se acepta y se normaliza a `undefined` para el resto del flujo.
-      .nullish()
-      .transform((value) => value ?? undefined),
   })
   .superRefine((value, ctx) => {
     if (value.mode === "import" && !value.importId) {
@@ -139,7 +139,7 @@ export const BulkDetailQuerySchema = z.object({
   id: uuidParam("id es requerido y debe ser un UUID válido."),
   page: pageParam,
   pageSize: paginationParam(50, 200),
-  status: z.enum(DELIVERY_STATUSES).optional(),
+  status: z.enum(BULK_DETAIL_DELIVERY_FILTERS).optional(),
   q: z.string().trim().max(120).optional(),
 });
 

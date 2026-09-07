@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getWhatsAppClient } from "@/lib/whatsapp/client";
+import { handleInboundMessage } from "@/lib/whatsapp/chatbot";
 import { safeEqual } from "@/lib/security/webhook-signatures";
 import { redactPII } from "@/lib/audit/redact";
 import { logger } from "@/lib/logger";
@@ -37,6 +38,12 @@ export type WebhookEntry = {
         timestamp: string;
         type: string;
         text?: { body: string };
+        button?: { text?: string; payload?: string };
+        interactive?: {
+          type?: string;
+          button_reply?: { id?: string; title?: string };
+          list_reply?: { id?: string; title?: string };
+        };
       }>;
       statuses?: Array<{
         id: string;
@@ -66,6 +73,21 @@ export async function handleWebhook(payload: {
 
       // Mensajes entrantes
       for (const msg of value.messages ?? []) {
+        // Idempotencia: Meta puede reentregar el mismo evento. Si ya hay un log
+        // inbound con este id, ya lo procesamos → lo saltamos (evita doble
+        // generación / doble mensaje). Ventana de carrera mínima; las operaciones
+        // de fondo (reuso de contrato, rechazada) son idempotentes de todos modos.
+        const { data: seen } = await supabase
+          .from("integration_logs")
+          .select("id")
+          .eq("correlation_id", msg.id)
+          .eq("direction", "inbound")
+          .limit(1);
+        if (seen && seen.length > 0) {
+          logger.info("whatsapp.webhook.duplicate_inbound_skipped", { id: msg.id });
+          continue;
+        }
+
         await supabase.from("integration_logs").insert({
           provider: "whatsapp",
           direction: "inbound",
@@ -80,6 +102,7 @@ export async function handleWebhook(payload: {
           entity_type: "whatsapp_messages",
         });
 
+        // Modo debug: eco de conectividad (bypassa el chatbot).
         if (process.env.WHATSAPP_DEBUG_AUTO_REPLY === "true") {
           const reply = await getWhatsAppClient().sendTextMessage(
             msg.from,
@@ -101,6 +124,17 @@ export async function handleWebhook(payload: {
               entity_type: "whatsapp_messages",
             });
           }
+          continue;
+        }
+
+        // Chatbot: rutea el botón Sí/No o responde con el fallback. Un error en un
+        // mensaje NO debe tumbar el resto del lote ni provocar reintentos de Meta
+        // (por eso se captura aquí y el webhook igual responde 200).
+        try {
+          const outcome = await handleInboundMessage(msg);
+          logger.info("whatsapp.chatbot.inbound", { id: msg.id, kind: outcome.kind, handled: outcome.handled });
+        } catch (err) {
+          logger.error("whatsapp.chatbot.error", err, { id: msg.id });
         }
       }
 

@@ -224,7 +224,7 @@ Sin `WHATSAPP_APP_SECRET` configurado, en producción se rechaza (`401`); fuera 
 ### `POST /api/webhooks/easylex/sign`
 Webhook real de firma.
 
-**Autenticación:** cabecera `x-easylex-signature` comparada en **tiempo constante** contra `EASYLEX_WEBHOOK_SECRET` (`verifySharedSecret`). Diferencia o ausencia → `401`.
+**Autenticación:** cabecera `x-easylex-signature`, verificada por `verifyEasylexWebhook` (en `src/lib/security/webhook-signatures.ts`), que acepta **cualquiera de dos esquemas** en tiempo constante contra `EASYLEX_WEBHOOK_SECRET`: (1) secreto compartido plano, o (2) HMAC-SHA256 del **cuerpo crudo** (con prefijo `sha256=` opcional). Se admiten ambos porque no está confirmado cuál usa EasyLex y los dos exigen el secreto. Diferencia o ausencia → `401`. Por eso el handler lee `await request.text()` y parsea después: reserializar el JSON invalidaría el HMAC.
 
 Sin secreto configurado, en producción se rechaza (`401`, log `easylex.webhook.secret_missing`); fuera de producción se permite con log `easylex.webhook.signature_check_skipped`.
 
@@ -241,7 +241,7 @@ Los dos manejadores buscan el intento por campos distintos (`documentId` vs `id`
 
 **Idempotencia:** `recordEasyLexEvent` descarta el evento si ya existe una fila con el mismo `event_id`. Cuando falta `webhookId`, el id se sintetiza como `webhook_{attemptId}_{Date.now()}` — que **nunca colisiona**, así que en ese caso la protección de idempotencia no aplica.
 
-**Siempre devuelve `200 {"ok":true}`**, incluso ante errores capturados. Es intencional: evita que EasyLex reintente indefinidamente. El precio es que un fallo de procesamiento no es visible desde EasyLex, solo en `integration_logs`.
+**Ante un error de procesamiento devuelve `500`** (no `200`) para que EasyLex **reintente**. Los manejadores son idempotentes (saltan si el intento ya está `firmado` y deduplican por `event_id`), así que un fallo transitorio de BD durante la transición a `firmado` no pierde la confirmación de firma —evidencia legal—. Éxito → `200 {"ok":true}`.
 
 ### `POST /api/webhooks/easylex/mock-sign`
 Simula una firma para pruebas. **Deshabilitado en producción**: responde `404` sin cuerpo, como si la ruta no existiera (`404` en vez de `403` para no revelar que el endpoint existe).
@@ -267,11 +267,12 @@ El bloqueo se hace con `isProduction()` al inicio del handler, antes de leer el 
 `action` por defecto es `send`.
 
 ```json
-{ "mode": "import", "importId": "uuid", "templateName": "adelanto_nomina_v2",
-  "buttonConfig": { "text": "Solicitar", "url": "https://…" } }
+{ "mode": "import", "importId": "uuid", "templateName": "adelanto_nomina_v2" }
 ```
 
 Validaciones manuales, cada una devuelve `400`: `mode` requerido y dentro del enum; `importId` obligatorio si `mode === "import"`; `employeeIds` no vacío si `mode === "manual"`.
+
+El botón URL de la plantilla no se recibe desde el cliente: el backend genera o reutiliza el contrato por empleado y manda a Meta el sufijo dinámico correcto del link de firma. Si llega un `buttonUrl` legado en el body, se ignora.
 
 `action=validate` — no envía nada:
 ```json
@@ -445,6 +446,6 @@ Vale la pena conocerlas antes de añadir endpoints, porque son consistentes:
 - **Los webhooks siempre responden `200`** para evitar reintentos del proveedor.
 - **Los errores se devuelven en español**, orientados al operador.
 - **La validación va en el borde con Zod**, antes del `try/catch`: un `400` de validación nunca debe salir del bloque que captura errores de servidor.
-- **No hay módulo de auditoría.** Seis archivos declaran su propio `createAuditEvent` privado, e igual ocurre con `createIntegrationLog`. Añadir un evento nuevo implica copiar el helper.
+- **Auditoría centralizada.** `src/lib/audit/` expone `recordAuditEvent` y `recordIntegrationLog`; para registrar un evento o log de integración se llaman esos helpers (aplican redacción de PII). Algunos módulos conservan un `createAuditEvent` local como envoltorio delgado sobre `recordAuditEvent`, con los campos fijos de ese flujo.
 
 Ver también: [Base de datos](base-de-datos.md) · [WhatsApp](whatsapp.md) · [EasyLex y contratos](easylex-contratos.md) · [Configuración](configuracion.md)

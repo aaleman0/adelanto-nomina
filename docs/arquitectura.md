@@ -70,7 +70,7 @@ El backoffice observa todo esto a través de la vista `backoffice_contract_contr
 | Auditoría de teléfonos | Funcionando |
 | Verificación de firma de webhooks (Meta y EasyLex) | Funcionando |
 | Cabeceras de seguridad HTTP | Funcionando (CSP en modo report-only) |
-| RLS en Supabase | Fase A: deny-all activo. Fase B (políticas por rol) pendiente |
+| RLS en Supabase | Fase A (deny-all) y Fase B (políticas por rol, `20260722`) aplicadas. Las lecturas del backoffice usan service role hasta encender `RLS_SESSION_READS` |
 | Roles y permisos | Implementado, en modo `warn` por defecto |
 | Cola de envío masivo | Implementada (Cloud Tasks), desactivada por defecto |
 | Pagos y CEP | **No existe código** |
@@ -136,7 +136,7 @@ src/
     ui/             primitivas: Button, Card, DataTable, StatusBadge, Toast…
     layout/         AppShell, SidebarFrame, UserControls
     contracts/      tabla, filtros, detalle, timeline
-    whatsapp/       dashboard, historial, plantillas, send-flow (asistente de 5 pasos)
+    whatsapp/       dashboard, historial, plantillas, send-flow (asistente de 4 pasos + resultado)
     imports/        formulario de subida, botón de aplicar
     dashboard/      cockpit de operación
   lib/

@@ -7,8 +7,10 @@ import { logger } from "@/lib/logger";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  // Historial de mensajes de un empleado concreto (PII): exige operaciones.
-  const auth = await requireRole("operaciones");
+  // Historial de mensajes de un empleado (PII), alimenta el panel del expediente.
+  // Se exige `solo_lectura` —el mismo nivel que puede abrir el expediente— para
+  // que el panel no se rompa con 403 para quien consulta evidencia en modo enforce.
+  const auth = await requireRole("solo_lectura");
   if (!auth.ok) return auth.response;
 
   const { searchParams } = new URL(request.url);

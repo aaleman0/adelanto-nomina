@@ -37,7 +37,7 @@ function contractTemplateName(): string {
  * acepta el sufijo que rellena `{{1}}`, no la URL completa. Se toma el último
  * segmento del path del link de firma (el signerId / id de intento).
  */
-function signingUrlSuffix(signingUrl: string): string {
+export function signingUrlSuffix(signingUrl: string): string {
   const path = signingUrl.split("?")[0].split("#")[0];
   const segments = path.split("/").filter(Boolean);
   return segments[segments.length - 1] || signingUrl;

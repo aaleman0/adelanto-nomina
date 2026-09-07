@@ -4,6 +4,7 @@ import {
   safeEqual,
   verifyMetaSignature,
   verifySharedSecret,
+  verifyEasylexWebhook,
 } from "./webhook-signatures";
 
 const APP_SECRET = "test_app_secret_123";
@@ -94,5 +95,44 @@ describe("verifySharedSecret", () => {
   it("rechaza cuando el secreto esperado está vacío", () => {
     expect(verifySharedSecret("cualquier cosa", "")).toBe(false);
     expect(verifySharedSecret("", "")).toBe(false);
+  });
+});
+
+describe("verifyEasylexWebhook", () => {
+  const SECRET = "easylex_webhook_secret_abc";
+  const body = JSON.stringify({ eventType: "DOCUMENT_SIGNED", data: { id: "doc-1" } });
+
+  const hmacHex = (b: string, s = SECRET) =>
+    createHmac("sha256", s).update(b, "utf8").digest("hex");
+
+  it("acepta el secreto compartido plano en la cabecera", () => {
+    expect(verifyEasylexWebhook(body, SECRET, SECRET)).toBe(true);
+  });
+
+  it("acepta un HMAC-SHA256 del cuerpo (hex crudo)", () => {
+    expect(verifyEasylexWebhook(body, hmacHex(body), SECRET)).toBe(true);
+  });
+
+  it("acepta un HMAC con prefijo sha256=", () => {
+    expect(verifyEasylexWebhook(body, "sha256=" + hmacHex(body), SECRET)).toBe(true);
+  });
+
+  it("rechaza un HMAC calculado con otro secreto", () => {
+    expect(verifyEasylexWebhook(body, hmacHex(body, "otro"), SECRET)).toBe(false);
+  });
+
+  it("rechaza si el cuerpo cambió después de firmar (HMAC)", () => {
+    const sig = hmacHex(body);
+    const tampered = JSON.stringify({ eventType: "DOCUMENT_SIGNED", data: { id: "doc-2" } });
+    expect(verifyEasylexWebhook(tampered, sig, SECRET)).toBe(false);
+  });
+
+  it("rechaza una cabecera vacía o ausente", () => {
+    expect(verifyEasylexWebhook(body, null, SECRET)).toBe(false);
+    expect(verifyEasylexWebhook(body, "", SECRET)).toBe(false);
+  });
+
+  it("rechaza cuando el secreto esperado está vacío", () => {
+    expect(verifyEasylexWebhook(body, SECRET, "")).toBe(false);
   });
 });

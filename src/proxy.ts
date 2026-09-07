@@ -22,6 +22,20 @@ import { createMiddlewareClient } from "@/lib/supabase/middleware-client";
 const PUBLIC_PATHS = ["/login", "/auth/callback"];
 
 /**
+ * Prefijos de página pública (sin sesión). Ambas son pantallas del EMPLEADO, que
+ * no tiene cuenta en el backoffice: su autenticación es el identificador
+ * imposible de adivinar que viaja en la URL, no una cookie de sesión.
+ *
+ * - `/solicitar/<token>`: token HMAC firmado con `SOLICITAR_TOKEN_SECRET`.
+ * - `/firmar/<signerId>`: identificador de firmante que EasyLex emite por
+ *   contrato. La página lo valida contra `contract_attempts` y contra la
+ *   vigencia de 2 horas antes de redirigir; si no cuadra, no muestra nada.
+ *   Sin esto, el enlace de firma que se guarda como `signing_url` mandaba al
+ *   empleado a `/login`, donde nunca podrá entrar.
+ */
+const PUBLIC_PATH_PREFIXES = ["/solicitar/", "/firmar/"];
+
+/**
  * Prefijos de API que no requieren sesión.
  *
  * No son rutas abiertas: cada una se autentica por su cuenta —los webhooks por
@@ -43,6 +57,7 @@ function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.includes(pathname)) return true;
   if (PUBLIC_API_EXACT.includes(pathname)) return true;
   if (PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true;
+  if (PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true;
   return false;
 }
 

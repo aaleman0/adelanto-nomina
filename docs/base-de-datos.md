@@ -14,8 +14,13 @@ Las migraciones viven en `supabase/migrations/` y **se aplican manualmente pegá
 | `20250612_fix_whatsapp_message_status_text.sql` | `status` pasa a `text`; **versión autoritativa de las vistas** |
 | `20250701_contract_employee_fields.sql` | Campos de empleado para el contrato + `company_settings` |
 | `20250701_easylex_validation_settings.sql` | Flags de validación de EasyLex en `company_settings` |
+| `20260720`–`20260722` | RLS: deny-all, aprovisionamiento de perfiles/roles, políticas por rol (fase B) |
+| `20260723_restrict_sensitive_reads.sql` | Restringe la lectura de `employee_bank_accounts` y `raw_import_rows` a `operaciones`+ |
+| `20260724_whatsapp_message_dedup.sql` | `dedup_key` + índice único parcial (idempotencia de envíos) |
+| `20260730_signed_contracts.sql` | Bucket privado `contratos-firmados` + columna `contract_attempts.signed_pdf_path` (PDF firmado archivado) |
+| `20260731_bulk_send_mode_status.sql` | Amplía el CHECK de `whatsapp_bulk_sends.mode` a `('import','manual','status')` |
 
-Además, `20260720_enable_rls_deny_all.sql` activa RLS en modo deny-all sobre todas las tablas. Ver [Seguridad](#seguridad-y-control-de-acceso).
+RLS se activa en modo deny-all con `20260720` y se completa con las políticas por rol de `20260722`. Storage tiene tres buckets: `imports`, `import-reports` y `contratos-firmados` (privado, `application/pdf`). Ver [Seguridad](#seguridad-y-control-de-acceso).
 
 ---
 
@@ -254,6 +259,8 @@ Claves sembradas en `20250701_contract_employee_fields.sql` (`ON CONFLICT DO NOT
 | `acreedor_rfc` | `LCO2105032T5` |
 | `acreedor_domicilio` | `Del Gran Parque número 225, Interior C, colonia Cumbres, C.P. 64610, Monterrey, Nuevo León` |
 | `acreedor_banco`, `acreedor_cuenta`, `acreedor_clabe`, `testigo_1_nombre`, `testigo_2_nombre` | vacías — marcadas `(LLENAR)` |
+
+Desde 2026-07-31 las cuatro de identidad (`acreedor_razon_social/representante/rfc/domicilio`) **sí llegan al contrato** vía placeholders `{{razon_social_acreedor}}`… con respaldo en código si están vacías; las cinco `(LLENAR)` no tienen respaldo. Editables desde "Datos de empresa". Ver [Configuración](configuracion.md#datos-del-acreedor-contrato).
 
 Claves de `20250701_easylex_validation_settings.sql`, todas booleanos en texto: `easylex_validate_biometric` = `true`, `easylex_validate_liveness` = `true`; `easylex_validate_id`, `easylex_validate_sms`, `easylex_validate_picture`, `easylex_validate_email`, `easylex_validate_voice` = `false`.
 

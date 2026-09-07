@@ -5,8 +5,7 @@ import { generateContractPdf } from "@/lib/easylex/contract-pdf";
 import { easylexEnv } from "@/lib/env";
 import { getCompanySettings } from "@/lib/company-settings";
 import { logger } from "@/lib/logger";
-
-const LINK_TTL_HOURS = 2;
+import { LINK_TTL_HOURS } from "./link-ttl";
 
 export type Employee = {
   id: string;
@@ -122,6 +121,9 @@ export async function createEasyLexAttempt(
   const fileName = `contrato_${employee.rfc}_${attemptId.slice(0, 8)}`;
   const validation = buildValidationConfig(companySettings);
 
+  // El TTL de la app coincide con la expiración real del documento en EasyLex.
+  const expiresAt = new Date(now.getTime() + LINK_TTL_HOURS * 60 * 60 * 1000);
+
   const client = new EasyLexClient();
   const easylexResult = await client.createDocument({
     fileName,
@@ -135,6 +137,7 @@ export async function createEasyLexAttempt(
     ],
     pdfBuffer,
     callbackUrl,
+    expirationDate: expiresAt.toISOString(),
     validation,
   });
 
@@ -162,7 +165,10 @@ export async function createEasyLexAttempt(
     throw new Error(`Error al crear contrato en EasyLex: ${easylexResult.error}`);
   }
 
-  const expiresAt = new Date(now.getTime() + LINK_TTL_HOURS * 60 * 60 * 1000);
+  const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const publicSigningUrl = appBaseUrl
+    ? `${appBaseUrl.replace(/\/+$/, "")}/firmar/${easylexResult.signerId}`
+    : easylexResult.signingUrl;
 
   const { data, error } = await supabase
     .from("contract_attempts")
@@ -171,7 +177,7 @@ export async function createEasyLexAttempt(
       contract_request_id: contractRequest.id,
       attempt_number: attemptNumber,
       easylex_contract_id: easylexResult.documentId,
-      signing_url: easylexResult.signingUrl,
+      signing_url: publicSigningUrl,
       status: "generado",
       expires_at: expiresAt.toISOString(),
       generated_at: now.toISOString(),
@@ -179,7 +185,8 @@ export async function createEasyLexAttempt(
         provider: "easylex",
         document_id: easylexResult.documentId,
         signer_id: easylexResult.signerId,
-        signing_url: easylexResult.signingUrl,
+        signing_url: publicSigningUrl,
+        easylex_signing_url: easylexResult.signingUrl,
         expires_at: expiresAt.toISOString(),
         raw: easylexResult.rawResponse,
       },
@@ -193,7 +200,8 @@ export async function createEasyLexAttempt(
     attemptId,
     documentId: easylexResult.documentId,
     signerId: easylexResult.signerId,
-    signingUrl: easylexResult.signingUrl,
+    signingUrl: publicSigningUrl,
+    easylexSigningUrl: easylexResult.signingUrl,
     correlationId,
     validation,
   });
@@ -206,7 +214,7 @@ function readBooleanSetting(settings: Record<string, string>, key: string): bool
 }
 
 function buildValidationConfig(settings: Record<string, string>): EasyLexValidationConfig {
-  return {
+  const config: EasyLexValidationConfig = {
     validateId: readBooleanSetting(settings, "easylex_validate_id"),
     validateSms: readBooleanSetting(settings, "easylex_validate_sms"),
     validatePicture: readBooleanSetting(settings, "easylex_validate_picture"),
@@ -215,4 +223,16 @@ function buildValidationConfig(settings: Record<string, string>): EasyLexValidat
     validateLiveness: readBooleanSetting(settings, "easylex_validate_liveness"),
     validateVoice: readBooleanSetting(settings, "easylex_validate_voice"),
   };
+
+  // EasyLex exige que el biométrico y la prueba de vida vengan acompañados de
+  // validación de INE (validateId) y foto comparativa (validatePicture): tiene
+  // sentido —para cotejar la cara necesita el documento—. Sin esa dependencia,
+  // createDocument falla con 502 "InvalidRequest". Se fuerza aquí para que una
+  // configuración inconsistente en company_settings no tumbe el pipeline.
+  if (config.validateBiometric || config.validateLiveness) {
+    config.validateId = true;
+    config.validatePicture = true;
+  }
+
+  return config;
 }

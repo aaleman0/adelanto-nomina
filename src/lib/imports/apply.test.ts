@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildOfferPayload,
   hasEmployeeChanged,
+  isUnchangedReapply,
   requireString,
   type Employee,
   type EmployeePayload,
@@ -110,6 +111,30 @@ describe("buildOfferPayload", () => {
     const offer = build({ is_eligible: true, monto_prestamo_autorizado: 1, estatus_p_esta_q: "", estatus_cliente: "" });
     expect(offer.estatus_p_esta_q).toBeNull();
     expect(offer.estatus_cliente).toBeNull();
+  });
+});
+
+describe("isUnchangedReapply (lote nuevo = ciclo nuevo)", () => {
+  const offer = { source_batch_id: "batch-1", source_hash: "hash-abc" };
+
+  it("mismo lote + mismo hash → se salta (reaplicar es idempotente)", () => {
+    expect(isUnchangedReapply(offer, "batch-1", "hash-abc")).toBe(true);
+  });
+
+  it("LOTE NUEVO + mismo hash → NO se salta (ciclo nuevo, aunque el monto no cambie)", () => {
+    expect(isUnchangedReapply(offer, "batch-2", "hash-abc")).toBe(false);
+  });
+
+  it("mismo lote + hash distinto → NO se salta (cambió el dato)", () => {
+    expect(isUnchangedReapply(offer, "batch-1", "hash-xyz")).toBe(false);
+  });
+
+  it("sin oferta vigente → NO se salta (hay que crearla)", () => {
+    expect(isUnchangedReapply(null, "batch-1", "hash-abc")).toBe(false);
+  });
+
+  it("oferta sin lote registrado → NO se salta (se refresca)", () => {
+    expect(isUnchangedReapply({ source_batch_id: null, source_hash: "hash-abc" }, "batch-1", "hash-abc")).toBe(false);
   });
 });
 

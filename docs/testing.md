@@ -44,7 +44,10 @@ Configuración: `@vitejs/plugin-react-swc`, entorno `jsdom`, `globals: true`, se
 
 `src/test/setup.ts` importa `@testing-library/jest-dom` y **mockea globalmente** `@/lib/logger` y `@/lib/supabase/server` (`getSupabaseAdmin`). Es decir, ningún test unitario toca la base de datos.
 
-### Cobertura actual — 6 archivos, 76 tests
+### Cobertura actual
+
+> Nota: el conteo exacto crece con cada cambio (a la fecha, ~23 archivos y ~220
+> tests unitarios). La tabla de abajo resume las áreas cubiertas, no un total fijo.
 
 | Archivo | Qué cubre |
 |---|---|

@@ -45,7 +45,11 @@ export async function GET(request: Request) {
       .order("created_at", { ascending: true })
       .range(from, to);
 
-    if (statusFilter) {
+    if (statusFilter === "queued") {
+      // Un mensaje encolado no tiene estado de entrega todavía: el worker lo
+      // escribe al enviarlo. "queued" es el nombre que le da la UI a ese NULL.
+      msgQuery = msgQuery.is("delivery_status", null);
+    } else if (statusFilter) {
       msgQuery = msgQuery.eq("delivery_status", statusFilter);
     }
 

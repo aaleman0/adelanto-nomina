@@ -54,12 +54,12 @@ Las dos últimas **no están en el esquema de `src/lib/env.ts`**: se leen direct
 |---|---|---|
 | `EASYLEX_ACCESS_KEY_ID` | sí | |
 | `EASYLEX_SECRET_ACCESS_KEY` | sí | |
-| `EASYLEX_BASE_URL` | no | **Default: `https://sandboxapi.easylex.com`** |
-| `EASYLEX_SIGNING_LINK_BASE_URL` | no | Default: `https://widgetsandbox.easylex.com/firmar` |
-| `EASYLEX_CALLBACK_URL` | sí | **Debe terminar en `/api/webhooks/easylex/sign`** |
-| `EASYLEX_WEBHOOK_SECRET` | sí en producción | Si está vacío, en producción **el webhook rechaza todo** con `401` |
+| `EASYLEX_BASE_URL` | **sí en prod** | Default en código = sandbox. **Producción: `https://api.easylex.com`** (la cuenta solo existe en prod) |
+| `EASYLEX_SIGNING_LINK_BASE_URL` | **sí en prod** | Default en código (`widgetsandbox…`) **no existe / NXDOMAIN**. **Producción: `https://easylex.com/documento/firma`** |
+| `EASYLEX_CALLBACK_URL` | sí en prod | **Debe terminar en `/api/webhooks/easylex/sign`** y ser una **URL pública** (EasyLex no alcanza `localhost`) |
+| `EASYLEX_WEBHOOK_SECRET` | sí en producción | El mismo valor que se configure en EasyLex. Si está vacío, en producción **el webhook rechaza todo** con `401` |
 
-Los dos defaults apuntan a sandbox. Sin definirlos explícitamente, producción firma contra el entorno de pruebas de EasyLex.
+**Los defaults en código apuntan a sandbox/dominios muertos.** Sin fijar `EASYLEX_BASE_URL` y `EASYLEX_SIGNING_LINK_BASE_URL` explícitamente en producción, la firma no funciona. Además, `easylex_validate_biometric`/`_liveness` **exigen** `easylex_validate_id`+`_picture` en `true` (ver [EasyLex y contratos](easylex-contratos.md#validaciones-biométricas)). Detalle completo de la integración en ese doc.
 
 ### Aplicación
 
@@ -147,23 +147,25 @@ Configuración de negocio, editable en base sin redeploy. Se lee con `getCompany
 
 ### Datos del acreedor (contrato)
 
-| Clave | Estado |
-|---|---|
-| `acreedor_razon_social` | sembrada — `LOZAV CONSTRUCTORES, SOCIEDAD ANÓNIMA DE CAPITAL VARIABLE` |
-| `acreedor_representante` | sembrada — `DARA JAHDAI LOPEZ DE LOS ANGELES` |
-| `acreedor_rfc` | sembrada — `LCO2105032T5` |
-| `acreedor_domicilio` | sembrada |
-| `acreedor_banco` | **vacía — (LLENAR)** |
-| `acreedor_cuenta` | **vacía — (LLENAR)** |
-| `acreedor_clabe` | **vacía — (LLENAR)** |
-| `testigo_1_nombre` | **vacía — (LLENAR)** |
-| `testigo_2_nombre` | **vacía — (LLENAR)** |
+Todas se editan desde la pantalla **"Datos de empresa"** (`/settings/empresa`, admin) o en base. Dos grupos según qué pasa si están vacías:
 
-Las cinco vacías deben llenarse antes de emitir contratos reales.
+| Clave | Estado | Si está vacía |
+|---|---|---|
+| `acreedor_razon_social` | identidad — respaldo `LOZAV CONSTRUCTORES, SOCIEDAD ANÓNIMA DE CAPITAL VARIABLE` | usa el respaldo (no sale en blanco) |
+| `acreedor_representante` | identidad — respaldo `DARA JAHDAI LOPEZ DE LOS ANGELES` | usa el respaldo |
+| `acreedor_rfc` | identidad — respaldo `LCO2105032T5` | usa el respaldo |
+| `acreedor_domicilio` | identidad — respaldo `Del Gran Parque número 225…` | usa el respaldo |
+| `acreedor_banco` | **vacía — (LLENAR)** | **sale en blanco** |
+| `acreedor_cuenta` | **vacía — (LLENAR)** | **sale en blanco** |
+| `acreedor_clabe` | **vacía — (LLENAR)** | **sale en blanco** |
+| `testigo_1_nombre` | **vacía — (LLENAR)** | **sale en blanco** |
+| `testigo_2_nombre` | **vacía — (LLENAR)** | **sale en blanco** |
+
+La identidad (primeras cuatro) tiene respaldo en código (`ACREEDOR_DEFAULTS`): editarla es opcional, cambia el contrato pero nunca lo deja en blanco. Las **cinco `(LLENAR)`** no tienen respaldo y **deben llenarse antes de emitir contratos reales**. Detalle en [EasyLex y contratos](easylex-contratos.md#plantilla-del-contrato-placeholders-y-arreglos).
 
 ### Validaciones de EasyLex
 
-Booleanos en texto: `easylex_validate_biometric` y `easylex_validate_liveness` en `true`; `easylex_validate_id`, `easylex_validate_sms`, `easylex_validate_picture`, `easylex_validate_email`, `easylex_validate_voice` en `false`.
+Booleanos en texto. Valor actual (verificación completa): `easylex_validate_id`, `easylex_validate_picture`, `easylex_validate_biometric` y `easylex_validate_liveness` en `true`; `easylex_validate_sms`, `easylex_validate_email`, `easylex_validate_voice` en `false`. **Biométrico/liveness exigen id+picture** o `createDocument` da `502`.
 
 ## Checklist antes de producción
 
@@ -171,8 +173,8 @@ Configuración:
 
 - [ ] `EASYLEX_BASE_URL` y `EASYLEX_SIGNING_LINK_BASE_URL` apuntando a producción, no a sandbox
 - [ ] `EASYLEX_WEBHOOK_SECRET` definido (si está vacío no hay autenticación de webhook)
-- [ ] **Credenciales de EasyLex que autentiquen.** Bloqueo verificado (2026-07-20): las llaves del panel de EasyLex son rechazadas por su propia API (`code 106`), en sandbox y producción. No es del código —está correcto—; es de la cuenta EasyLex. Soporte debe habilitar el acceso a la API. Detalle en [EasyLex y contratos](easylex-contratos.md#autenticación)
-- [ ] `EASYLEX_CALLBACK_URL` terminando en `/api/webhooks/easylex/sign`
+- [x] **Credenciales de EasyLex que autentiquen (RESUELTO 2026-07-28).** El `code 106` era discordancia de ambiente+llave, no de cuenta: la cuenta solo existe en producción y la llave estaba equivocada. Fix: `EASYLEX_BASE_URL=https://api.easylex.com` + resetear llaves en el dashboard. Probar con `node scripts/test-easylex.mjs`. Detalle en [EasyLex y contratos](easylex-contratos.md#autenticación)
+- [ ] `EASYLEX_CALLBACK_URL` (URL **pública**) terminando en `/api/webhooks/easylex/sign`, y el webhook + secreto configurados en el dashboard de EasyLex
 - [ ] Las cinco claves `(LLENAR)` de `company_settings` completadas
 - [ ] Secretos en un gestor de secretos, no en la tabla `settings`
 - [ ] `NEXT_PUBLIC_APP_URL` con el dominio real (rompe el OAuth si no)
@@ -181,7 +183,7 @@ Configuración:
 - [x] **RLS aplicada y verificada (2026-07-21).** Se descubrió (2026-07-20) que la anon key **pública** leía todas las tablas (504 empleados, 48 cuentas bancarias, 310 solicitudes, 347 logs) porque la migración nunca se había aplicado. Se aplicaron las tres migraciones y se verificó el cierre: la anon key sin sesión devuelve **0 filas** en las 18 tablas.
 - [x] Aplicadas, en orden: `20260720_enable_rls_deny_all.sql` (deny-all), `20260721_profiles_provisioning_and_roles.sql` (perfiles), `20260722_rls_policies_phase_b.sql` (políticas por rol)
 - [ ] **Aplicar `20260723_restrict_sensitive_reads.sql`** (M1): restringe la lectura de `employee_bank_accounts` y `raw_import_rows` a `operaciones`+. Hacerlo **antes** de encender `RLS_SESSION_READS`.
-- [ ] **Al aprovisionar una base de producción separada, re-aplicar las migraciones en orden** (`20260720` → `20260721` → `20260722` → `20260723`) y re-verificar el count 0 (la verificación de arriba es sobre la base actual)
+- [ ] **Al aprovisionar una base de producción separada, re-aplicar TODAS las migraciones de `supabase/migrations/` en orden** (incluidas `20260723` restricción de lecturas, `20260724` dedup de WhatsApp, `20260730` bucket de contratos firmados + `signed_pdf_path`, `20260731` CHECK de `whatsapp_bulk_sends.mode`) y re-verificar el count 0 (la verificación de arriba es sobre la base actual)
 - [x] Test automatizado del invariante de RLS (H2): `pnpm verify:rls` (`RUN_RLS_CHECK=1`) — verifica que la anon key devuelve 0 filas en las 18 tablas. Correrlo en CI/post-deploy.
 - [ ] Tras aplicar M1, poner `RLS_SESSION_READS=on` para que las lecturas del backoffice usen el cliente de sesión
 - [ ] Definir `BOOTSTRAP_ADMIN_EMAILS` **antes** de poner `RBAC_ENFORCEMENT=enforce`

@@ -69,12 +69,58 @@ export type EasyLexDocumentStatusResponse = {
   references: unknown[];
 };
 
+/**
+ * Forma real del error de EasyLex: `{ error: { path, message, description, code } }`.
+ * El `description` (validación de esquema) trae `dataPath` y `params.allowedValues`,
+ * que es lo que hace legible un rechazo como "validateId debe ser true".
+ */
+export type EasyLexErrorDetail = {
+  path?: string;
+  message?: string;
+  code?: number;
+  description?: {
+    keyword?: string;
+    dataPath?: string;
+    message?: string;
+    params?: { allowedValues?: unknown[] };
+  };
+};
+
 export type EasyLexError = {
-  error?: string;
+  // `error` puede venir como string (formato viejo) u objeto (v2).
+  error?: string | EasyLexErrorDetail;
   message?: string;
   code?: number;
   statusCode?: number;
 };
+
+/**
+ * Convierte la respuesta de error de EasyLex en un mensaje legible. Antes se
+ * hacía `body.message ?? body.error`, pero en v2 `body.error` es un OBJETO, así
+ * que terminaba como "[object Object]" y ocultaba la causa real (p. ej. que una
+ * validación exige otra). Aquí se extrae el detalle del esquema cuando existe.
+ */
+export function describeEasyLexError(body: unknown, status: number): string {
+  const b = (body ?? {}) as EasyLexError;
+  const err = b.error;
+
+  if (err && typeof err === "object") {
+    const base = err.message || "InvalidRequest";
+    const d = err.description;
+    if (d && (d.dataPath || d.params?.allowedValues)) {
+      const field = d.dataPath ? d.dataPath.replace(/^\./, "") : "campo";
+      const allowed = d.params?.allowedValues?.length
+        ? ` (valor permitido: ${d.params.allowedValues.join(", ")})`
+        : "";
+      return `${base}: '${field}' inválido${allowed}`;
+    }
+    return err.code ? `${base} [code ${err.code}]` : base;
+  }
+
+  if (typeof err === "string" && err) return err;
+  if (typeof b.message === "string" && b.message) return b.message;
+  return `HTTP ${status}`;
+}
 
 export type CreateDocumentResult =
   | { ok: true; documentId: string; signerId: string; signingUrl: string; rawResponse: EasyLexCreateDocumentResponse }
@@ -82,6 +128,10 @@ export type CreateDocumentResult =
 
 export type GetDocumentStatusResult =
   | { ok: true; status: "SIGNED" | "UNSIGNED" }
+  | { ok: false; error: string };
+
+export type GetSignedDocumentResult =
+  | { ok: true; pdf: Buffer }
   | { ok: false; error: string };
 
 /* ─── Client ─── */
@@ -162,9 +212,7 @@ export class EasyLexClient {
       const body = await response.json();
 
       if (!response.ok) {
-        const errorMsg = (body as EasyLexError).message
-          ?? (body as EasyLexError).error
-          ?? `HTTP ${response.status}`;
+        const errorMsg = describeEasyLexError(body, response.status);
 
         logger.error("easylex.create_document.failed", new Error(errorMsg), {
           status: response.status,
@@ -221,7 +269,7 @@ export class EasyLexClient {
       const body = await response.json();
 
       if (!response.ok) {
-        const errorMsg = (body as EasyLexError).message ?? `HTTP ${response.status}`;
+        const errorMsg = describeEasyLexError(body, response.status);
         return { ok: false, error: errorMsg };
       }
 
@@ -234,11 +282,59 @@ export class EasyLexClient {
     }
   }
 
-  private buildSigningUrl(signerId: string): string {
-    if (this.signingLinkBaseUrl) {
-      return `${this.signingLinkBaseUrl}/${signerId}`;
+  /**
+   * Descarga el PDF FIRMADO de un documento. Cuando existe, la respuesta es
+   * binaria (`application/pdf`); si el documento no está firmado o la petición
+   * falla, EasyLex responde JSON de error, que se traduce con
+   * `describeEasyLexError` en lugar de tratar los bytes como PDF.
+   */
+  async getSignedDocument(documentId: string): Promise<GetSignedDocumentResult> {
+    if (!this.accessKeyId || !this.secretAccessKey) {
+      return { ok: false, error: "EasyLex no configurado (access-key-id o secret-access-key faltante)." };
     }
-    return `${this.baseUrl.replace("api.", "widget.")}/firmar/${signerId}`;
+
+    const url = `${this.baseUrl}/api/public/v2/document/signed/${documentId}`;
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        headers: {
+          "access-key-id": this.accessKeyId,
+          "secret-access-key": this.secretAccessKey,
+        },
+      });
+
+      if (!response.ok) {
+        let body: unknown = null;
+        try {
+          body = await response.json();
+        } catch {
+          // La respuesta de error podría no ser JSON; se cae al status HTTP.
+        }
+        return { ok: false, error: describeEasyLexError(body, response.status) };
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      return { ok: true, pdf: Buffer.from(arrayBuffer) };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Error al descargar el documento firmado.";
+      logger.error("easylex.get_signed.error", error, { documentId });
+      return { ok: false, error: msg };
+    }
+  }
+
+  private buildSigningUrl(signerId: string): string {
+    // Sin base configurada, el fallback antiguo (`baseUrl` con `api.`→`widget.`)
+    // producía un dominio que no sirve para firmar (404). Fallar en voz alta:
+    // así el intento queda en 'error' con un mensaje claro en vez de generar un
+    // link muerto que el empleado no podría abrir.
+    if (!this.signingLinkBaseUrl) {
+      throw new Error(
+        "EASYLEX_SIGNING_LINK_BASE_URL no está configurada: no se puede construir el link de firma.",
+      );
+    }
+    return `${this.signingLinkBaseUrl}/${signerId}`;
   }
 }
 

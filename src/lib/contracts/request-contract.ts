@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { LINK_TTL_HOURS } from "./link-ttl";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { normalizePhoneFromCsv } from "@/lib/whatsapp/phone-utils";
 import { createEasyLexAttempt } from "@/lib/contracts/create-easylex-attempt";
@@ -84,7 +85,7 @@ type ContractAttempt = {
   error_message: string | null;
 };
 
-type RequestContractInput = {
+export type RequestContractInput = {
   subscriberId: string;
   rfc: string;
   telefonoNormalizado: string | null;
@@ -113,8 +114,6 @@ type RequestContractResult = {
   expires_at?: string;
   expires_at_formatted?: string;
 };
-
-const LINK_TTL_HOURS = 2;
 
 export function parseRequestContractPayload(
   payload: RequestContractPayload,
@@ -145,10 +144,23 @@ export function parseRequestContractPayload(
   };
 }
 
+type RequestContractOptions = {
+  /** No envía el link de firma por WhatsApp. Útil para reenviar el link por otro medio (ej. botón de plantilla masiva). */
+  skipSend?: boolean;
+  /** No registra interacción de WhatsApp en `whatsapp_contract_messages`. */
+  skipRecord?: boolean;
+  /** No registra resultado de negocio en `integration_logs`. */
+  skipLog?: boolean;
+  /** Origen para eventos de auditoría. Default: whatsapp. */
+  source?: "whatsapp" | "backend";
+};
+
 export async function requestContractFromWhatsApp(
   input: RequestContractInput,
+  options: RequestContractOptions = {},
 ): Promise<RequestContractResult> {
   const correlationId = randomUUID();
+  const { skipSend = false, skipRecord = false, skipLog = false, source = "whatsapp" } = options;
 
   const employee = await getEmployeeByRfc(input.rfc);
 
@@ -159,13 +171,15 @@ export async function requestContractFromWhatsApp(
       message: "No encontramos una oferta disponible para este RFC.",
       estatus_contrato: "no_disponible",
     };
-    await createIntegrationLog({
-      correlationId,
-      requestPayload: sanitizePayload(input.rawPayload),
-      responsePayload: result,
-      success: true,
-      entityType: "employees",
-    });
+    if (!skipLog) {
+      await createIntegrationLog({
+        correlationId,
+        requestPayload: sanitizePayload(input.rawPayload),
+        responsePayload: result,
+        success: true,
+        entityType: "employees",
+      });
+    }
     return result;
   }
 
@@ -179,7 +193,7 @@ export async function requestContractFromWhatsApp(
       message: "No hay una oferta vigente para generar contrato.",
       estatus_contrato: "no_disponible",
     };
-    await recordWhatsAppInteraction({
+    if (!skipRecord) await recordWhatsAppInteraction({
       input,
       employee,
       offer: null,
@@ -187,7 +201,7 @@ export async function requestContractFromWhatsApp(
       correlationId,
       metadata: { result_status: result.status },
     });
-    await logBusinessResult(input, employee.id, result, correlationId);
+    if (!skipLog) await logBusinessResult(input, employee.id, result, correlationId);
     return result;
   }
 
@@ -198,7 +212,7 @@ export async function requestContractFromWhatsApp(
       message: "Tu oferta no esta disponible para solicitar adelanto.",
       estatus_contrato: "no_disponible",
     };
-    await recordWhatsAppInteraction({
+    if (!skipRecord) await recordWhatsAppInteraction({
       input,
       employee,
       offer,
@@ -206,7 +220,7 @@ export async function requestContractFromWhatsApp(
       correlationId,
       metadata: { result_status: result.status },
     });
-    await logBusinessResult(input, employee.id, result, correlationId);
+    if (!skipLog) await logBusinessResult(input, employee.id, result, correlationId);
     return result;
   }
 
@@ -222,8 +236,10 @@ export async function requestContractFromWhatsApp(
       entityType: "contract_requests",
       entityId: contractRequest.id,
       employeeId: employee.id,
-      source: "whatsapp",
-      summary: `Solicitud de contrato creada desde WhatsApp para RFC ${employee.rfc}.`,
+      source,
+      summary: source === "whatsapp"
+        ? `Solicitud de contrato creada desde WhatsApp para RFC ${employee.rfc}.`
+        : `Solicitud de contrato creada desde envío masivo para RFC ${employee.rfc}.`,
       metadata: {
         offer_id: offer.id,
         subscriber_id: input.subscriberId,
@@ -242,7 +258,7 @@ export async function requestContractFromWhatsApp(
       request_id: contractRequest.id,
       attempt_id: signedAttempt?.id,
     };
-    await recordWhatsAppInteraction({
+    if (!skipRecord) await recordWhatsAppInteraction({
       input,
       employee,
       offer,
@@ -250,7 +266,7 @@ export async function requestContractFromWhatsApp(
       correlationId,
       metadata: { result_status: result.status },
     });
-    await logBusinessResult(input, employee.id, result, correlationId);
+    if (!skipLog) await logBusinessResult(input, employee.id, result, correlationId);
     return result;
   }
 
@@ -271,14 +287,14 @@ export async function requestContractFromWhatsApp(
       // 'error'), así que el empleado cae en "Requieren acción → Con error",
       // listo para reintentar en lote cuando EasyLex vuelva. No se manda
       // WhatsApp: no hay link válido que enviar.
-      return await handleContractLinkFailure({ input, employee, offer, contractRequest, correlationId, error });
+      return await handleContractLinkFailure({ input, employee, offer, contractRequest, correlationId, error, skipLog });
     }
   } else {
     attempt = await regenerateMockAttempt(contractRequest, latestAttempt);
   }
 
   await updateContractRequestLinkGenerated(contractRequest.id);
-  await recordWhatsAppInteraction({
+  if (!skipRecord) await recordWhatsAppInteraction({
     input,
     employee,
     offer,
@@ -319,7 +335,7 @@ export async function requestContractFromWhatsApp(
 
   // Enviar el link al empleado por WhatsApp. No es fatal: el contrato ya está
   // generado y el link queda en el resultado aunque el envío falle.
-  const linkSend = await sendContractLinkWhatsApp({
+  const linkSend = !skipSend ? await sendContractLinkWhatsApp({
     employeeId: employee.id,
     offerId: offer.id,
     contractRequestId: contractRequest.id,
@@ -330,7 +346,7 @@ export async function requestContractFromWhatsApp(
     expiresAt: attempt.expires_at,
     subscriberId: input.subscriberId,
     correlationId,
-  });
+  }) : { sent: false, reason: "Omitido por envío masivo." };
 
   const result: RequestContractResult = {
     ok: true,
@@ -347,7 +363,7 @@ export async function requestContractFromWhatsApp(
       : undefined,
   };
 
-  await logBusinessResult(input, employee.id, result, correlationId);
+  if (!skipLog) await logBusinessResult(input, employee.id, result, correlationId);
   return result;
 }
 
@@ -366,8 +382,9 @@ async function handleContractLinkFailure(params: {
   contractRequest: ContractRequest;
   correlationId: string;
   error: unknown;
+  skipLog: boolean;
 }): Promise<RequestContractResult> {
-  const { input, employee, offer, contractRequest, correlationId, error } = params;
+  const { input, employee, offer, contractRequest, correlationId, error, skipLog } = params;
   const reason = error instanceof Error ? error.message : "No se pudo generar el link de firma.";
 
   // Best-effort: la vista ya marca 'error' por el intento; esto solo mejora el
@@ -409,25 +426,56 @@ async function handleContractLinkFailure(params: {
     request_id: contractRequest.id,
   };
 
-  await logBusinessResult(input, employee.id, result, correlationId);
+  if (!skipLog) await logBusinessResult(input, employee.id, result, correlationId);
   return result;
 }
 
+const EMPLOYEE_COLUMNS =
+  "id, rfc, curp, nombre, apellido_paterno, apellido_materno, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador, estado_civil, nacionalidad, lugar_origen, fecha_nacimiento, domicilio";
+
+/**
+ * Empleado por RFC.
+ *
+ * El RFC debería ser único, pero en la práctica se han colado filas repetidas
+ * (importaciones antiguas, altas manuales de prueba). Antes esto usaba
+ * `maybeSingle()`, que ANTE UN DUPLICADO LANZA: el empleado tocaba "Sí" en
+ * WhatsApp y todo el pipeline reventaba con un error incomprensible.
+ *
+ * Ahora se resuelve de forma determinista: si hay varias filas, gana la que
+ * tiene la oferta del ciclo vigente —que es la que el operador está trabajando—
+ * y, si ninguna la tiene, la más reciente. Se registra el duplicado para poder
+ * limpiarlo, pero no se detiene al empleado por un problema de datos nuestro.
+ */
 async function getEmployeeByRfc(rfc: string) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("employees")
-    .select(
-      "id, rfc, curp, nombre, apellido_paterno, apellido_materno, apellidos, cp_csf, telefono, telefono_normalizado, email, empleador, estado_civil, nacionalidad, lugar_origen, fecha_nacimiento, domicilio",
-    )
+    .select(EMPLOYEE_COLUMNS)
     .eq("rfc", rfc)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
 
   if (error) {
     throw error;
   }
 
-  return data as Employee | null;
+  const filas = (data ?? []) as Employee[];
+  if (filas.length === 0) return null;
+  if (filas.length === 1) return filas[0];
+
+  logger.warn("employees.duplicate_rfc", {
+    rfc,
+    encontrados: filas.length,
+    detalle: "Varias filas de empleado con el mismo RFC; se usa la de la oferta vigente.",
+  });
+
+  const { data: ofertas } = await supabase
+    .from("advance_offers")
+    .select("employee_id")
+    .in("employee_id", filas.map((f) => f.id))
+    .eq("is_current", true);
+
+  const conOfertaVigente = new Set((ofertas ?? []).map((o) => o.employee_id as string));
+  return filas.find((f) => conOfertaVigente.has(f.id)) ?? filas[0];
 }
 
 async function getCurrentOffer(employeeId: string) {

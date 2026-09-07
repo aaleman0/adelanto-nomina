@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { easylexEnv } from "@/lib/env";
-import { verifySharedSecret, isProduction, enforceSignatures } from "@/lib/security/webhook-signatures";
+import { verifyEasylexWebhook, isProduction, enforceSignatures } from "@/lib/security/webhook-signatures";
 import { redactPII } from "@/lib/audit/redact";
+import { deliverSignedContract } from "@/lib/contracts/deliver-signed-contract";
 import { randomUUID } from "node:crypto";
 
 import { enforceRateLimit } from "@/lib/security/rate-limit";
@@ -45,6 +46,10 @@ export async function POST(request: Request) {
   try {
     const signature = request.headers.get("x-easylex-signature");
     const webhookSecret = easylexEnv.webhookSecret;
+    // Cuerpo crudo (no parseado): se necesita para poder validar un HMAC del
+    // payload. Si se reserializa el JSON, los bytes cambian y la firma nunca
+    // coincide. Se lee una sola vez y luego se parsea desde aquí.
+    const rawBody = await request.text();
 
     if (!webhookSecret) {
       // Antes, un secreto vacío omitía la validación por completo (fail open).
@@ -63,7 +68,7 @@ export async function POST(request: Request) {
         correlationId,
         detail: "EASYLEX_WEBHOOK_SECRET no configurado (solo permitido fuera de producción).",
       });
-    } else if (!verifySharedSecret(signature, webhookSecret)) {
+    } else if (!verifyEasylexWebhook(rawBody, signature, webhookSecret)) {
       logger.warn("easylex.webhook.unauthorized", {
         correlationId,
         hasSignature: Boolean(signature),
@@ -71,7 +76,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const payload: EasyLexWebhookPayload = await request.json();
+    const payload: EasyLexWebhookPayload = JSON.parse(rawBody);
 
     logger.info("easylex.webhook.received", {
       webhookId: payload.webhookId,
@@ -209,13 +214,12 @@ async function handleDocumentSigned(
     return;
   }
 
-  const { error: updateAttemptError } = await supabase
-    .from("contract_attempts")
-    .update({ status: "firmado", signed_at: signedAt })
-    .eq("id", attempt.id);
-
-  if (updateAttemptError) throw updateAttemptError;
-
+  // ORDEN IMPORTANTE: `contract_attempts.status='firmado'` es el guard de
+  // idempotencia de arriba, así que se marca AL FINAL —después de escribir
+  // request/oferta/auditoría—. Si alguna de esas escrituras falla, el intento
+  // queda SIN firmar y el reintento de EasyLex (5xx) recupera el estado, en vez
+  // de cortocircuitar en el guard como pasaba antes (marcarlo primero perdía la
+  // request/oferta/evidencia si el proceso moría a mitad).
   const { data: contractRequest, error: crError } = await supabase
     .from("contract_requests")
     .select("id, employee_id, offer_id, status, signed_at")
@@ -239,29 +243,51 @@ async function handleDocumentSigned(
 
     if (offerError) throw offerError;
 
-    // El audit_event de firma es la evidencia legal: su fallo NO debe tragarse.
-    // Se lanza para que el webhook devuelva 5xx y EasyLex reintente.
-    const { error: auditError } = await supabase.from("audit_events").insert({
-      event_name: "contract.signed",
-      entity_type: "contract_requests",
-      entity_id: contractRequest.id,
-      employee_id: contractRequest.employee_id,
-      correlation_id: correlationId,
-      source: "easylex",
-      previous_state: contractRequest.status,
-      new_state: "firmado",
-      summary: "Contrato firmado confirmado por webhook de EasyLex.",
-      metadata: {
-        contract_attempt_id: attempt.id,
-        easylex_contract_id: documentId,
-        signed_at: signedAt,
-        webhook_id: payload.webhookId,
-      },
-      actor_type: "system",
-    });
+    // El audit_event de firma es la evidencia legal. Idempotente: si un reintento
+    // vuelve a entrar tras haberlo insertado, no se duplica. Su fallo NO se traga
+    // (se lanza para que el webhook devuelva 5xx y EasyLex reintente).
+    const { data: existingAudit, error: existingAuditError } = await supabase
+      .from("audit_events")
+      .select("id")
+      .eq("entity_id", contractRequest.id)
+      .eq("event_name", "contract.signed")
+      .limit(1)
+      .maybeSingle();
 
-    if (auditError) throw auditError;
+    if (existingAuditError) throw existingAuditError;
+
+    if (!existingAudit) {
+      const { error: auditError } = await supabase.from("audit_events").insert({
+        event_name: "contract.signed",
+        entity_type: "contract_requests",
+        entity_id: contractRequest.id,
+        employee_id: contractRequest.employee_id,
+        correlation_id: correlationId,
+        source: "easylex",
+        previous_state: contractRequest.status,
+        new_state: "firmado",
+        summary: "Contrato firmado confirmado por webhook de EasyLex.",
+        metadata: {
+          contract_attempt_id: attempt.id,
+          easylex_contract_id: documentId,
+          signed_at: signedAt,
+          webhook_id: payload.webhookId,
+        },
+        actor_type: "system",
+      });
+
+      if (auditError) throw auditError;
+    }
   }
+
+  // Guard de idempotencia: se marca el intento firmado AL FINAL de las escrituras
+  // críticas. Los pasos que siguen (evento, log, entrega) son best-effort.
+  const { error: updateAttemptError } = await supabase
+    .from("contract_attempts")
+    .update({ status: "firmado", signed_at: signedAt })
+    .eq("id", attempt.id);
+
+  if (updateAttemptError) throw updateAttemptError;
 
   await recordEasyLexEvent({
     payload,
@@ -284,6 +310,19 @@ async function handleDocumentSigned(
     entity_type: "contract_attempts",
     entity_id: attempt.id,
   });
+
+  // Entrega del contrato firmado al empleado (archiva el PDF + WhatsApp).
+  // Best-effort y NUNCA lanza: un fallo de entrega no debe convertirse en un
+  // 5xx que haga a EasyLex reintentar la firma, que ya quedó registrada.
+  if (contractRequest) {
+    await deliverSignedContract({
+      documentId,
+      contractRequestId: contractRequest.id,
+      contractAttemptId: attempt.id,
+      employeeId: contractRequest.employee_id,
+      correlationId,
+    });
+  }
 
   logger.info("easylex.webhook.document_signed.completed", {
     attemptId: attempt.id,

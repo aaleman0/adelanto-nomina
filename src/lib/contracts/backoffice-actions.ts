@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { LINK_TTL_HOURS } from "./link-ttl";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { createEasyLexAttempt, type ContractAttempt } from "@/lib/contracts/create-easylex-attempt";
 import { easylexEnv } from "@/lib/env";
@@ -68,8 +69,6 @@ export type BackofficeContractActionResult = {
   link_easylex?: string;
   expires_at?: string;
 };
-
-const LINK_TTL_HOURS = 2;
 
 /**
  * Tope de expedientes que procesa una sola invocación en lote.

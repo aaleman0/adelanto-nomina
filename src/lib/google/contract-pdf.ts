@@ -14,15 +14,100 @@ export interface ContractData {
   domicilio: string;
   monto_numero: string;
   monto_letra: string;
+  total_pago_numero: string;
+  total_pago_letra: string;
   banco_acreedor: string;
   cuenta_acreedor: string;
   clabe_acreedor: string;
+  razon_social_acreedor: string;
+  rfc_acreedor: string;
+  representante_acreedor: string;
+  domicilio_acreedor: string;
   dia_firma: string;
   mes_firma: string;
   anio_firma: string;
   empleador: string;
   testigo_1: string;
   testigo_2: string;
+}
+
+type TextOccurrence = {
+  startIndex: number;
+  endIndex: number;
+  text: string;
+};
+
+function collectTextOccurrences(node: unknown, needle: string, out: TextOccurrence[]) {
+  if (!node || typeof node !== "object") return;
+
+  const record = node as Record<string, unknown>;
+  const startIndex = typeof record.startIndex === "number" ? record.startIndex : null;
+  const textRun = record.textRun as { content?: string } | undefined;
+  const content = textRun?.content;
+
+  if (startIndex !== null && typeof content === "string") {
+    let offset = content.indexOf(needle);
+    while (offset !== -1) {
+      out.push({
+        startIndex: startIndex + offset,
+        endIndex: startIndex + offset + needle.length,
+        text: needle,
+      });
+      offset = content.indexOf(needle, offset + needle.length);
+    }
+  }
+
+  for (const value of Object.values(record)) {
+    if (Array.isArray(value)) {
+      for (const child of value) collectTextOccurrences(child, needle, out);
+    } else if (value && typeof value === "object") {
+      collectTextOccurrences(value, needle, out);
+    }
+  }
+}
+
+type IndexedReplacement = {
+  occurrence: TextOccurrence;
+  replacement: string;
+};
+
+function buildIndexedReplacements(
+  occurrences: TextOccurrence[],
+  replacements: string[],
+): IndexedReplacement[] {
+  if (occurrences.length < replacements.length) {
+    throw new Error(
+      `No se encontraron suficientes ocurrencias del placeholder. Esperadas ${replacements.length}, encontradas ${occurrences.length}.`,
+    );
+  }
+
+  return occurrences
+    .slice(0, replacements.length)
+    .map((occurrence, index) => ({
+      occurrence,
+      replacement: replacements[index],
+    }));
+}
+
+function buildIndexedReplacementRequests(replacements: IndexedReplacement[]) {
+  return [...replacements]
+    .sort((a, b) => b.occurrence.startIndex - a.occurrence.startIndex)
+    .flatMap(({ occurrence, replacement }) => [
+      {
+        deleteContentRange: {
+          range: {
+            startIndex: occurrence.startIndex,
+            endIndex: occurrence.endIndex,
+          },
+        },
+      },
+      {
+        insertText: {
+          location: { index: occurrence.startIndex },
+          text: replacement,
+        },
+      },
+    ]);
 }
 
 export async function generateContractPdfFromGoogleDocs(
@@ -50,11 +135,13 @@ export async function generateContractPdfFromGoogleDocs(
       { old: "{{fecha_nacimiento}}", new: data.fecha_nacimiento },
       { old: "{{rfc}}", new: data.rfc },
       { old: "{{domicilio}}", new: data.domicilio },
-      { old: "{{monto_numero}}", new: data.monto_numero },
-      { old: "{{monto_letra}}", new: data.monto_letra },
       { old: "{{banco_acreedor}}", new: data.banco_acreedor },
       { old: "{{cuenta_acreedor}}", new: data.cuenta_acreedor },
       { old: "{{clabe_acreedor}}", new: data.clabe_acreedor },
+      { old: "{{razon_social_acreedor}}", new: data.razon_social_acreedor },
+      { old: "{{rfc_acreedor}}", new: data.rfc_acreedor },
+      { old: "{{representante_acreedor}}", new: data.representante_acreedor },
+      { old: "{{domicilio_acreedor}}", new: data.domicilio_acreedor },
       { old: "{{dia_firma}}", new: data.dia_firma },
       { old: "{{mes_firma}}", new: data.mes_firma },
       { old: "{{anio_firma}}", new: data.anio_firma },
@@ -72,6 +159,34 @@ export async function generateContractPdfFromGoogleDocs(
             replaceText: r.new,
           },
         })),
+      },
+    });
+
+    const document = await docs.documents.get({ documentId: copiedDocId });
+    const amountOccurrences: TextOccurrence[] = [];
+    const amountLetterOccurrences: TextOccurrence[] = [];
+
+    collectTextOccurrences(document.data.body?.content, "{{monto_numero}}", amountOccurrences);
+    collectTextOccurrences(document.data.body?.content, "{{monto_letra}}", amountLetterOccurrences);
+
+    const indexedRequests = buildIndexedReplacementRequests([
+      ...buildIndexedReplacements(amountOccurrences, [
+        data.monto_numero,
+        data.monto_numero,
+        data.total_pago_numero,
+        data.total_pago_numero,
+        data.total_pago_numero,
+      ]),
+      ...buildIndexedReplacements(amountLetterOccurrences, [
+        data.monto_letra,
+        data.total_pago_letra,
+      ]),
+    ]);
+
+    await docs.documents.batchUpdate({
+      documentId: copiedDocId,
+      requestBody: {
+        requests: indexedRequests,
       },
     });
 

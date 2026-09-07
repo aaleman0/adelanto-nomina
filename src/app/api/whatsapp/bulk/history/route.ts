@@ -2,12 +2,16 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { BulkHistoryQuerySchema } from "@/lib/whatsapp/schemas";
 import { parseQuery } from "@/lib/api/validation";
+import { requireRole } from "@/lib/auth/roles";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
 // GET /api/whatsapp/bulk/history?page=1&pageSize=20&status=completed&mode=import&dateFrom=2024-01-01&dateTo=2024-12-31
 export async function GET(request: Request) {
+  const auth = await requireRole("solo_lectura");
+  if (!auth.ok) return auth.response;
+
   const parsed = parseQuery(request, BulkHistoryQuerySchema);
   if (!parsed.success) return parsed.response;
   const { page, pageSize, status, mode, dateFrom, dateTo } = parsed.data;
