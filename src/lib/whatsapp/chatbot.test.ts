@@ -197,7 +197,8 @@ describe("variantesDeTelefono", () => {
  * Meta reintenta la entrega cuando el webhook no responde, y se vieron entregas
  * con 4 y 7 horas de retraso tras un redespliegue. Actuar sobre un mensaje tan
  * viejo confunde a la persona y, en el caso del "Sí", gasta una firma de EasyLex
- * en un enlace que vence mientras duerme.
+ * en un enlace que vence mientras duerme. El corte son 30 minutos: holgado para
+ * un reintento normal y muy por debajo de las 2 horas que dura el enlace.
  */
 describe("mensajeDemasiadoViejo", () => {
   const ahora = new Date("2026-09-07T12:00:00Z").getTime();
@@ -205,12 +206,13 @@ describe("mensajeDemasiadoViejo", () => {
 
   it("atiende lo reciente", () => {
     expect(mensajeDemasiadoViejo(haceMinutos(0), ahora)).toBe(false);
-    expect(mensajeDemasiadoViejo(haceMinutos(30), ahora)).toBe(false);
-    expect(mensajeDemasiadoViejo(haceMinutos(119), ahora)).toBe(false);
+    expect(mensajeDemasiadoViejo(haceMinutos(15), ahora)).toBe(false);
+    expect(mensajeDemasiadoViejo(haceMinutos(29), ahora)).toBe(false);
   });
 
-  it("descarta lo que rebasa las 2 horas", () => {
-    expect(mensajeDemasiadoViejo(haceMinutos(121), ahora)).toBe(true);
+  it("descarta lo que rebasa la media hora", () => {
+    expect(mensajeDemasiadoViejo(haceMinutos(31), ahora)).toBe(true);
+    expect(mensajeDemasiadoViejo(haceMinutos(90), ahora)).toBe(true);
     expect(mensajeDemasiadoViejo(haceMinutos(60 * 4), ahora)).toBe(true);  // el caso real
     expect(mensajeDemasiadoViejo(haceMinutos(60 * 7), ahora)).toBe(true);  // el otro caso real
   });

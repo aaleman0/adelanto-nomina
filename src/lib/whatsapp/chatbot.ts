@@ -154,8 +154,12 @@ export function classifyTextReply(body?: string | null): OfferReply | null {
  *
  * Se descarta en silencio: si la persona sigue interesada, vuelve a tocar el
  * botón y recibe un enlace fresco que sí alcanza a usar.
+ *
+ * Media hora es holgado para un reintento normal de Meta y sigue muy por debajo
+ * de las 2 horas que dura el enlace de firma: un mensaje más viejo que eso
+ * generaría un contrato que nace casi vencido.
  */
-export const MAX_ANTIGUEDAD_MS = 2 * 60 * 60 * 1000;
+export const MAX_ANTIGUEDAD_MS = 30 * 60 * 1000;
 
 export function mensajeDemasiadoViejo(
   timestamp: string | undefined,
