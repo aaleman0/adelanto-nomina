@@ -53,8 +53,8 @@ export function AccionesCiclo({
         {!puedeOperar
           ? "Tu rol no permite actualizar ni exportar este ciclo. Pídeselo a un administrador."
           : firmados === 0
-            ? "Cuando alguien firme podrás exportar la lista con nombre, RFC y monto."
-            : "Actualizar revisa en EasyLex quién ya firmó. Exportar baja la lista de firmados en CSV."}
+            ? "Cuando alguien firme podrás exportar la lista con nombre, RFC, monto autorizado y total a pagar."
+            : "Actualizar revisa en EasyLex quién ya firmó. Exportar baja el CSV con el monto autorizado y el total a pagar de cada quien."}
       </p>
     </div>
   );

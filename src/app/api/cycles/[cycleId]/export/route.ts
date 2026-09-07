@@ -1,12 +1,16 @@
 import { requireRole } from "@/lib/auth/roles";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { calculateLoanTotals } from "@/lib/contracts/loan-totals";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
 /**
  * Exporta en CSV (que Excel abre directo) los EMPLEADOS QUE FIRMARON en un ciclo
- * (lote de importación), con nombre + RFC + monto. "Firmó" = la solicitud de
+ * (lote de importación), con nombre + RFC + los dos montos: el AUTORIZADO (lo que
+ * recibe la persona) y el TOTAL A PAGAR (con comisión e IVA, lo que se le
+ * descuenta de la nómina). Son cifras distintas y ambas se necesitan: una para
+ * dispersar y otra para el descuento. "Firmó" = la solicitud de
  * contrato de su oferta de ese lote está `firmado` (persiste aunque un ciclo
  * posterior reemplace la oferta). Rol `operaciones`.
  */
@@ -39,13 +43,18 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cyc
         nombre: nombre || "Sin nombre",
         rfc: e?.rfc ?? "",
         monto: Number(o.monto_prestamo_autorizado ?? 0),
+        // Se calcula con la MISMA función que llena el contrato, para que el
+        // Excel y el pagaré que firmó la persona no puedan discrepar.
+        total: calculateLoanTotals(Number(o.monto_prestamo_autorizado ?? 0)).total,
       };
     });
     rows.sort((a, b) => a.nombre.localeCompare(b.nombre));
 
-    const lines = ["Nombre,RFC,Monto"];
+    const lines = ["Nombre,RFC,Monto autorizado,Total a pagar"];
     for (const r of rows) {
-      lines.push([csvEscape(r.nombre), csvEscape(r.rfc), r.monto.toFixed(2)].join(","));
+      lines.push(
+        [csvEscape(r.nombre), csvEscape(r.rfc), r.monto.toFixed(2), r.total.toFixed(2)].join(","),
+      );
     }
     // BOM para que Excel respete acentos; CRLF entre filas.
     const csv = "﻿" + lines.join("\r\n") + "\r\n";
