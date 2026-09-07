@@ -138,7 +138,11 @@ export default async function ExpedientePage({ params, searchParams }: Props) {
                 value={fecha(control.contract_signed_at ?? control.attempt_signed_at, "Todavía no firma")}
               />
             </div>
-            {control.contract_error || control.attempt_error ? (
+            {/* La última falla solo importa mientras el expediente siga abierto.
+                Una vez firmado, el error que hubo en el camino ya se resolvió, y
+                dejarlo en rojo hace creer que algo sigue mal en un contrato que
+                está terminado. */}
+            {!firmado && (control.contract_error || control.attempt_error) ? (
               <p className="mt-5 text-[17px] leading-relaxed text-failed">
                 Última falla registrada: {control.contract_error ?? control.attempt_error}
               </p>
