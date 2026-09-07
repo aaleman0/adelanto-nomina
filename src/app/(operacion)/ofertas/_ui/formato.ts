@@ -372,3 +372,24 @@ export async function pedirJson<T>(url: string, init?: RequestInit): Promise<T> 
 
   return cuerpo;
 }
+
+/**
+ * ¿Esta plantilla sirve con el flujo actual?
+ *
+ * Las plantillas con BOTÓN DE ENLACE quedaron obsoletas: su enlace se arma con
+ * una base fija guardada en Meta, y el sistema ya no manda eso —ahora el
+ * empleado responde con los botones Sí/No y el enlace de firma se le manda
+ * después—. Si se elige una de esas, el mensaje sale, pero el botón lleva a un
+ * enlace roto y el empleado se queda sin poder firmar.
+ *
+ * Se detecta leyendo la definición que Meta devolvió, no por nombre: así una
+ * plantilla nueva con botón de enlace también queda avisada.
+ */
+export function plantillaLlevaBotonDeEnlace(components: ComponentePlantilla[] | null | undefined): boolean {
+  const botones = (components ?? []).find((c) => c.type?.toUpperCase() === "BUTTONS");
+  return (botones?.buttons ?? []).some((b) => b.type?.toUpperCase() === "URL");
+}
+
+export const AVISO_PLANTILLA_OBSOLETA =
+  "Esta plantilla lleva un botón de enlace y ya no funciona con el flujo actual: " +
+  "el empleado recibiría un enlace roto. Usa la plantilla con los botones Sí / No.";

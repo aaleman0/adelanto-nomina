@@ -10,7 +10,9 @@ import { Empty, ErrorState, LoadingRows, ProblemNote } from "@/ui/states";
 import { staggerChild, staggerParent } from "@/ui/motion";
 import { EnlaceAccion, FilaElegible, Paso } from "./paso";
 import {
+  AVISO_PLANTILLA_OBSOLETA,
   categoriaDePlantilla,
+  plantillaLlevaBotonDeEnlace,
   estaAprobada,
   estadoDePlantilla,
   idiomaDePlantilla,
@@ -138,6 +140,13 @@ export function PasoPlantilla({
             </div>
           ) : null}
 
+          {/* Aviso fuerte, no una nota al pie: elegir esta plantilla manda un
+              mensaje que SÍ sale y se ve bien, pero cuyo botón lleva a un enlace
+              roto. El operador no tiene forma de notarlo desde aquí. */}
+          {plantilla && plantillaLlevaBotonDeEnlace(plantilla.components) ? (
+            <ProblemNote>{AVISO_PLANTILLA_OBSOLETA}</ProblemNote>
+          ) : null}
+
           {previa ? (
             <Sunken>
               <p className="mb-2 text-[13px] font-bold uppercase tracking-[0.07em] text-ink-3">
@@ -196,7 +205,11 @@ export function PasoPlantilla({
                           onAceptarRiesgo(false);
                         }}
                         titulo={t.name}
-                        detalle={`${idiomaDePlantilla(t.language)} · ${categoriaDePlantilla(t.category).etiqueta}`}
+                        detalle={
+                          plantillaLlevaBotonDeEnlace(t.components)
+                            ? `${idiomaDePlantilla(t.language)} · ${categoriaDePlantilla(t.category).etiqueta} · ⚠️ no sirve con el flujo actual`
+                            : `${idiomaDePlantilla(t.language)} · ${categoriaDePlantilla(t.category).etiqueta}`
+                        }
                         extra={<Status value={estadoDePlantilla(t.status)} size="sm" />}
                       />
                     </motion.div>
