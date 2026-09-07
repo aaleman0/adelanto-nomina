@@ -12,6 +12,7 @@ import {
   requestContractFromWhatsApp,
 } from "@/lib/contracts/request-contract";
 import { deliverSignedContract } from "@/lib/contracts/deliver-signed-contract";
+import { syncEmployeeSignature } from "@/lib/contracts/sync-employee-signature";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/roles";
 
@@ -149,4 +150,32 @@ function readFormValue(formData: FormData, key: string) {
   const value = formData.get(key);
 
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/**
+ * "Comprobar si ya firmó": le pregunta a EasyLex por el contrato de ESTA persona
+ * y actualiza el expediente si allá ya está firmado.
+ *
+ * Es la salida cuando el aviso automático de EasyLex no llega. La sincronización
+ * por ciclo no cubre a quien no tiene lote (altas manuales), y obligar a
+ * sincronizar el ciclo entero por un caso suelto es un rodeo innecesario.
+ */
+export async function checkSignatureAction(formData: FormData) {
+  const employeeId = readFormValue(formData, "employee_id");
+  if (!employeeId) {
+    redirect("/");
+  }
+
+  // Las server actions no pasan por `src/proxy.ts`: el rol se comprueba aquí.
+  const auth = await requireRole("operaciones");
+  if (!auth.ok) {
+    redirect(`/personas/${employeeId}?action_status=forbidden`);
+  }
+
+  const result = await syncEmployeeSignature(employeeId);
+  const detailPath = `/personas/${employeeId}`;
+
+  revalidatePath("/");
+  revalidatePath(detailPath);
+  redirect(`${detailPath}?action_status=comprobacion_${result.status}`);
 }

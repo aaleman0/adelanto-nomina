@@ -11,6 +11,7 @@ import {
   requestContractAction,
   resendSignedContractAction,
   retryContractFlowAction,
+  checkSignatureAction,
 } from "../actions";
 import { fecha } from "./vocabulario";
 
@@ -67,6 +68,13 @@ export function AccionesExpediente({
     sinRol ??
     (!haySolicitud ? "Todavía no hay solicitud de contrato. Empieza por «Solicitar el contrato»." : null) ??
     (firmado ? "Ya está firmado: no hay nada que rehacer." : null);
+
+  // Solo tiene sentido cuando hay un contrato pendiente que consultar: sin
+  // solicitud no hay nada en EasyLex, y si ya está firmado no hay qué comprobar.
+  const motivoComprobar =
+    sinRol ??
+    (firmado ? "Ya está firmado: no hay nada que comprobar." : null) ??
+    (!haySolicitud ? "Todavía no hay contrato que consultar en EasyLex." : null);
 
   const motivoReenviar =
     sinRol ??
@@ -137,6 +145,19 @@ export function AccionesExpediente({
             motivo={motivoReenviar}
           />
         </form>
+
+        {/* Salida cuando el aviso automático de EasyLex no llega: en vez de
+            quedarse con un expediente que dice "falta que firme" cuando la
+            persona ya firmó, el operador lo comprueba desde aquí. No cuesta una
+            firma —solo consulta— así que no lleva confirmación. */}
+        <form action={checkSignatureAction}>
+          <input type="hidden" name="employee_id" value={employeeId} />
+          <Accion
+            etiqueta="Comprobar si ya firmó"
+            explicacion="Le pregunta a EasyLex y actualiza el expediente. Úsalo si la persona dice que ya firmó pero aquí sigue pendiente."
+            motivo={motivoComprobar}
+          />
+        </form>
       </div>
 
       <div className="mt-7 flex flex-wrap items-start gap-x-8 gap-y-6 border-t border-line pt-6">
@@ -172,16 +193,20 @@ function Accion({
 }: {
   etiqueta: string;
   explicacion: string;
-  titulo: string;
-  consecuencia: string;
-  confirmLabel: string;
-  destacada: boolean;
+  /* Sin estos tres, la acción se ejecuta directo. Solo se confirma lo que gasta
+     una firma, manda un WhatsApp o no se puede deshacer; pedir confirmación de
+     todo entrena al operador a decir que sí sin leer. */
+  titulo?: string;
+  consecuencia?: string;
+  confirmLabel?: string;
+  destacada?: boolean;
   motivo: string | null;
 }) {
   const [abierto, setAbierto] = useState(false);
   const ancla = useRef<HTMLDivElement>(null);
   const { pending } = useFormStatus();
   const bloqueada = Boolean(motivo);
+  const confirma = Boolean(titulo && consecuencia && confirmLabel);
 
   return (
     <div ref={ancla} className="flex flex-col gap-2">
@@ -192,7 +217,8 @@ function Accion({
         disabled={bloqueada}
         loading={pending}
         loadingLabel="Trabajando…"
-        onClick={() => setAbierto(true)}
+        type={confirma ? "button" : "submit"}
+        onClick={confirma ? () => setAbierto(true) : undefined}
       >
         {etiqueta}
       </Button>
@@ -200,6 +226,7 @@ function Accion({
         {motivo ?? explicacion}
       </p>
 
+      {confirma ? (
       <ConfirmDialog
         open={abierto}
         onClose={() => setAbierto(false)}
@@ -209,11 +236,12 @@ function Accion({
           // dispara la server action y activa `useFormStatus`.
           ancla.current?.closest("form")?.requestSubmit();
         }}
-        title={titulo}
-        consequence={consecuencia}
-        confirmLabel={confirmLabel}
+        title={titulo ?? ""}
+        consequence={consecuencia ?? ""}
+        confirmLabel={confirmLabel ?? ""}
         tone="primary"
       />
+      ) : null}
     </div>
   );
 }

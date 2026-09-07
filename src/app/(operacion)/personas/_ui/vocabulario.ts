@@ -186,6 +186,31 @@ export type Aviso = { tono: "ok" | "atencion" | "falla"; texto: string };
  */
 export function avisoDeAccion(status: string | undefined): Aviso | null {
   switch (status) {
+    // Resultados de «Comprobar si ya firmó». Se le dice al operador qué
+    // contestó EasyLex, no si la consulta "funcionó": lo que necesita saber es
+    // si la persona firmó o no.
+    case "comprobacion_firmado":
+      return {
+        tono: "ok",
+        texto: "¡Confirmado! Esta persona ya firmó y el expediente quedó actualizado.",
+      };
+    case "comprobacion_todavia_no":
+      return {
+        tono: "atencion",
+        texto: "EasyLex dice que todavía no firma. Si te consta que sí, avísale a soporte.",
+      };
+    case "comprobacion_ya_estaba":
+      return { tono: "atencion", texto: "Ya aparecía como firmada: no se cambió nada." };
+    case "comprobacion_sin_contrato":
+      return {
+        tono: "atencion",
+        texto: "No hay un contrato en EasyLex que consultar todavía.",
+      };
+    case "comprobacion_error":
+      return {
+        tono: "falla",
+        texto: "No se pudo consultar a EasyLex en este momento. Inténtalo de nuevo en unos minutos.",
+      };
     case "contract_ready":
       return {
         tono: "ok",
