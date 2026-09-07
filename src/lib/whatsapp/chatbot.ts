@@ -88,6 +88,37 @@ export function classifyOfferReply(text?: string | null, payload?: string | null
   return null;
 }
 
+/**
+ * Clasifica un mensaje ESCRITO (no un botón) como sí/no.
+ *
+ * Es deliberadamente ESTRICTO, al revés que `classifyOfferReply`: el texto de un
+ * botón es exacto y controlado, pero el texto libre no. Una coincidencia laxa
+ * haría que "no sé" se lea como un rechazo y le cancele el adelanto a alguien
+ * que solo estaba dudando —una acción con consecuencia real—. Por eso solo se
+ * aceptan frases completas de la lista; cualquier otra cosa cae al mensaje de
+ * ayuda, que no cambia nada.
+ */
+const TEXTO_SI = new Set([
+  "si", "si lo quiero", "si quiero", "lo quiero", "si acepto", "acepto",
+  "claro", "claro que si", "si por favor", "dale", "va", "de acuerdo",
+]);
+
+const TEXTO_NO = new Set([
+  "no", "no gracias", "no lo quiero", "no quiero", "no me interesa",
+  "no por ahora", "ahora no", "no acepto",
+]);
+
+export function classifyTextReply(body?: string | null): OfferReply | null {
+  // Se normaliza igual que los botones (sin acentos, minúsculas) y además se
+  // quita la puntuación y se colapsan espacios, para que "¡Sí, lo quiero!"
+  // y "si lo quiero" sean la misma frase.
+  const t = strip(body).replace(/[¡!¿?.,;:]/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return null;
+  if (TEXTO_SI.has(t)) return "si";
+  if (TEXTO_NO.has(t)) return "no";
+  return null;
+}
+
 /** Extrae la respuesta de botón de un mensaje entrante (plantilla o interactivo). */
 export function extractButtonReply(msg: InboundMessage): ButtonReply | null {
   if (msg.type === "button" && msg.button) {
@@ -260,6 +291,14 @@ export async function handleInboundMessage(
   }
 
   if (msg.type === "text") {
+    // Mucha gente contesta ESCRIBIENDO en vez de tocar el botón, sobre todo si
+    // el mensaje ya lleva rato en el chat y los botones quedaron arriba. Se
+    // atiende igual que un toque, pero solo con frases inequívocas.
+    const escrito = classifyTextReply(msg.text?.body);
+    if (escrito) {
+      await handleOfferReply(msg.from, escrito);
+      return { handled: true, kind: `${escrito}_texto` };
+    }
     await getWhatsAppClient().sendTextMessage(msg.from, FALLBACK_MESSAGE);
     return { handled: true, kind: "text_fallback" };
   }

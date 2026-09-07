@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyOfferReply,
+  classifyTextReply,
   extractButtonReply,
   siSuccessMessage,
   noMessage,
@@ -83,5 +84,43 @@ describe("mensajes", () => {
     const m = noMessage("Angel");
     expect(m).toContain("Gracias por confirmar, Angel");
     expect(m).not.toContain("cambias de opinión");
+  });
+});
+
+/**
+ * Respuestas ESCRITAS. Lo crítico aquí no es que reconozca "sí": es que NO
+ * reconozca de más. Clasificar mal un "no sé" como rechazo le cancelaría el
+ * adelanto a alguien que solo estaba dudando.
+ */
+describe("classifyTextReply", () => {
+  it("acepta las formas comunes de decir que sí", () => {
+    ["si", "Sí", "SI", "sí, lo quiero", "Si lo quiero", "acepto", "claro", "dale", "de acuerdo"]
+      .forEach((t) => expect(classifyTextReply(t), t).toBe("si"));
+  });
+
+  it("acepta las formas comunes de decir que no", () => {
+    ["no", "No", "no gracias", "No, gracias", "no quiero", "no me interesa", "ahora no"]
+      .forEach((t) => expect(classifyTextReply(t), t).toBe("no"));
+  });
+
+  it("NO confunde la duda con un rechazo (el caso peligroso)", () => {
+    ["no sé", "no se", "no entiendo", "no me llegó", "no puedo abrir el link", "no sé qué es esto"]
+      .forEach((t) => expect(classifyTextReply(t), t).toBeNull());
+  });
+
+  it("NO confunde una pregunta con una aceptación", () => {
+    ["si me lo dan cuándo lo pagan", "de cuánto es", "hola", "quien habla", "?"]
+      .forEach((t) => expect(classifyTextReply(t), t).toBeNull());
+  });
+
+  it("ignora signos y espacios de más", () => {
+    expect(classifyTextReply("  ¡Sí!  ")).toBe("si");
+    expect(classifyTextReply("No, gracias.")).toBe("no");
+  });
+
+  it("devuelve null con texto vacío", () => {
+    expect(classifyTextReply("")).toBeNull();
+    expect(classifyTextReply(null)).toBeNull();
+    expect(classifyTextReply(undefined)).toBeNull();
   });
 });
