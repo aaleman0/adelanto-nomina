@@ -57,8 +57,25 @@ export function PasoPlantilla({
   } | null>(null);
 
   const vigente = carga?.intento === intento ? carga : null;
-  const plantillas = vigente?.lista ?? null;
   const fallo = vigente?.fallo ?? null;
+
+  // El operador elige aquí bajo presión y una equivocación manda un enlace roto
+  // a gente real. Se ordena para que lo elegible salte a la vista: primero las
+  // que sirven con el flujo actual, al final las que llevan botón de enlace
+  // —que ya no funcionan— y las que no son de oferta. No se ocultan: puede
+  // haber un caso legítimo, y esconder opciones deja al operador sin entender
+  // por qué no encuentra la que buscaba.
+  const plantillas = vigente?.lista
+    ? [...vigente.lista].sort((a, b) => {
+        const puntaje = (t: PlantillaGuardada) => {
+          if (plantillaLlevaBotonDeEnlace(t.components)) return 2; // obsoleta
+          if (!/adelanto/i.test(t.name)) return 1;                 // ajena al flujo
+          return 0;                                               // la que sirve
+        };
+        const d = puntaje(a) - puntaje(b);
+        return d !== 0 ? d : a.name.localeCompare(b.name);
+      })
+    : null;
 
   useEffect(() => {
     let activo = true;
