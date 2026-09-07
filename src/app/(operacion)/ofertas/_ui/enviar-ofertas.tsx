@@ -160,17 +160,34 @@ export function EnviarOfertas({ rol }: { rol: UserRole }) {
       setResultado(r);
       setConfirmando(false);
 
-      // El aviso no puede cantar "salieron 0 mensajes" cuando en realidad no se
-      // repitieron: son dos cosas distintas y el operador reacciona distinto.
+      // El aviso tiene que coincidir con lo que pasó. Que el servidor conteste
+      // bien no significa que el envío saliera: una tanda donde NADA salió y
+      // hubo fallos es un error, y pintarla de verde con palomita hace que el
+      // operador la dé por buena y siga adelante.
       const omitidos = omitidosPorRepetido(r);
       const salieron = r.status === "queued" ? (r.queued ?? r.eligible) : r.sent;
-      toast.done(
-        salieron === 0 && omitidos > 0
-          ? "No salió nada nuevo: ya se les había mandado hace unos minutos."
-          : r.status === "queued"
+      const fallaron = r.failed ?? 0;
+
+      if (salieron === 0 && fallaron > 0) {
+        toast.failed(
+          fallaron === 1
+            ? "No salió el mensaje. Abajo está el motivo."
+            : `No salió ninguno de los ${fallaron} mensajes. Abajo está el motivo de cada uno.`,
+        );
+      } else if (salieron === 0 && omitidos > 0) {
+        // Ni éxito ni fallo: no se repitió lo que ya se había mandado.
+        toast.info("No salió nada nuevo: ya se les había mandado hace unos minutos.");
+      } else if (fallaron > 0) {
+        toast.info(
+          `Salieron ${salieron}, pero ${fallaron} no se pudieron enviar. Revisa el motivo abajo.`,
+        );
+      } else {
+        toast.done(
+          r.status === "queued"
             ? `Se encolaron ${salieron} mensajes.`
             : `Salieron ${salieron} mensajes.`,
-      );
+        );
+      }
     } catch (e) {
       setFalloEnvio((e as Error).message);
       setConfirmando(false);
