@@ -69,9 +69,18 @@ export async function POST(request: Request) {
         detail: "EASYLEX_WEBHOOK_SECRET no configurado (solo permitido fuera de producción).",
       });
     } else if (!verifyEasylexWebhook(rawBody, signature, webhookSecret)) {
+      // Diagnóstico: EasyLex sí llama, pero su esquema de firma no coincide con
+      // el nuestro y el aviso se pierde. Sin saber QUÉ manda no se puede
+      // adaptar, así que se registran los NOMBRES de las cabeceras y la forma
+      // de la firma —nunca su valor ni el del secreto—. Quitar cuando el
+      // esquema esté acordado con EasyLex.
       logger.warn("easylex.webhook.unauthorized", {
         correlationId,
         hasSignature: Boolean(signature),
+        cabecerasRecibidas: [...request.headers.keys()].sort().join(", "),
+        firmaLongitud: signature?.length ?? 0,
+        firmaEmpiezaCon: signature ? signature.slice(0, 7) : null,
+        cuerpoLongitud: rawBody.length,
       });
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
