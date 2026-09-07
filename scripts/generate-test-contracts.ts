@@ -70,6 +70,12 @@ function buildPlaceholderData(
     domicilio: "Domicilio placeholder",
     monto_numero: formatMonto(totals.principal),
     monto_letra: montoEnLetra(totals.principal),
+    // Datos del acreedor: en producción salen de company_settings; aquí van fijos
+    // porque este script genera contratos de PRUEBA sin tocar la base.
+    razon_social_acreedor: "ACREEDOR DE PRUEBA, S.A. DE C.V.",
+    rfc_acreedor: "XAXX010101000",
+    representante_acreedor: "Representante de Prueba",
+    domicilio_acreedor: "Domicilio del acreedor placeholder",
     total_pago_numero: formatMonto(totals.total),
     total_pago_letra: montoEnLetra(totals.total),
     banco_acreedor: "BANCO PLACEHOLDER",

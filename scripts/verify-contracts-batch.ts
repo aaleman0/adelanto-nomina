@@ -261,7 +261,11 @@ async function main() {
         fechaFirma: now, companySettings: cs,
       };
       const ph = buildContractPlaceholders(data);
-      const missing = PER_EMPLOYEE.filter((k) => !ph[k]?.trim());
+      // `missing` mezcla llaves de plantilla con faltantes de datos ("oferta_vigente"),
+
+      // así que se anota como string[] en vez de heredar el tipo estrecho de PER_EMPLOYEE.
+
+      const missing: string[] = PER_EMPLOYEE.filter((k) => !ph[k]?.trim());
       if (monto === undefined) missing.push("oferta_vigente");
       const ready = missing.length === 0;
       audits.push({ rfc: e.rfc ?? "(sin rfc)", nombre: nombreCompleto, ready, missing });
