@@ -1,6 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getWhatsAppClient } from "@/lib/whatsapp/client";
-import { handleInboundMessage } from "@/lib/whatsapp/chatbot";
+import { handleInboundMessage, quienEscribio } from "@/lib/whatsapp/chatbot";
 import { safeEqual } from "@/lib/security/webhook-signatures";
 import { redactPII } from "@/lib/audit/redact";
 import { logger } from "@/lib/logger";
@@ -133,8 +133,12 @@ export async function handleWebhook(payload: {
         try {
           const outcome = await handleInboundMessage(msg);
           logger.info("whatsapp.chatbot.inbound", { id: msg.id, kind: outcome.kind, handled: outcome.handled });
+          await anotarMensajeEntrante(supabase, msg.id, outcome.employeeId, outcome.kind);
         } catch (err) {
           logger.error("whatsapp.chatbot.error", err, { id: msg.id });
+          // Se liga igual a quien escribió: una falla es justo el caso en que la
+          // persona se quedó sin respuesta y alguien tiene que verlo en su expediente.
+          await anotarMensajeEntrante(supabase, msg.id, await quienEscribio(msg.from), "error");
         }
       }
 
@@ -203,5 +207,41 @@ export async function handleWebhook(payload: {
         }
       }
     }
+  }
+}
+
+/**
+ * Deja escrito, junto al mensaje entrante ya guardado, de quién es y qué hizo el
+ * sistema con él.
+ *
+ * El texto se guarda desde siempre, pero `redactPII` tacha el teléfono: sin esta
+ * anotación el mensaje queda en la base sin dueño y nadie lo puede ver en el
+ * expediente de la persona. Así, una respuesta automática de WhatsApp Business
+ * llegó a parecer una respuesta perdida.
+ *
+ * Nunca lanza: es evidencia, no flujo, y un fallo aquí no debe tumbar el resto
+ * del lote ni provocar reintentos de Meta.
+ */
+async function anotarMensajeEntrante(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  mensajeId: string,
+  employeeId: string | null,
+  kind: string,
+): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("integration_logs")
+      .update({
+        ...(employeeId ? { entity_type: "employees", entity_id: employeeId } : {}),
+        response_payload: { chatbot: kind },
+      })
+      .eq("correlation_id", mensajeId)
+      .eq("direction", "inbound");
+    if (error) throw error;
+  } catch (err) {
+    logger.warn("whatsapp.chatbot.anotacion_fallida", {
+      id: mensajeId,
+      detalle: (err as { message?: string } | null)?.message ?? String(err),
+    });
   }
 }

@@ -1,9 +1,14 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getWhatsAppClient } from "@/lib/whatsapp/client";
-import { normalizePhoneFromCsv } from "@/lib/whatsapp/phone-utils";
+import { variantesDeTelefono } from "@/lib/whatsapp/phone-utils";
 import { parseRequestContractPayload, requestContractFromWhatsApp } from "@/lib/contracts/request-contract";
-import { LINK_TTL_HOURS } from "@/lib/contracts/link-ttl";
+import { pasoAlPedir, ventanaDeLaPersona, type PasoAlPedir } from "@/lib/contracts/ventana-oferta";
+import { solicitudPrevia, type SolicitudPrevia } from "@/lib/contracts/solicitud-previa";
 import { logger } from "@/lib/logger";
+
+// Se re-exportan para quien ya los importaba desde aquí.
+export { variantesDeTelefono };
+export { VENTANA_OFERTA_MS } from "@/lib/contracts/ventana-oferta";
 
 /**
  * Chatbot de oferta de adelanto. La plantilla de oferta lleva dos botones de
@@ -96,6 +101,60 @@ export const UNKNOWN_NUMBER_MESSAGE =
   "No encontramos tu número en el sistema 😕\n\n" +
   "Puede que esté registrado de otra forma. Contacta a tu empresa para revisarlo.";
 
+/**
+ * Pidió el adelanto sin que la empresa se lo haya ofrecido. No se le habla de un
+ * plazo vencido —nunca tuvo uno— ni se le invita a insistir: la oferta la abre
+ * la empresa cuando quiere.
+ */
+export const SIN_OFERTA_ABIERTA_MESSAGE =
+  "Por ahora no hay un adelanto abierto para ti.\n\n" +
+  "Tu empresa te avisará por este medio cuando esté disponible.";
+
+/** No se pudo comprobar la ventana. Es una falla nuestra, no un plazo vencido. */
+export const VENTANA_SIN_VERIFICAR_MESSAGE =
+  "😕 No pudimos revisar tu solicitud en este momento. Inténtalo de nuevo en unos minutos.";
+
+/** Pidió a tiempo, pero su enlace de firma ya venció. No se le genera otro fuera de la ventana. */
+export const ENLACE_VENCIDO_MESSAGE =
+  "Tu enlace para firmar ya venció ⏳\n\n" +
+  "Los enlaces duran 2 horas. Tu empresa te avisará cuando el adelanto vuelva a estar disponible.";
+
+/** Pidió a tiempo, pero el contrato no se pudo preparar. No se le promete un enlace que nunca tuvo. */
+export const CONTRATO_NO_PREPARADO_MESSAGE =
+  "😕 Tu solicitud quedó registrada, pero no pudimos preparar tu contrato.\n\n" +
+  "Tu empresa lo va a revisar.";
+
+export const SOLICITUD_EN_PROCESO_MESSAGE = (firstName: string) =>
+  `Ya solicitaste tu adelanto${firstName ? `, ${firstName}` : ""}. Tu empresa te avisará si hace falta algo más.`;
+
+/**
+ * Qué contestarle a quien quiere pedir el adelanto, según el paso que toca.
+ * `null` = que siga y se le genere el contrato. Cada motivo dice la verdad sobre
+ * POR QUÉ no puede: no es lo mismo llegar tarde que no haber recibido nunca la
+ * oferta, y ninguna de las dos es una caída de la base. Quien ya pidió se
+ * atiende aparte, mirando lo que de verdad tiene.
+ */
+export function mensajeAntesDePedir(paso: Exclude<PasoAlPedir, "ya_pidio">): string | null {
+  if (paso === "pedir") return null;
+  if (paso === "fuera_de_plazo") return VENTANA_CERRADA_MESSAGE;
+  if (paso === "sin_envio") return SIN_OFERTA_ABIERTA_MESSAGE;
+  return VENTANA_SIN_VERIFICAR_MESSAGE;
+}
+
+/**
+ * Qué contestarle a quien ya pidió y no tiene un enlace vigente que entregarle.
+ * Nunca le promete un enlace que no existe ni lo invita a insistir.
+ */
+export function mensajeParaQuienYaPidio(
+  previa: Exclude<SolicitudPrevia, "enlace_vigente">,
+  primerNombre: string,
+): string {
+  if (previa === "enlace_vencido") return ENLACE_VENCIDO_MESSAGE;
+  if (previa === "fallo") return CONTRATO_NO_PREPARADO_MESSAGE;
+  if (previa === "sin_verificar") return VENTANA_SIN_VERIFICAR_MESSAGE;
+  return SOLICITUD_EN_PROCESO_MESSAGE(primerNombre);
+}
+
 // --- Clasificación del botón (pura, testeable) ---
 
 function strip(s?: string | null): string {
@@ -177,6 +236,17 @@ export function mensajeDemasiadoViejo(
   return ahora - enviado > MAX_ANTIGUEDAD_MS;
 }
 
+/**
+ * Cuándo pidió la persona, para medir la ventana. Es la marca que pone Meta al
+ * recibir el mensaje, no la hora en que lo procesamos: un "Sí" dado a tiempo que
+ * nos llega tarde por un reintento no debe encontrarse el plazo cerrado. Nunca
+ * en el futuro; sin marca legible, ahora.
+ */
+export function momentoDeLaRespuesta(timestamp: string | undefined, ahora = Date.now()): number {
+  const enviado = Number(timestamp) * 1000;
+  return Number.isFinite(enviado) && enviado > 0 ? Math.min(enviado, ahora) : ahora;
+}
+
 /** Extrae la respuesta de botón de un mensaje entrante (plantilla o interactivo). */
 export function extractButtonReply(msg: InboundMessage): ButtonReply | null {
   if (msg.type === "button" && msg.button) {
@@ -197,28 +267,6 @@ type FoundEmployee = {
   employee: { id: string; rfc: string; nombre: string | null; telefono_normalizado: string | null };
   offer: { id: string; status: string; is_eligible: boolean; monto_prestamo_autorizado: number } | null;
 };
-
-/**
- * Todas las formas en que un mismo número mexicano puede estar guardado.
- *
- * WhatsApp manda SIEMPRE `52` + `1` + 10 dígitos, pero en la base conviven las
- * dos convenciones: con el `1` (móvil) y sin él. No es un detalle menor —hoy
- * uno de cada tres empleados está guardado sin el `1`—, y buscar por igualdad
- * exacta los dejaba fuera: respondían al chatbot y el sistema decía no
- * conocerlos. Se buscan ambas variantes en vez de exigir que los datos estén
- * perfectos.
- */
-export function variantesDeTelefono(from: string): string[] {
-  const digitos = (normalizePhoneFromCsv(from) ?? from).replace(/\D/g, "");
-  const variantes = new Set<string>([digitos]);
-
-  if (digitos.startsWith("521") && digitos.length === 13) {
-    variantes.add("52" + digitos.slice(3)); // sin el 1
-  } else if (digitos.startsWith("52") && digitos.length === 12) {
-    variantes.add("521" + digitos.slice(2)); // con el 1
-  }
-  return [...variantes];
-}
 
 async function findEmployeeForPhone(from: string): Promise<FoundEmployee | null> {
   const supabase = getSupabaseAdmin();
@@ -248,44 +296,6 @@ async function findEmployeeForPhone(from: string): Promise<FoundEmployee | null>
     }
   }
   return { employee: emps[0] as FoundEmployee["employee"], offer: null };
-}
-
-/**
- * ¿Sigue abierta la ventana para pedir el adelanto?
- *
- * Regla del negocio: la ventana la abre la EMPRESA al enviar la oferta y dura lo
- * mismo que el enlace de firma. Fuera de ella el empleado no puede pedirlo por su
- * cuenta —la idea es que el adelanto se ofrezca cuando la empresa quiere, no que
- * quede disponible de forma permanente para pedirlo en cualquier momento—.
- *
- * Se mide desde el ENVÍO registrado (`bulk_contract_offer`), no desde la oferta:
- * una oferta puede llevar semanas vigente en la base sin habérsele enviado.
- *
- * Si no hay registro de envío, se deja pasar: puede ser un alta manual o una
- * prueba, y bloquear ahí dejaría a alguien sin su adelanto por un hueco de datos.
- * Queda en el log para poder detectarlo.
- */
-export const VENTANA_OFERTA_MS = LINK_TTL_HOURS * 60 * 60 * 1000;
-
-async function ventanaSigueAbierta(employeeId: string, offerId: string | null): Promise<boolean> {
-  const supabase = getSupabaseAdmin();
-  let q = supabase
-    .from("whatsapp_contract_messages")
-    .select("created_at")
-    .eq("employee_id", employeeId)
-    .eq("message_type", "bulk_contract_offer")
-    .order("created_at", { ascending: false })
-    .limit(1);
-  if (offerId) q = q.eq("offer_id", offerId);
-
-  const { data } = await q;
-  const enviadoEn = (data ?? [])[0]?.created_at as string | undefined;
-
-  if (!enviadoEn) {
-    logger.info("whatsapp.chatbot.sin_registro_de_envio", { employeeId });
-    return true;
-  }
-  return Date.now() - new Date(enviadoEn).getTime() <= VENTANA_OFERTA_MS;
 }
 
 // --- Ramas del flujo ---
@@ -379,35 +389,102 @@ async function handleNo(from: string, found: FoundEmployee): Promise<void> {
   }
 }
 
-/** Rutea una respuesta de oferta (Sí/No) para el teléfono dado. */
-export async function handleOfferReply(from: string, reply: OfferReply): Promise<void> {
+/**
+ * Rutea una respuesta de oferta (Sí/No) para el teléfono dado. Devuelve de qué
+ * empleado era, para dejar el mensaje ligado a su expediente.
+ */
+export async function handleOfferReply(
+  from: string,
+  reply: OfferReply,
+  pidioEn = Date.now(),
+): Promise<string | null> {
   const found = await findEmployeeForPhone(from);
   if (!found) {
     logger.warn("whatsapp.chatbot.employee_not_found", { fromTail: from.slice(-4) });
     await getWhatsAppClient().sendTextMessage(from, UNKNOWN_NUMBER_MESSAGE);
-    return;
+    return null;
   }
-  if (reply === "si") {
+
+  if (reply === "no") {
     // La ventana solo limita PEDIR. Rechazar fuera de plazo es inofensivo y no
     // tiene sentido negárselo a quien se tomó la molestia de contestar.
-    if (!(await ventanaSigueAbierta(found.employee.id, found.offer?.id ?? null))) {
-      logger.info("whatsapp.chatbot.ventana_cerrada", { employeeId: found.employee.id });
-      await getWhatsAppClient().sendTextMessage(from, VENTANA_CERRADA_MESSAGE);
-      return;
-    }
-    await handleSi(from, found);
-  } else {
     await handleNo(from, found);
+    return found.employee.id;
+  }
+
+  if (!found.offer) {
+    // Sin oferta no hay plazo que discutir: "el plazo cerró" le haría creer que
+    // llegó tarde a algo que nunca existió.
+    await getWhatsAppClient().sendTextMessage(from, NO_OFFER_MESSAGE);
+    return found.employee.id;
+  }
+
+  const ventana = await ventanaDeLaPersona(found.employee.id, pidioEn);
+  const paso = pasoAlPedir(found.offer.status, ventana);
+
+  if (paso === "ya_pidio") {
+    // Ya pidió dentro del plazo: no se le genera otro contrato. Si tiene un
+    // enlace vigente —el suyo, o uno que le regeneró un operador— se le entrega:
+    // handleSi lo reusa y no llama a EasyLex.
+    const previa = await solicitudPrevia(found.offer.id);
+    if (previa === "enlace_vigente") {
+      await handleSi(from, found);
+      return found.employee.id;
+    }
+    logger.info("whatsapp.chatbot.no_puede_pedir", {
+      employeeId: found.employee.id,
+      offerId: found.offer.id,
+      paso,
+      previa,
+    });
+    await getWhatsAppClient().sendTextMessage(
+      from,
+      mensajeParaQuienYaPidio(previa, firstNameOf(found.employee.nombre)),
+    );
+    return found.employee.id;
+  }
+
+  const aviso = mensajeAntesDePedir(paso);
+  if (aviso) {
+    logger.info("whatsapp.chatbot.no_puede_pedir", {
+      employeeId: found.employee.id,
+      offerId: found.offer.id,
+      paso,
+    });
+    await getWhatsAppClient().sendTextMessage(from, aviso);
+    return found.employee.id;
+  }
+
+  await handleSi(from, found);
+  return found.employee.id;
+}
+
+/** Qué pasó con un mensaje entrante y de quién era, si se supo. */
+export type InboundOutcome = { handled: boolean; kind: string; employeeId: string | null };
+
+/**
+ * De quién es un mensaje que no llevó a ninguna acción. Solo sirve para ligarlo
+ * a su expediente, así que un fallo aquí no puede impedir la respuesta: se
+ * devuelve null y el mensaje queda guardado, aunque sin dueño.
+ */
+export async function quienEscribio(from: string): Promise<string | null> {
+  try {
+    return (await findEmployeeForPhone(from))?.employee.id ?? null;
+  } catch (err) {
+    logger.warn("whatsapp.chatbot.remitente_no_identificado", {
+      fromTail: from.slice(-4),
+      detalle: err instanceof Error ? err.message : String(err),
+    });
+    return null;
   }
 }
 
 /**
  * Procesa un mensaje entrante: si es un botón de oferta → rutea Sí/No; si es un
- * botón no reconocido o texto → responde con el fallback. Devuelve qué se hizo.
+ * botón no reconocido o texto → responde con el fallback. Devuelve qué se hizo y
+ * de quién era, para que el mensaje quede ligado a su expediente.
  */
-export async function handleInboundMessage(
-  msg: InboundMessage,
-): Promise<{ handled: boolean; kind: string }> {
+export async function handleInboundMessage(msg: InboundMessage): Promise<InboundOutcome> {
   if (mensajeDemasiadoViejo(msg.timestamp)) {
     logger.info("whatsapp.chatbot.mensaje_viejo_descartado", {
       id: msg.id,
@@ -415,18 +492,17 @@ export async function handleInboundMessage(
         ? Math.round((Date.now() - Number(msg.timestamp) * 1000) / 60000) + " min"
         : "?",
     });
-    return { handled: false, kind: "demasiado_viejo" };
+    return { handled: false, kind: "demasiado_viejo", employeeId: await quienEscribio(msg.from) };
   }
 
   const button = extractButtonReply(msg);
   if (button) {
     const reply = classifyOfferReply(button.text, button.payload);
     if (reply) {
-      await handleOfferReply(msg.from, reply);
-      return { handled: true, kind: reply };
+      return { handled: true, kind: reply, employeeId: await handleOfferReply(msg.from, reply, momentoDeLaRespuesta(msg.timestamp)) };
     }
     await getWhatsAppClient().sendTextMessage(msg.from, FALLBACK_MESSAGE);
-    return { handled: true, kind: "unknown_button" };
+    return { handled: true, kind: "unknown_button", employeeId: await quienEscribio(msg.from) };
   }
 
   if (msg.type === "text") {
@@ -435,15 +511,18 @@ export async function handleInboundMessage(
     // atiende igual que un toque, pero solo con frases inequívocas.
     const escrito = classifyTextReply(msg.text?.body);
     if (escrito) {
-      await handleOfferReply(msg.from, escrito);
-      return { handled: true, kind: `${escrito}_texto` };
+      return {
+        handled: true,
+        kind: `${escrito}_texto`,
+        employeeId: await handleOfferReply(msg.from, escrito, momentoDeLaRespuesta(msg.timestamp)),
+      };
     }
     await getWhatsAppClient().sendTextMessage(msg.from, FALLBACK_MESSAGE);
-    return { handled: true, kind: "text_fallback" };
+    return { handled: true, kind: "text_fallback", employeeId: await quienEscribio(msg.from) };
   }
 
   // Cualquier otro tipo (nota de voz, imagen, sticker, ubicación, documento…):
   // se contesta con la guía en vez de dejar a la persona esperando.
   await getWhatsAppClient().sendTextMessage(msg.from, UNSUPPORTED_MESSAGE);
-  return { handled: true, kind: `no_soportado:${msg.type}` };
+  return { handled: true, kind: `no_soportado:${msg.type}`, employeeId: await quienEscribio(msg.from) };
 }

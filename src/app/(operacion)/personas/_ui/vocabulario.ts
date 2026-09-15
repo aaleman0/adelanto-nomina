@@ -278,3 +278,67 @@ export function avisoDeAccion(status: string | undefined): Aviso | null {
       return null;
   }
 }
+
+/**
+ * Qué mandó la persona, dicho como lo diría el operador. El texto en sí se
+ * muestra aparte, tal cual lo escribió.
+ */
+export function queMandoLaPersona(tipo: string | null | undefined): string {
+  switch (tipo) {
+    case "text":
+      return "Escribió";
+    case "button":
+    case "interactive":
+      return "Tocó un botón";
+    case "audio":
+      return "Mandó una nota de voz";
+    case "image":
+      return "Mandó una foto";
+    case "video":
+      return "Mandó un video";
+    case "sticker":
+      return "Mandó un sticker";
+    case "document":
+      return "Mandó un documento";
+    case "location":
+      return "Mandó su ubicación";
+    case "contacts":
+      return "Mandó un contacto";
+    case "reaction":
+      return "Reaccionó a un mensaje";
+    default:
+      return "Mandó un mensaje";
+  }
+}
+
+export type TonoDeRespuesta = "done" | "attention" | "failed" | "neutral";
+
+/**
+ * Qué hizo el sistema con lo que contestó la persona. Es lo que le dice al
+ * operador si hace falta intervenir: un SÍ o un NO ya se atendió solo; lo que
+ * no se entendió puede necesitar una llamada.
+ */
+export function comoLoTomoElSistema(
+  interpretacion: string | null | undefined,
+): { texto: string; tono: TonoDeRespuesta } | null {
+  if (!interpretacion) return null;
+  if (interpretacion === "si" || interpretacion === "si_texto") {
+    return { texto: "El sistema lo tomó como SÍ", tono: "done" };
+  }
+  if (interpretacion === "no" || interpretacion === "no_texto") {
+    return { texto: "El sistema lo tomó como NO", tono: "neutral" };
+  }
+  if (interpretacion === "text_fallback" || interpretacion === "unknown_button") {
+    return { texto: "El sistema no lo entendió y le pidió contestar SÍ o NO", tono: "attention" };
+  }
+  if (interpretacion.startsWith("no_soportado")) {
+    return { texto: "El sistema solo lee texto y le pidió escribir SÍ o NO", tono: "attention" };
+  }
+  if (interpretacion === "demasiado_viejo") {
+    return { texto: "Llegó con mucho retraso y el sistema no lo atendió", tono: "attention" };
+  }
+  if (interpretacion === "error") {
+    return { texto: "Falló al procesarlo; puede que no haya recibido respuesta", tono: "failed" };
+  }
+  return null;
+}

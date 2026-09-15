@@ -1,6 +1,8 @@
 import { solicitarContratoAction } from "./actions";
 import { verifySolicitarToken } from "@/lib/contracts/solicitar-token";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { pasoAlPedir, ventanaDeLaPersona, type PasoAlPedir } from "@/lib/contracts/ventana-oferta";
+import { solicitudPrevia, type SolicitudPrevia } from "@/lib/contracts/solicitud-previa";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +53,7 @@ export default async function SolicitarPage({ params, searchParams }: PageProps)
     supabase.from("employees").select("nombre").eq("id", verificado.employeeId).maybeSingle(),
     supabase
       .from("advance_offers")
-      .select("monto_prestamo_autorizado, is_eligible, status, contract_requests(status)")
+      .select("id, monto_prestamo_autorizado, is_eligible, status, contract_requests(status)")
       .eq("employee_id", verificado.employeeId)
       .eq("is_current", true)
       .maybeSingle(),
@@ -100,11 +102,33 @@ export default async function SolicitarPage({ params, searchParams }: PageProps)
     );
   }
 
+  // La ventana se revisa antes de enseñar el botón, no solo al pulsarlo:
+  // "Tu adelanto está listo" a quien ya no puede pedirlo sería prometerle algo
+  // que la acción le va a negar.
+  const paso = pasoAlPedir(
+    oferta.status as string | null | undefined,
+    await ventanaDeLaPersona(verificado.employeeId),
+  );
+  // A quien ya pidió se le dice lo que de verdad tiene: un enlace vigente se le
+  // ofrece para firmar, y sin él se le explica qué pasó con su solicitud.
+  const previa = paso === "ya_pidio" ? await solicitudPrevia(oferta.id as string) : null;
+  const yaTieneEnlace = previa === "enlace_vigente";
+  const avisoDelPaso = avisoParaPaso(paso, previa);
+  if (avisoDelPaso) {
+    return (
+      <Marco>
+        <Aviso tono={avisoDelPaso.tono} titulo={avisoDelPaso.titulo} texto={avisoDelPaso.texto} />
+      </Marco>
+    );
+  }
+
   return (
     <Marco>
       <div className="rounded-xl bg-surface p-7 shadow-2">
         <p className="text-[19px] text-ink-2">{nombre ? `Hola, ${nombre}` : "Hola"}</p>
-        <h1 className="mt-1 text-[27px] font-bold leading-tight text-ink">Tu adelanto está listo</h1>
+        <h1 className="mt-1 text-[27px] font-bold leading-tight text-ink">
+          {yaTieneEnlace ? "Tu contrato está listo para firmar" : "Tu adelanto está listo"}
+        </h1>
 
         <div className="mt-7 rounded-lg bg-paper-deep px-6 py-7 text-center">
           <p className="text-[13px] font-bold uppercase tracking-[0.12em] text-ink-3">Te corresponde</p>
@@ -114,7 +138,9 @@ export default async function SolicitarPage({ params, searchParams }: PageProps)
         </div>
 
         <p className="mt-7 text-[17px] leading-relaxed text-ink-2">
-          Si lo aceptas, preparamos tu contrato y lo firmas desde tu celular con tu identificación (INE).
+          {yaTieneEnlace
+            ? "Ya lo habías pedido y tu enlace para firmar sigue vigente. Fírmalo desde tu celular con tu identificación (INE)."
+            : "Si lo aceptas, preparamos tu contrato y lo firmas desde tu celular con tu identificación (INE)."}{" "}
           Se descuenta de tu próximo pago de nómina.
         </p>
 
@@ -124,7 +150,7 @@ export default async function SolicitarPage({ params, searchParams }: PageProps)
             type="submit"
             className="flex h-16 w-full items-center justify-center rounded-md border-b-[3px] border-action-press bg-action px-6 text-[19px] font-bold text-white transition-[background-color,transform] duration-[160ms] hover:bg-action-hover active:translate-y-[2px] active:border-b-0 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-action"
           >
-            Sí, quiero mi adelanto
+            {yaTieneEnlace ? "Ir a firmar" : "Sí, quiero mi adelanto"}
           </button>
         </form>
 
@@ -203,4 +229,65 @@ function leerRespuesta(
     };
   }
   return null;
+}
+
+type AvisoTexto = { tono: "listo" | "espera" | "alto"; titulo: string; texto: string };
+
+/**
+ * Qué decirle a quien ya no puede pedir. El mismo criterio que el chatbot:
+ * nunca invita a insistir, porque el adelanto lo abre la empresa.
+ */
+function avisoParaPaso(paso: PasoAlPedir, previa: SolicitudPrevia | null): AvisoTexto | null {
+  switch (paso) {
+    case "fuera_de_plazo":
+      return {
+        tono: "espera",
+        titulo: "El plazo para pedir este adelanto ya cerró",
+        texto: "La oferta estuvo disponible por 2 horas. Tu empresa te avisará cuando vuelva a estar abierta.",
+      };
+    case "sin_envio":
+      return {
+        tono: "espera",
+        titulo: "Por ahora no hay un adelanto abierto",
+        texto: "Tu empresa te avisará cuando esté disponible.",
+      };
+    case "error":
+      return { tono: "alto", titulo: "No pudimos revisar tu solicitud", texto: "Vuelve a intentarlo en unos minutos." };
+    case "ya_pidio":
+      return avisoParaQuienYaPidio(previa);
+    default:
+      return null;
+  }
+}
+
+/**
+ * A quien ya pidió no se le genera otro contrato, pero se le dice lo cierto:
+ * prometerle un enlace a quien se le cayó el contrato lo manda a buscar algo
+ * que no existe. Con un enlace vigente no hay aviso: se le ofrece firmar.
+ */
+function avisoParaQuienYaPidio(previa: SolicitudPrevia | null): AvisoTexto | null {
+  switch (previa) {
+    case "enlace_vigente":
+      return null;
+    case "enlace_vencido":
+      return {
+        tono: "espera",
+        titulo: "Tu enlace para firmar ya venció",
+        texto: "Los enlaces duran 2 horas. Tu empresa te avisará cuando el adelanto vuelva a estar disponible.",
+      };
+    case "fallo":
+      return {
+        tono: "alto",
+        titulo: "Tu contrato no se pudo preparar",
+        texto: "Tu solicitud quedó registrada, pero hubo un problema al preparar el contrato. Tu empresa lo va a revisar.",
+      };
+    case "sin_verificar":
+      return { tono: "alto", titulo: "No pudimos revisar tu solicitud", texto: "Vuelve a intentarlo en unos minutos." };
+    default:
+      return {
+        tono: "espera",
+        titulo: "Ya pediste tu adelanto",
+        texto: "Tu solicitud quedó registrada. Tu empresa te avisará si hace falta algo más.",
+      };
+  }
 }

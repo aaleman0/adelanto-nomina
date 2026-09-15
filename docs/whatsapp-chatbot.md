@@ -30,9 +30,10 @@ El nuevo diseño lo vuelve un **chatbot**:
         ▼                                                      ▼
    toca "SÍ"                                              toca "NO"
         │                                                      │
+        ├─ ¿fuera de la ventana? ► "El plazo cerró ⏳" (§2.1)  │
         ├─ ¿ya firmó? ───────────► "Ya firmaste ✅"            │
         ├─ ¿link vivo (<2h)? ────► reenvía el MISMO link       │
-        ├─ ¿link expiró (>2h)? ──► genera uno NUEVO            │
+        ├─ ¿link expiró (>2h)? ──► uno NUEVO si hay ventana    │
         ├─ ¿sin oferta/no elegible? ─► "No tienes adelanto…"   │
         ├─ ¿falla EasyLex? ──────► "Hubo un problema…"         │
         └─ normal ──► genera contrato ──► manda link           └─► oferta = rechazada
@@ -61,13 +62,39 @@ Firmas con tu identificación (INE) desde tu celular.
 | Caso | Riesgo si no se maneja | Manejo |
 |---|---|---|
 | Doble tap en "Sí" (<2h) | Genera 2 contratos → **gasta 2 firmas** | Reusa el link vivo (índice *una-activa-por-empleado* + `getReusableAttempt`) |
-| Toca "Sí" tras 2h | Link muerto | Detecta expirado → genera uno nuevo |
+| Toca "Sí" con el enlace vencido | Link muerto | Dentro de la ventana genera uno nuevo; fuera, "Ya solicitaste tu adelanto" y no genera nada |
 | Ya firmó | Contrato de más | "Ya firmaste ✅" |
 | No elegible / sin oferta | Algo inválido | "No tienes adelanto disponible…" |
 | EasyLex caído | El empleado queda sin respuesta | "Hubo un problema, intenta más tarde" |
-| Escribe texto (no botón) | El bot parece muerto | "Usa los botones de arriba 👆" |
+| Escribe texto (no botón) | El bot parece muerto | Acepta SÍ/NO escritos (lista cerrada); cualquier otra cosa recibe la guía y queda visible en el expediente |
 | No → luego Sí (cambia de opinión) | Queda bloqueado como rechazada | Permitir reactivar |
-| Teléfono no está en la BD | Error en el webhook | Log + ignora |
+| Teléfono no está en la BD | Error en el webhook | "No encontramos tu número… contacta a tu empresa" |
+
+### 2.1 Ventana para pedir
+
+Regla del cliente: el adelanto **no** se puede pedir en cualquier momento. Lo abre
+la empresa al mandar la oferta y dura lo mismo que el enlace de firma (2 h).
+Vive en `src/lib/contracts/ventana-oferta.ts` y la usan **las dos puertas**: el
+"Sí" del chatbot y el enlace `/solicitar`.
+
+| Pregunta | Decisión | Por qué |
+|---|---|---|
+| ¿Qué abre la ventana? | **Solo** un `bulk_contract_offer` (envío desde /ofertas) que Meta **aceptó** (`wa_message_id` y `delivery_status` sent/delivered/read) | Las filas de envío se crean antes de llamar a Meta y sobreviven al fracaso. El `contract_link` lo manda la propia solicitud en cada clic de /solicitar: si contara, cada solicitud se abriría otra ventana y se podrían pedir contratos sin fin |
+| ¿Desde cuándo corre? | Desde que el mensaje **llegó** al teléfono (`delivered_at`); si Meta no avisó, desde que salió. Se compara con la hora en que la persona **contestó** (marca de Meta), no con la de procesarlo | Quien trae el celular sin señal recibe la oferta horas después; y un reintento de Meta no debe dejar fuera a quien pidió a tiempo |
+| ¿Hasta cuándo se respeta una entrega tardía? | **24 h** desde el envío (`TOPE_ENTREGA_TARDIA_MS`) | Meta reintenta hasta 30 días; un teléfono que reaparece días después no reabre la oferta |
+| ¿Se ancla a la fecha de la oferta? | **No** | Reimportar la nómina (p. ej. para corregir una CLABE) crea ofertas nuevas para todos y dejaría fuera de plazo a quien ya recibió el mensaje |
+| ¿Duplicados? | Se juzga **solo sobre la fila de la persona** | El RFC es único en `employees`; juntar por teléfono mezclaría a personas distintas que comparten celular |
+| ¿Si la base falla? | **Cerrada** | Negar de más se arregla reenviando la oferta; un contrato que nadie ofreció no se deshace |
+| ¿Quién ya pidió? | `solicitada` fuera de plazo no genera otro contrato. Si tiene un enlace **vigente** (el suyo, o uno que le regeneró un operador) se le entrega reusándolo; si no, se le dice lo cierto: venció, no se pudo preparar, o sigue en proceso. `firmada` solo recibe la confirmación | Quien alcanzó a pedir tiene sus 2 h para firmar, y nunca se le promete un enlace que no existe |
+
+Qué oye la persona según el motivo: fuera de plazo → "El plazo para pedir este
+adelanto ya cerró"; nunca recibió la oferta → "Por ahora no hay un adelanto
+abierto para ti"; falla nuestra → "No pudimos revisar tu solicitud… inténtalo de
+nuevo". Ninguno invita a insistir.
+
+**Para reabrirle la ventana a alguien:** Ofertas → Enviar → "Personas sueltas". Si ya había pedido
+(oferta en *solicitada*) no se le puede reenviar la oferta: su enlace se regenera desde el expediente,
+y se le entrega en cuanto conteste "Sí" o abra /solicitar, mientras siga vigente.
 
 ## 3. Arquitectura técnica
 
@@ -178,6 +205,9 @@ Escenarios:
   nuevos ya comprobada en esta cuenta). Textos de mensaje finales (§2).
 - Export **B** (nombre + RFC + monto). Re-ofertar a "No" cada ciclo. Confirmación post-firma: **sí**.
 - Empate de empleado por RFC. El "2 horas" va en el mensaje del link (sesión), no en la oferta.
+- **Ventana para pedir** (§2.1): solo la abre el envío de ofertas, corre desde la entrega, tope de 24 h
+  desde el envío, sin anclarse a la oferta, por persona (no por teléfono), cerrada ante cualquier falla.
+  Aplica también a `/solicitar`.
 
 **Abiertas:**
 - Opt-in/consentimiento (cómo aceptaron recibir mensajes).
@@ -204,3 +234,15 @@ Escenarios:
   empleado toca "No" sobre el mensaje de un **ciclo anterior**, se rechaza la oferta
   `vigente` **actual** (v1 sí protege contra pisar `firmada`/`solicitada`). Mitigación
   futura: incluir un id de oferta en el payload del botón, o expirar la oferta por tiempo.
+- **Lo que contesta la persona sí se guarda** (`integration_logs.request_payload`, pasado por
+  `redactPII`), pero `redactPII` tacha el teléfono. Por eso el webhook anota después cada mensaje
+  entrante con `entity_id` = empleado y `response_payload.chatbot` = qué hizo el sistema, y el
+  expediente lo muestra junto a lo enviado ("Contestó · Escribió · …"). Los mensajes anteriores a
+  esa anotación siguen en la base pero **sin dueño**, así que no aparecen en ningún expediente.
+- **Respuestas automáticas de WhatsApp Business.** Algunos empleados usan WhatsApp Business con
+  mensaje de bienvenida: al llegar la oferta, su teléfono contesta solo ("Gracias por comunicarte…")
+  y el bot le responde con la guía. No es una solicitud perdida; en el expediente se ve el texto y
+  se reconoce de inmediato.
+- **Celulares compartidos (limitación previa).** Si dos personas comparten número, el chatbot atiende a
+  la primera fila con oferta vigente que encuentra. La ventana ya no se cruza entre ellas, pero la que
+  no recibió la oferta oirá que no hay adelanto abierto.

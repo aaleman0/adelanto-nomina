@@ -112,3 +112,25 @@ export function normalizePhoneFromCsv(value: string | undefined): string | null 
 
   return null;
 }
+
+/**
+ * Todas las formas en que un mismo número mexicano puede estar guardado.
+ *
+ * WhatsApp manda SIEMPRE `52` + `1` + 10 dígitos, pero en la base conviven las
+ * dos convenciones: con el `1` (móvil) y sin él. No es un detalle menor —hoy
+ * uno de cada tres empleados está guardado sin el `1`—, y buscar por igualdad
+ * exacta los dejaba fuera: respondían al chatbot y el sistema decía no
+ * conocerlos. Se buscan ambas variantes en vez de exigir que los datos estén
+ * perfectos.
+ */
+export function variantesDeTelefono(from: string): string[] {
+  const digitos = (normalizePhoneFromCsv(from) ?? from).replace(/\D/g, "");
+  const variantes = new Set<string>([digitos]);
+
+  if (digitos.startsWith("521") && digitos.length === 13) {
+    variantes.add("52" + digitos.slice(3)); // sin el 1
+  } else if (digitos.startsWith("52") && digitos.length === 12) {
+    variantes.add("521" + digitos.slice(2)); // con el 1
+  }
+  return [...variantes];
+}

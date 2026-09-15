@@ -12,6 +12,14 @@ import {
   extractButtonReply,
   siSuccessMessage,
   noMessage,
+  mensajeAntesDePedir,
+  momentoDeLaRespuesta,
+  SIN_OFERTA_ABIERTA_MESSAGE,
+  VENTANA_SIN_VERIFICAR_MESSAGE,
+  mensajeParaQuienYaPidio,
+  ENLACE_VENCIDO_MESSAGE,
+  CONTRATO_NO_PREPARADO_MESSAGE,
+  SOLICITUD_EN_PROCESO_MESSAGE,
   type InboundMessage,
 } from "./chatbot";
 
@@ -249,5 +257,92 @@ describe("ventana para pedir el adelanto", () => {
   it("el aviso explica el plazo sin jerga", () => {
     expect(VENTANA_CERRADA_MESSAGE).toMatch(/2 horas/);
     expect(VENTANA_CERRADA_MESSAGE).not.toMatch(/webhook|token|API|null/i);
+  });
+});
+
+/**
+ * Quien quiere pedir y no puede tiene que oír la verdad sobre POR QUÉ. Decirle
+ * "el plazo cerró" a quien nunca recibió una oferta lo manda a reclamar un
+ * envío que no existió; y una caída nuestra no es un plazo vencido.
+ */
+describe("mensajeAntesDePedir", () => {
+  it("con la ventana abierta no se contesta nada: sigue a generar el contrato", () => {
+    expect(mensajeAntesDePedir("pedir")).toBeNull();
+  });
+
+  it("cada motivo tiene su propio mensaje", () => {
+    expect(mensajeAntesDePedir("fuera_de_plazo")).toBe(VENTANA_CERRADA_MESSAGE);
+    expect(mensajeAntesDePedir("sin_envio")).toBe(SIN_OFERTA_ABIERTA_MESSAGE);
+    expect(mensajeAntesDePedir("error")).toBe(VENTANA_SIN_VERIFICAR_MESSAGE);
+  });
+
+  it("a quien nunca recibió la oferta no le habla de un plazo ni lo invita a insistir", () => {
+    expect(SIN_OFERTA_ABIERTA_MESSAGE).not.toMatch(/plazo|cerr|venc/i);
+    expect(SIN_OFERTA_ABIERTA_MESSAGE).toMatch(/empresa/i);
+    expect(SIN_OFERTA_ABIERTA_MESSAGE).not.toMatch(/responde|escribe|toca/i);
+  });
+
+  it("una falla nuestra no se disfraza de plazo vencido ni usa jerga", () => {
+    expect(VENTANA_SIN_VERIFICAR_MESSAGE).not.toMatch(/plazo|cerr/i);
+    expect(VENTANA_SIN_VERIFICAR_MESSAGE).not.toMatch(/webhook|token|API|null|error/i);
+  });
+});
+
+/**
+ * La ventana se mide contra el momento en que la persona contestó. Meta
+ * reintenta los webhooks, y un "Sí" dado a tiempo no debe llegar tarde por eso.
+ */
+describe("momentoDeLaRespuesta", () => {
+  const ahora = new Date("2026-09-07T12:00:00Z").getTime();
+
+  it("usa la hora en que la persona contestó, no la de procesarlo", () => {
+    const hace20 = ahora - 20 * 60_000;
+    expect(momentoDeLaRespuesta(String(hace20 / 1000), ahora)).toBe(hace20);
+  });
+
+  it("nunca una hora en el futuro", () => {
+    expect(momentoDeLaRespuesta(String((ahora + 60 * 60_000) / 1000), ahora)).toBe(ahora);
+  });
+
+  it("sin marca de tiempo legible, ahora", () => {
+    expect(momentoDeLaRespuesta(undefined, ahora)).toBe(ahora);
+    expect(momentoDeLaRespuesta("no-es-un-numero", ahora)).toBe(ahora);
+    expect(momentoDeLaRespuesta("", ahora)).toBe(ahora);
+  });
+});
+
+/**
+ * A quien ya pidió no se le genera otro contrato fuera de plazo, pero se le dice
+ * lo cierto. El caso que motivó esto: a quien se le cayó el contrato se le
+ * contestaba "revisa el mensaje anterior con tu enlace", un enlace que nunca tuvo.
+ */
+describe("mensajeParaQuienYaPidio", () => {
+  const todos = () => [
+    mensajeParaQuienYaPidio("enlace_vencido", "Angel"),
+    mensajeParaQuienYaPidio("fallo", "Angel"),
+    mensajeParaQuienYaPidio("en_proceso", "Angel"),
+    mensajeParaQuienYaPidio("sin_verificar", "Angel"),
+  ];
+
+  it("cada situación tiene su mensaje", () => {
+    expect(mensajeParaQuienYaPidio("enlace_vencido", "Angel")).toBe(ENLACE_VENCIDO_MESSAGE);
+    expect(mensajeParaQuienYaPidio("fallo", "Angel")).toBe(CONTRATO_NO_PREPARADO_MESSAGE);
+    expect(mensajeParaQuienYaPidio("sin_verificar", "Angel")).toBe(VENTANA_SIN_VERIFICAR_MESSAGE);
+    expect(mensajeParaQuienYaPidio("en_proceso", "Angel")).toBe(SOLICITUD_EN_PROCESO_MESSAGE("Angel"));
+  });
+
+  it("a quien se le cayó el contrato no le promete ningún enlace", () => {
+    expect(CONTRATO_NO_PREPARADO_MESSAGE).not.toMatch(/enlace/i);
+    expect(CONTRATO_NO_PREPARADO_MESSAGE).toMatch(/empresa/i);
+  });
+
+  it("ninguno manda a buscar un mensaje anterior", () => {
+    for (const mensaje of todos()) expect(mensaje).not.toMatch(/mensaje anterior/i);
+  });
+
+  it("solo la falla nuestra invita a intentar de nuevo", () => {
+    expect(ENLACE_VENCIDO_MESSAGE).not.toMatch(/responde|escribe|toca|intenta|inténtalo/i);
+    expect(CONTRATO_NO_PREPARADO_MESSAGE).not.toMatch(/responde|escribe|toca|intenta|inténtalo/i);
+    expect(SOLICITUD_EN_PROCESO_MESSAGE("Angel")).not.toMatch(/responde|escribe|toca|intenta|inténtalo/i);
   });
 });
