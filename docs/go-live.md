@@ -5,6 +5,14 @@ esté en producción. Cada fase asume la anterior. Los pasos marcados 🧑 requi
 una persona (cuentas, credenciales, verificaciones de terceros): no se pueden
 automatizar desde el repo.
 
+> **Obsoleto (2026-09-15).** Este checklist describe la puesta en producción en **Google
+> Cloud Run**, que nunca se hizo: producción corre en **Railway**, que construye con el
+> `Dockerfile` y despliega solo en cada push a `main`. Los pasos de Secret Manager, Cloud
+> Tasks, Workload Identity Federation y dominio hacia Cloud Run **no aplican**, y los
+> archivos que menciona (`scripts/crear-secretos.sh`, `scripts/setup-cloud-tasks.sh`,
+> `deploy/cloud-run-service.yaml`) se eliminaron. Lo que sigue vigente son las fases de
+> base de datos, seguridad y verificación de terceros.
+
 El código está completo y verificado; lo que sigue es aprovisionamiento y
 configuración. Detalle por tema en [Configuración](configuracion.md),
 [Seguridad](seguridad.md) e [Infraestructura](infraestructura.md).

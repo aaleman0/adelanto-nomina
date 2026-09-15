@@ -114,7 +114,7 @@ El detalle largo de cada fase está en [go-live.md](go-live.md); esto es la ruta
 ## Lo que ya está hecho (no tienes que tocarlo)
 
 - ~~`.github/workflows/deploy.yml`~~ — eliminado el 2026-09-15: el despliegue lo hace Railway.
-- ✅ `scripts/crear-secretos.sh` — crea los 9 secretos y da permisos.
-- ✅ `scripts/setup-cloud-tasks.sh` — crea la cola y la cuenta invocadora.
-- ✅ `deploy/cloud-run-service.yaml` — el servicio con sus 31 variables declaradas.
+- ~~`scripts/crear-secretos.sh`~~, ~~`scripts/setup-cloud-tasks.sh`~~ y
+  ~~`deploy/cloud-run-service.yaml`~~ — eliminados el 2026-09-15 junto con el resto de
+  Cloud Run. En Railway las variables se cargan en su panel, no con Secret Manager.
 - ✅ `Dockerfile` — imagen verificada: construye (290 MB) y arranca.
