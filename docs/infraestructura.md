@@ -1,6 +1,6 @@
 # Infraestructura y despliegue
 
-> **Estado: CI implementado, despliegue pendiente.** Existe `.github/workflows/ci.yml` (integración continua), pero no hay `Dockerfile` ni `output: "standalone"`, así que **no hay entrega continua**: nada se despliega solo. Este documento describe la arquitectura acordada y lo que falta.
+> **Estado (2026-09-15): producción en Railway.** Railway construye con el `Dockerfile` y despliega solo cada push a `main`. La integración continua sigue en `.github/workflows/ci.yml`. La arquitectura con Google Cloud Run descrita más abajo fue la opción original y **no se usa**; su workflow y su job de CI se eliminaron.
 
 ## Integración continua (implementado)
 
@@ -19,7 +19,7 @@ Dependabot (`.github/dependabot.yml`) revisa npm semanalmente y las actions mens
 
 Para activar el job `db-types` hacen falta el secret `SUPABASE_ACCESS_TOKEN` y la variable `SUPABASE_PROJECT_ID` en el repositorio, y ejecutar `pnpm db:types` una vez para generar el archivo inicial.
 
-## Opción elegida
+## Opción original (no se usa)
 
 Docker + Google Cloud Run + Artifact Registry + GitHub Actions + Cloud Monitoring.
 

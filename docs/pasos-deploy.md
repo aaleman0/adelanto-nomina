@@ -1,5 +1,10 @@
 # Pasos para poner esto en producción
 
+> **Obsoleto (2026-09-15).** Producción corre en **Railway**, que despliega solo cada push a
+> `main` usando el `Dockerfile`. Esta guía describe el plan anterior con Google Cloud Run, que no
+> se usó: su workflow (`.github/workflows/deploy.yml`) y el job de Cloud Run de `ci.yml` se
+> eliminaron. Los scripts de `scripts/` y `deploy/` para Cloud Run quedan solo como referencia.
+
 Lista simple y en orden de lo que hay que hacer **a mano**. Todo lo que se podía
 automatizar ya está hecho: el workflow de despliegue, el script de secretos y la
 configuración del servicio.
@@ -108,9 +113,7 @@ El detalle largo de cada fase está en [go-live.md](go-live.md); esto es la ruta
 
 ## Lo que ya está hecho (no tienes que tocarlo)
 
-- ✅ `.github/workflows/deploy.yml` — construye, publica y despliega, con lint,
-  tipos y pruebas como puerta de entrada, y una comprobación de que el servicio
-  responde después.
+- ~~`.github/workflows/deploy.yml`~~ — eliminado el 2026-09-15: el despliegue lo hace Railway.
 - ✅ `scripts/crear-secretos.sh` — crea los 9 secretos y da permisos.
 - ✅ `scripts/setup-cloud-tasks.sh` — crea la cola y la cuenta invocadora.
 - ✅ `deploy/cloud-run-service.yaml` — el servicio con sus 31 variables declaradas.
