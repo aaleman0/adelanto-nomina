@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@komandero/numeros-a-letras": "2.0.0",
-    "@sentry/nextjs": "^10.67.0",
+    "@sentry/nextjs": "^10.75.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.116.0",
     "csv-parse": "^7.0.2",
