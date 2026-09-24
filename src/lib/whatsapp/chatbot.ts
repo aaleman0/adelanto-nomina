@@ -5,6 +5,7 @@ import { parseRequestContractPayload, requestContractFromWhatsApp } from "@/lib/
 import {
   DURACION_DE_LA_VENTANA,
   pasoAlPedir,
+  VENTANA_OFERTA_MS,
   ventanaDeLaPersona,
   type PasoAlPedir,
 } from "@/lib/contracts/ventana-oferta";
@@ -136,6 +137,16 @@ export const SIN_OFERTA_ABIERTA_MESSAGE =
   "Por ahora no hay un adelanto abierto para ti.\n\n" +
   "Tu empresa te avisará por este medio cuando esté disponible.";
 
+/**
+ * Contestó a una oferta que ya fue reemplazada por un ciclo nuevo. No se le
+ * genera nada: su "Sí" era por otro monto. Se le dice dónde está el vigente en
+ * vez de callar, porque el mensaje nuevo ya está en su chat.
+ */
+export const RESPUESTA_DE_OTRA_OFERTA_MESSAGE =
+  "Tu empresa actualizó tu adelanto 🔄\n\n" +
+  "Ese mensaje era de la oferta anterior. Busca el más reciente en esta " +
+  "conversación y contesta ahí para pedirlo.";
+
 /** No se pudo comprobar la ventana. Es una falla nuestra, no un plazo vencido. */
 export const VENTANA_SIN_VERIFICAR_MESSAGE =
   "😕 No pudimos revisar tu solicitud en este momento. Inténtalo de nuevo en unos minutos.";
@@ -239,29 +250,64 @@ export function classifyTextReply(body?: string | null): OfferReply | null {
  * Meta reintenta la entrega cuando el webhook no responde —por ejemplo durante
  * un redespliegue—, y se han visto entregas con 4 y 7 horas de retraso. Actuar
  * sobre un mensaje tan viejo hace daño: contestar una guía de madrugada por un
- * "hola" de la mañana confunde, y un "Sí, lo quiero" rezagado se atendería como
- * si la persona estuviera ahí, mirando el teléfono.
+ * "hola" de la mañana confunde a quien ya olvidó que escribió.
  *
  * Se descarta en silencio: si sigue interesada, vuelve a tocar el botón y se le
  * atiende con la hora correcta.
  *
- * El plazo con el que compite es la VENTANA para pedir (`VENTANA_OFERTA_MS`, dos
- * horas), no la vida del enlace de firma: media hora es holgado para un
- * reintento normal de Meta y sigue muy por debajo de la ventana, que de todos
- * modos le cerraría el paso al llegar a las dos horas. Antes esto se justificaba
- * contra el enlace —"nacería casi vencido"—, cuando enlace y ventana eran el
- * mismo plazo; el enlace dura ahora un día y ya no nace vencido nunca.
+ * Son DOS cortes, porque los dos tipos de mensaje se estropean por motivos
+ * distintos:
+ *
+ * - Un "hola", una foto o un botón que no se reconoce solo se contestan si
+ *   siguen siendo recientes: media hora. Contestar de madrugada a algo de la
+ *   mañana confunde a quien ya olvidó que escribió, y no hay nada que perder por
+ *   no contestarlo.
+ * - Un "Sí" o un "No" compiten con la VENTANA para pedir, y ahí el corte corto
+ *   hace daño: tiraría en silencio una solicitud que la ventana sí acepta, y la
+ *   persona se quedaría sin adelanto y sin respuesta, sin saber por qué. Quien
+ *   manda en esos es la ventana, que ya juzga con la hora en que la persona
+ *   contestó (`momentoDeLaRespuesta`) y falla en cerrado; este corte solo tiene
+ *   que atrapar lo que ya no cabría en ella por ningún camino.
+ *
+ * Mientras la ventana duró dos horas los dos cortes coincidían en la práctica y
+ * bastaba uno.
  */
 export const MAX_ANTIGUEDAD_MS = 30 * 60 * 1000;
+export const MAX_ANTIGUEDAD_RESPUESTA_MS = VENTANA_OFERTA_MS;
 
 export function mensajeDemasiadoViejo(
   timestamp: string | undefined,
   ahora = Date.now(),
+  maximo = MAX_ANTIGUEDAD_MS,
 ): boolean {
   if (!timestamp) return false; // Sin marca de tiempo no se puede juzgar: se atiende.
   const enviado = Number(timestamp) * 1000;
   if (!Number.isFinite(enviado) || enviado <= 0) return false;
-  return ahora - enviado > MAX_ANTIGUEDAD_MS;
+  return ahora - enviado > maximo;
+}
+
+/**
+ * ¿Esta respuesta es de la oferta que hay ahora, o de una anterior?
+ *
+ * Reimportar el ciclo INSERTA una oferta nueva y reemplaza la anterior
+ * (`imports/apply.ts`), casi siempre con otro monto. Un "Sí" que la persona tocó
+ * ayer, contra la oferta vieja, y que Meta nos entrega tarde, generaría un
+ * contrato por una cantidad que nunca vio: consintió $3,000 y firma $8,000.
+ *
+ * Con el corte de antigüedad en media hora esto era casi imposible. Con un día
+ * de tolerancia cabe un ciclo entero en medio, así que hay que mirarlo.
+ *
+ * Sin fecha de oferta legible no se bloquea: es un dato nuestro que falta, no una
+ * señal de que la persona se equivocó.
+ */
+export function respuestaEsDeOtraOferta(
+  ofertaCreadaEn: string | null | undefined,
+  pidioEn: number,
+): boolean {
+  if (!ofertaCreadaEn) return false;
+  const creada = new Date(ofertaCreadaEn).getTime();
+  if (!Number.isFinite(creada)) return false;
+  return pidioEn < creada;
 }
 
 /**
@@ -293,7 +339,14 @@ export function extractButtonReply(msg: InboundMessage): ButtonReply | null {
 
 type FoundEmployee = {
   employee: { id: string; rfc: string; nombre: string | null; telefono_normalizado: string | null };
-  offer: { id: string; status: string; is_eligible: boolean; monto_prestamo_autorizado: number } | null;
+  offer: {
+    id: string;
+    status: string;
+    is_eligible: boolean;
+    monto_prestamo_autorizado: number;
+    /** Para saber si una respuesta rezagada es de esta oferta o de la anterior. */
+    created_at: string | null;
+  } | null;
 };
 
 async function findEmployeeForPhone(from: string): Promise<FoundEmployee | null> {
@@ -312,7 +365,7 @@ async function findEmployeeForPhone(from: string): Promise<FoundEmployee | null>
   for (const e of emps) {
     const { data: offer } = await supabase
       .from("advance_offers")
-      .select("id, status, is_eligible, monto_prestamo_autorizado")
+      .select("id, status, is_eligible, monto_prestamo_autorizado, created_at")
       .eq("employee_id", e.id)
       .eq("is_current", true)
       .maybeSingle();
@@ -437,6 +490,21 @@ export async function handleOfferReply(
     return null;
   }
 
+  // Antes que nada: ¿contestó a ESTA oferta o a la anterior? Va delante del "No"
+  // a propósito — un rechazo rezagado del ciclo viejo dejaría la oferta nueva en
+  // `rechazada` y la persona perdería un adelanto que nunca vio.
+  if (respuestaEsDeOtraOferta(found.offer?.created_at, pidioEn)) {
+    logger.warn("whatsapp.chatbot.respuesta_de_otra_oferta", {
+      employeeId: found.employee.id,
+      offerId: found.offer?.id,
+      ofertaCreadaEn: found.offer?.created_at,
+      pidioEn: new Date(pidioEn).toISOString(),
+      reply,
+    });
+    await getWhatsAppClient().sendTextMessage(from, RESPUESTA_DE_OTRA_OFERTA_MESSAGE);
+    return found.employee.id;
+  }
+
   if (reply === "no") {
     // La ventana solo limita PEDIR. Rechazar fuera de plazo es inofensivo y no
     // tiene sentido negárselo a quien se tomó la molestia de contestar.
@@ -518,9 +586,21 @@ export async function quienEscribio(from: string): Promise<string | null> {
  * de quién era, para que el mensaje quede ligado a su expediente.
  */
 export async function handleInboundMessage(msg: InboundMessage): Promise<InboundOutcome> {
-  if (mensajeDemasiadoViejo(msg.timestamp)) {
+  // Se clasifica ANTES de mirar la antigüedad, porque el corte depende de qué
+  // sea: una respuesta de oferta se atiende mientras la ventana la aceptaría; lo
+  // demás, solo si sigue reciente. Ver MAX_ANTIGUEDAD_MS.
+  const button = extractButtonReply(msg);
+  const respuestaDeOferta = button
+    ? classifyOfferReply(button.text, button.payload)
+    : msg.type === "text"
+      ? classifyTextReply(msg.text?.body)
+      : null;
+  const maximo = respuestaDeOferta ? MAX_ANTIGUEDAD_RESPUESTA_MS : MAX_ANTIGUEDAD_MS;
+
+  if (mensajeDemasiadoViejo(msg.timestamp, Date.now(), maximo)) {
     logger.info("whatsapp.chatbot.mensaje_viejo_descartado", {
       id: msg.id,
+      esRespuestaDeOferta: Boolean(respuestaDeOferta),
       enviadoHace: msg.timestamp
         ? Math.round((Date.now() - Number(msg.timestamp) * 1000) / 60000) + " min"
         : "?",
@@ -528,7 +608,6 @@ export async function handleInboundMessage(msg: InboundMessage): Promise<Inbound
     return { handled: false, kind: "demasiado_viejo", employeeId: await quienEscribio(msg.from) };
   }
 
-  const button = extractButtonReply(msg);
   if (button) {
     const reply = classifyOfferReply(button.text, button.payload);
     if (reply) {

@@ -35,15 +35,20 @@ alguien sin su adelanto. Trabaja en consecuencia.
 Son decisiones del cliente, no detalles técnicos. Cambiarlas requiere que el
 usuario lo pida explícitamente.
 
-- **Dos plazos, independientes.** La **ventana para PEDIR** dura **2 horas**
-  (`VENTANA_OFERTA_HORAS` en `src/lib/contracts/ventana-oferta.ts`). El **enlace
-  para FIRMAR** dura **24 horas** (`LINK_TTL_HOURS` en `link-ttl.ts`). Regla en
-  una línea: *2 h para decir "Sí", el día entero para firmar.* Estuvieron atados
-  al mismo número; hay una prueba que falla si alguien los vuelve a atar.
+- **Dos plazos, independientes, que hoy coinciden en el número.** La **ventana
+  para PEDIR** dura **24 h desde que salió la oferta** (`VENTANA_OFERTA_HORAS` en
+  `ventana-oferta.ts`; era 2 h hasta el 2026-09-24). El **enlace para FIRMAR**
+  dura **24 h desde que se generó el contrato** (`LINK_TTL_HOURS` en
+  `link-ttl.ts`). Se miden desde momentos distintos y responden a reglas
+  distintas: **que valgan lo mismo es casualidad, no una relación.** Estuvieron
+  derivados del mismo número y eso impedía mover uno sin mover el otro; hay una
+  prueba que falla si alguien los vuelve a atar.
 - **La ventana la abre solo la empresa**, con un `bulk_contract_offer` que Meta
-  aceptó; corre desde que el mensaje **llegó** al teléfono (`delivered_at`), con
-  tope de 24 h desde el envío. Se juzga por empleado (el RFC es único; nunca por
-  teléfono, que se comparte) y contra la hora en que la persona contestó.
+  aceptó. Se juzga por empleado (el RFC es único; nunca por teléfono, que se
+  comparte) y contra la hora en que la persona contestó, no la de procesarlo. La
+  regla escrita corre desde que el mensaje **llegó** al teléfono con tope de 24 h
+  desde el envío, pero al valer ventana y tope lo mismo el tope manda siempre: en
+  la práctica cierra **un día después del envío** para todos.
 - **Todo lo que decide si alguien puede pedir falla en CERRADO.** Negarle el
   adelanto a quien lo merecía se arregla reenviándole la oferta; un contrato
   vinculante que nadie ofreció ya no se deshace.

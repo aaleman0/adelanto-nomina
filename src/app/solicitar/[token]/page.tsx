@@ -117,7 +117,13 @@ export default async function SolicitarPage({ params, searchParams }: PageProps)
   );
   // A quien ya pidió se le dice lo que de verdad tiene: un enlace vigente se le
   // ofrece para firmar, y sin él se le explica qué pasó con su solicitud.
-  const previa = paso === "ya_pidio" ? await solicitudPrevia(oferta.id as string) : null;
+  //
+  // Se mira el ESTADO DE LA OFERTA, no el paso, igual que en la acción. Atarlo al
+  // paso escondía este cálculo mientras la ventana estuviera abierta —porque
+  // `pasoAlPedir` devuelve "pedir" en cuanto lo está, sin mirar si ya pidió—, y
+  // con la ventana en un día eso son 24 h diciéndole "preparamos tu contrato" a
+  // quien ya tiene el suyo y solo necesita el botón de firmar.
+  const previa = oferta.status === "solicitada" ? await solicitudPrevia(oferta.id as string) : null;
   const yaTieneEnlace = previa === "enlace_vigente";
   const avisoDelPaso = avisoParaPaso(paso, previa);
   if (avisoDelPaso) {

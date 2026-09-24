@@ -64,6 +64,8 @@ Firmas con tu identificación (INE) desde tu celular.
 | Doble tap en "Sí" (link vivo) | Genera 2 contratos → **gasta 2 firmas** | Reusa el link vivo (índice *una-activa-por-empleado* + `getReusableAttempt`) y avisa que es un reenvío, no un contrato nuevo |
 | Toca "Sí" con el enlace vencido | Link muerto | Dentro de la ventana genera uno nuevo; fuera, "Ya solicitaste tu adelanto" y no genera nada |
 | Ya firmó | Contrato de más | "Ya firmaste ✅" |
+| Contesta a la oferta del ciclo ANTERIOR | Contrato por un monto que nunca vio | Si la respuesta es anterior a la oferta vigente (`respuestaEsDeOtraOferta`), no se genera nada y se le dice que busque el mensaje más reciente. Aplica también al "No", que si no rechazaría la oferta nueva |
+| Mensaje que Meta entrega con retraso | Un "Sí" válido tirado en silencio, o una guía de madrugada | Dos cortes: `MAX_ANTIGUEDAD_RESPUESTA_MS` (= la ventana) para el Sí/No, `MAX_ANTIGUEDAD_MS` (30 min) para todo lo demás |
 | No elegible / sin oferta | Algo inválido | "No tienes adelanto disponible…" |
 | EasyLex caído | El empleado queda sin respuesta | "Hubo un problema, intenta más tarde" |
 | Escribe texto (no botón) | El bot parece muerto | Acepta SÍ/NO escritos (lista cerrada); cualquier otra cosa recibe la guía y queda visible en el expediente |
@@ -73,7 +75,7 @@ Firmas con tu identificación (INE) desde tu celular.
 ### 2.1 Ventana para pedir
 
 Regla del cliente: el adelanto **no** se puede pedir en cualquier momento. Lo abre
-la empresa al mandar la oferta y dura lo mismo que el enlace de firma (2 h).
+la empresa al mandar la oferta y dura un día (24 h desde el envío).
 Vive en `src/lib/contracts/ventana-oferta.ts` y la usan **las dos puertas**: el
 "Sí" del chatbot y el enlace `/solicitar`.
 
@@ -85,7 +87,7 @@ Vive en `src/lib/contracts/ventana-oferta.ts` y la usan **las dos puertas**: el
 | ¿Se ancla a la fecha de la oferta? | **No** | Reimportar la nómina (p. ej. para corregir una CLABE) crea ofertas nuevas para todos y dejaría fuera de plazo a quien ya recibió el mensaje |
 | ¿Duplicados? | Se juzga **solo sobre la fila de la persona** | El RFC es único en `employees`; juntar por teléfono mezclaría a personas distintas que comparten celular |
 | ¿Si la base falla? | **Cerrada** | Negar de más se arregla reenviando la oferta; un contrato que nadie ofreció no se deshace |
-| ¿Quién ya pidió? | `solicitada` fuera de plazo no genera otro contrato. Si tiene un enlace **vigente** (el suyo, o uno que le regeneró un operador) se le entrega reusándolo; si no, se le dice lo cierto: venció, no se pudo preparar, o sigue en proceso. `firmada` solo recibe la confirmación | Quien alcanzó a pedir tiene sus 2 h para firmar, y nunca se le promete un enlace que no existe |
+| ¿Quién ya pidió? | `solicitada` fuera de plazo no genera otro contrato. Si tiene un enlace **vigente** (el suyo, o uno que le regeneró un operador) se le entrega reusándolo; si no, se le dice lo cierto: venció, no se pudo preparar, o sigue en proceso. `firmada` solo recibe la confirmación | Quien alcanzó a pedir tiene un día para firmar, y nunca se le promete un enlace que no existe |
 
 Qué oye la persona según el motivo: fuera de plazo → "El plazo para pedir este
 adelanto ya cerró"; nunca recibió la oferta → "Por ahora no hay un adelanto
@@ -127,7 +129,7 @@ y se le entrega en cuanto conteste "Sí" o abra /solicitar, mientras siga vigent
 No hay máquina de estados nueva:
 - `advance_offers.status`: `vigente` / `reemplazada` / `solicitada` / `firmada` / `rechazada`
 - `contract_requests.status`: `recibida` / `generando` / `link_generado` / `firmado` / `error` / `reemplazada`
-- `contract_attempts`: `generado` / `expirado` / `firmado` / `error` + `expires_at` (las 2 h)
+- `contract_attempts`: `generado` / `expirado` / `firmado` / `error` + `expires_at` (las 24 h)
 
 El webhook, en cada tap, **lee el estado actual** (`is_current` = oferta de ESTE ciclo)
 y responde según la tabla de edge cases.
@@ -205,9 +207,14 @@ Escenarios:
   nuevos ya comprobada en esta cuenta). Textos de mensaje finales (§2).
 - Export **B** (nombre + RFC + monto). Re-ofertar a "No" cada ciclo. Confirmación post-firma: **sí**.
 - Empate de empleado por RFC. El plazo del enlace (24 h) va en el mensaje del link (sesión), no en la oferta.
-- **Ventana para pedir** (§2.1): **2 h**, solo la abre el envío de ofertas, corre desde la entrega, tope de
-  24 h desde el envío, sin anclarse a la oferta, por persona (no por teléfono), cerrada ante cualquier falla.
-  Es un plazo **distinto** del que vive el enlace de firma (24 h): 2 h para decir "Sí", el día para firmar.
+- **Mensajes con retraso**: dos cortes, no uno. Una respuesta de oferta se atiende mientras la ventana la
+  aceptaría; cualquier otro mensaje, solo si tiene menos de 30 min. Y una respuesta anterior a la oferta
+  vigente no se procesa: al reimportar el ciclo la oferta se reemplaza y el monto cambia.
+- **Ventana para pedir** (§2.1): **24 h**, solo la abre el envío de ofertas, sin anclarse a la oferta, por
+  persona (no por teléfono), cerrada ante cualquier falla. La regla escrita mide desde la entrega con tope de
+  24 h desde el envío, pero al valer ambos lo mismo el tope manda: en la práctica es **un día desde el envío**.
+  Fue de 2 h hasta el 2026-09-24; se alargó porque un envío de las 5 de la tarde cerraba a las 7 y de 16
+  personas 11 no contestaron. Es un plazo **distinto** del que vive el enlace de firma, aunque hoy midan igual.
   Aplica también a `/solicitar`.
 
 **Abiertas:**

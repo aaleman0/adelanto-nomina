@@ -209,7 +209,7 @@ Van primero porque tienen tiempos de espera ajenos.
       sin sincronizar cae al comportamiento de las plantillas viejas y Meta rechaza
       el mensaje.
 - [ ] Probar el juego completo con UN empleado: llega la oferta → "Sí, lo quiero" →
-      llega el enlace de firma → abre dentro de 2 h. Y con otro: "No, gracias" → llega
+      llega el enlace de firma → abre dentro de 24 h. Y con otro: "No, gracias" → llega
       el agradecimiento y la oferta queda `rechazada`.
 - [ ] Confirmar en logs `whatsapp.chatbot.inbound` con `kind: "si" | "no"`.
 

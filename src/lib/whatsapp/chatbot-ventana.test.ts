@@ -23,6 +23,7 @@ import {
   SIN_OFERTA_ABIERTA_MESSAGE,
   VENTANA_CERRADA_MESSAGE,
   type InboundMessage,
+  RESPUESTA_DE_OTRA_OFERTA_MESSAGE,
 } from "./chatbot";
 import { requestContractFromWhatsApp } from "@/lib/contracts/request-contract";
 import { ventanaDeLaPersona } from "@/lib/contracts/ventana-oferta";
@@ -63,6 +64,93 @@ const haceMinutos = (m: number) => String(Math.floor((Date.now() - m * 60_000) /
 function boton(texto: string, minutos = 1): InboundMessage {
   return { id: `wamid.${texto}`, from: TELEFONO, timestamp: haceMinutos(minutos), type: "button", button: { text: texto } };
 }
+
+/**
+ * (H) El corte de antigüedad tiene dos valores y nadie recorría ninguno por
+ * `handleInboundMessage`: todas las entradas se construían con un minuto de vida.
+ */
+describe("antigüedad del mensaje", () => {
+  it("un 'Sí' con 7 h de retraso SÍ se atiende: la ventana lo acepta", async () => {
+    baseCon({ employees: [{ data: [EMPLEADO], error: null }], advance_offers: [{ data: OFERTA_VIGENTE, error: null }] });
+    vi.mocked(ventanaDeLaPersona).mockResolvedValue({ abierta: true, cierraEn: Date.now() + 60_000 });
+    vi.mocked(requestContractFromWhatsApp).mockResolvedValue({
+      ok: true, status: "contract_ready", link_easylex: "https://easylex.test/firma/tarde",
+    } as never);
+
+    const r = await handleInboundMessage(boton("Sí, lo quiero", 7 * 60));
+
+    expect(r.kind).toBe("si");
+    expect(requestContractFromWhatsApp).toHaveBeenCalledTimes(1);
+  });
+
+  it("un 'Sí' de hace más de un día se descarta: ya no cabe en la ventana", async () => {
+    const r = await handleInboundMessage(boton("Sí, lo quiero", 25 * 60));
+
+    expect(r.kind).toBe("demasiado_viejo");
+    expect(r.handled).toBe(false);
+    expect(requestContractFromWhatsApp).not.toHaveBeenCalled();
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it("un mensaje que no es respuesta se descarta a la media hora, no al día", async () => {
+    const r = await handleInboundMessage({
+      id: "wamid.hola", from: TELEFONO, timestamp: haceMinutos(40), type: "text", text: { body: "hola" },
+    });
+
+    expect(r.kind).toBe("demasiado_viejo");
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it("y si sigue reciente, se le contesta la guía", async () => {
+    const r = await handleInboundMessage({
+      id: "wamid.hola2", from: TELEFONO, timestamp: haceMinutos(10), type: "text", text: { body: "hola" },
+    });
+
+    expect(r.kind).toBe("text_fallback");
+    expect(enviar).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Reimportar el ciclo inserta una oferta nueva con otro monto. Un "Sí" rezagado
+ * del ciclo anterior no es consentimiento para la oferta de ahora.
+ */
+describe("respuesta de un ciclo anterior", () => {
+  const OFERTA_NUEVA = { ...OFERTA_VIGENTE, created_at: new Date(Date.now() - 30 * 60_000).toISOString() };
+
+  it("un 'Sí' anterior a la oferta vigente no genera contrato", async () => {
+    baseCon({ employees: [{ data: [EMPLEADO], error: null }], advance_offers: [{ data: OFERTA_NUEVA, error: null }] });
+
+    // Lo tocó 3 h antes; la oferta de ahora se creó hace 30 min.
+    const r = await handleInboundMessage(boton("Sí, lo quiero", 3 * 60));
+
+    expect(r.kind).toBe("si");
+    expect(requestContractFromWhatsApp).not.toHaveBeenCalled();
+    expect(ventanaDeLaPersona).not.toHaveBeenCalled();
+    expect(enviar).toHaveBeenCalledWith(TELEFONO, RESPUESTA_DE_OTRA_OFERTA_MESSAGE);
+  });
+
+  it("un 'No' rezagado tampoco rechaza la oferta nueva", async () => {
+    baseCon({ employees: [{ data: [EMPLEADO], error: null }], advance_offers: [{ data: OFERTA_NUEVA, error: null }] });
+
+    const r = await handleInboundMessage(boton("No, gracias", 3 * 60));
+
+    expect(r.kind).toBe("no");
+    expect(enviar).toHaveBeenCalledWith(TELEFONO, RESPUESTA_DE_OTRA_OFERTA_MESSAGE);
+  });
+
+  it("contestada después de la oferta vigente, sigue su curso normal", async () => {
+    baseCon({ employees: [{ data: [EMPLEADO], error: null }], advance_offers: [{ data: OFERTA_NUEVA, error: null }] });
+    vi.mocked(ventanaDeLaPersona).mockResolvedValue({ abierta: true, cierraEn: Date.now() + 60_000 });
+    vi.mocked(requestContractFromWhatsApp).mockResolvedValue({
+      ok: true, status: "contract_ready", link_easylex: "https://easylex.test/firma/ok",
+    } as never);
+
+    await handleInboundMessage(boton("Sí, lo quiero", 5));
+
+    expect(requestContractFromWhatsApp).toHaveBeenCalledTimes(1);
+  });
+});
 
 beforeEach(() => {
   enviar.mockReset();

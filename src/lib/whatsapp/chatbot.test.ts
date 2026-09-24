@@ -7,6 +7,9 @@ import {
   UNKNOWN_NUMBER_MESSAGE,
   variantesDeTelefono,
   mensajeDemasiadoViejo,
+  MAX_ANTIGUEDAD_MS,
+  MAX_ANTIGUEDAD_RESPUESTA_MS,
+  respuestaEsDeOtraOferta,
   VENTANA_OFERTA_MS,
   VENTANA_CERRADA_MESSAGE,
   extractButtonReply,
@@ -24,7 +27,6 @@ import {
   type InboundMessage,
 } from "./chatbot";
 import { DURACION_DE_LA_VENTANA } from "@/lib/contracts/ventana-oferta";
-import { LINK_TTL_MS } from "@/lib/contracts/link-ttl";
 
 describe("classifyOfferReply", () => {
   it("reconoce los textos de botón exactos", () => {
@@ -231,9 +233,14 @@ describe("variantesDeTelefono", () => {
 /**
  * Meta reintenta la entrega cuando el webhook no responde, y se vieron entregas
  * con 4 y 7 horas de retraso tras un redespliegue. Actuar sobre un mensaje tan
- * viejo confunde a la persona: se le contesta como si estuviera mirando el
- * teléfono. El corte son 30 minutos: holgado para un reintento normal de Meta y
- * muy por debajo de la VENTANA para pedir, que es el plazo con el que compite.
+ * viejo confunde a quien ya olvidó que escribió.
+ *
+ * El corte vale lo que la VENTANA para pedir. Fue de media hora mientras la
+ * ventana duraba dos: entonces un "Sí" con cuatro horas de retraso llegaba
+ * irremediablemente tarde. Con la ventana en un día, ese mismo corte tiraría en
+ * silencio solicitudes que la ventana sí acepta, y la persona se quedaría sin
+ * adelanto y sin respuesta. Quien decide el plazo es la ventana; esto solo
+ * atrapa lo verdaderamente antiguo.
  */
 describe("mensajeDemasiadoViejo", () => {
   const ahora = new Date("2026-09-07T12:00:00Z").getTime();
@@ -245,11 +252,28 @@ describe("mensajeDemasiadoViejo", () => {
     expect(mensajeDemasiadoViejo(haceMinutos(29), ahora)).toBe(false);
   });
 
-  it("descarta lo que rebasa la media hora", () => {
+  it("descarta lo que rebasa la media hora, que es el corte por omisión", () => {
     expect(mensajeDemasiadoViejo(haceMinutos(31), ahora)).toBe(true);
     expect(mensajeDemasiadoViejo(haceMinutos(90), ahora)).toBe(true);
-    expect(mensajeDemasiadoViejo(haceMinutos(60 * 4), ahora)).toBe(true);  // el caso real
-    expect(mensajeDemasiadoViejo(haceMinutos(60 * 7), ahora)).toBe(true);  // el otro caso real
+  });
+
+  it("con el corte de RESPUESTA, los retrasos reales de Meta ya no se tiran", () => {
+    // Los dos retrasos que de verdad se vieron en producción tras un
+    // redespliegue. Con media hora se descartaban en silencio; para un "Sí" que
+    // la ventana sí acepta, eso es dejar a alguien sin adelanto y sin respuesta.
+    expect(mensajeDemasiadoViejo(haceMinutos(60 * 4), ahora, MAX_ANTIGUEDAD_RESPUESTA_MS)).toBe(false);
+    expect(mensajeDemasiadoViejo(haceMinutos(60 * 7), ahora, MAX_ANTIGUEDAD_RESPUESTA_MS)).toBe(false);
+  });
+
+  it("ni con el corte largo se atiende lo que ya no cabe en la ventana", () => {
+    expect(mensajeDemasiadoViejo(haceMinutos(60 * 24 + 1), ahora, MAX_ANTIGUEDAD_RESPUESTA_MS)).toBe(true);
+    expect(mensajeDemasiadoViejo(haceMinutos(60 * 48), ahora, MAX_ANTIGUEDAD_RESPUESTA_MS)).toBe(true);
+  });
+
+  it("son dos cortes distintos, y el de respuesta es exactamente la ventana", () => {
+    expect(MAX_ANTIGUEDAD_MS).toBe(30 * 60 * 1000);
+    expect(MAX_ANTIGUEDAD_RESPUESTA_MS).toBe(VENTANA_OFERTA_MS);
+    expect(MAX_ANTIGUEDAD_MS).toBeLessThan(MAX_ANTIGUEDAD_RESPUESTA_MS);
   });
 
   it("ante la duda, atiende: sin marca de tiempo o con una ilegible", () => {
@@ -264,21 +288,40 @@ describe("mensajeDemasiadoViejo", () => {
 });
 
 /**
+ * Reimportar el ciclo inserta una oferta NUEVA, casi siempre con otro monto. Un
+ * "Sí" tocado contra la oferta vieja que Meta nos entrega tarde generaría un
+ * contrato por una cantidad que la persona nunca vio. Con el corte de antigüedad
+ * en media hora era casi imposible; con un día de tolerancia cabe un ciclo entero.
+ */
+describe("respuestaEsDeOtraOferta", () => {
+  const oferta = "2026-09-24T16:00:00Z";
+  const enHoras = (h: number) => Date.parse(oferta) + h * 60 * 60 * 1000;
+
+  it("lo contestado antes de que existiera esta oferta no cuenta para ella", () => {
+    expect(respuestaEsDeOtraOferta(oferta, enHoras(-1))).toBe(true);
+    expect(respuestaEsDeOtraOferta(oferta, enHoras(-20))).toBe(true);
+  });
+
+  it("lo contestado después sí es de esta oferta", () => {
+    expect(respuestaEsDeOtraOferta(oferta, enHoras(0))).toBe(false);
+    expect(respuestaEsDeOtraOferta(oferta, enHoras(3))).toBe(false);
+  });
+
+  it("sin fecha de oferta no se bloquea a nadie: el dato que falta es nuestro", () => {
+    expect(respuestaEsDeOtraOferta(null, enHoras(-5))).toBe(false);
+    expect(respuestaEsDeOtraOferta(undefined, enHoras(-5))).toBe(false);
+    expect(respuestaEsDeOtraOferta("no-es-fecha", enHoras(-5))).toBe(false);
+  });
+});
+
+/**
  * La ventana la abre la EMPRESA al enviar la oferta. Fuera de ella el empleado no
  * puede pedir el adelanto por su cuenta: la idea del cliente es ofrecerlo cuando
  * él quiere, no dejarlo disponible de forma permanente.
- *
- * Es un plazo INDEPENDIENTE de lo que vive el enlace de firma. Durante un tiempo
- * se derivó del TTL del enlace "para tener una sola fuente de verdad", y al
- * querer alargar el enlace se habría alargado con él la ventana, que es
- * exactamente lo contrario de la regla del cliente. La prueba de abajo es la
- * guardia contra volver a atarlos.
  */
 describe("ventana para pedir el adelanto", () => {
-  it("dura dos horas, sin importar lo que dure el enlace de firma", () => {
-    expect(VENTANA_OFERTA_MS).toBe(2 * 60 * 60 * 1000);
-    expect(LINK_TTL_MS).toBe(24 * 60 * 60 * 1000);
-    expect(VENTANA_OFERTA_MS).not.toBe(LINK_TTL_MS);
+  it("dura un día", () => {
+    expect(VENTANA_OFERTA_MS).toBe(24 * 60 * 60 * 1000);
   });
 
   it("el aviso de ventana cerrada no invita a pedirlo por su cuenta", () => {

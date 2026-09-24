@@ -82,8 +82,9 @@ where employee_id = 'ec0b2388-78f6-4fc7-b35f-a5512dc81833' and is_current = true
 - [ ] Abrir el enlace **directo de EasyLex** (el que queda en el navegador al
       firmar) → **si EasyLex deja firmar, es un hallazgo grave** que hay que
       hablar con ellos.
-- [ ] Tocar **"Sí"** otra vez, **dentro de la ventana de 2 h** → debe generar uno nuevo con 24 horas frescas.
-      Fuera de la ventana no debe generar nada: la ventana para pedir (2 h) y la vida del enlace (24 h) son plazos distintos.
+- [ ] Tocar **"Sí"** otra vez, **dentro de la ventana de 24 h** → si su enlace sigue vivo se le reenvía el
+      mismo (y el mensaje debe decir que es un reenvío); si ya venció, debe generar uno nuevo.
+      Pasado el día del envío no debe generar nada.
 
 ---
 

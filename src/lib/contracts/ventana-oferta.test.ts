@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
@@ -16,10 +17,14 @@ const hace = (minutos: number) => new Date(AHORA - minutos * MIN).toISOString();
 const dentroDe = (minutos: number) => new Date(AHORA + minutos * MIN).toISOString();
 
 /**
- * La ventana la abre la EMPRESA al mandar la oferta, y corre desde que el
- * mensaje llega al teléfono. Lo que estas pruebas cuidan son las dos maneras de
- * equivocarse: dejar pedir a quien nadie le ofreció nada, y cerrarle el plazo a
- * quien simplemente no tenía señal.
+ * La ventana la abre la EMPRESA al mandar la oferta y dura un día. Lo que estas
+ * pruebas cuidan son las dos maneras de equivocarse: dejar pedir a quien nadie le
+ * ofreció nada, y cerrarle el plazo a quien contestó a tiempo.
+ *
+ * La regla escrita mide desde que el mensaje LLEGÓ al teléfono, pero mientras la
+ * ventana y el tope de entrega tardía valgan lo mismo (24 h) el tope manda y el
+ * cierre acaba siendo `envío + un día` para todo el mundo. Las pruebas de abajo
+ * lo dicen tal cual, en vez de afirmar un anclaje que hoy no cambia nada.
  */
 describe("evaluarVentana", () => {
   it("sin ningún envío de la empresa, no se puede pedir", () => {
@@ -33,17 +38,28 @@ describe("evaluarVentana", () => {
     });
   });
 
-  it("entregada al momento hace 3 horas: el plazo ya cerró", () => {
-    expect(evaluarVentana([{ created_at: hace(180), delivered_at: hace(179) }], AHORA)).toEqual({
+  it("unas horas después sigue abierta: el plazo es de un día", () => {
+    // El caso que motivó alargar la ventana: ofertas mandadas a las 5 de la
+    // tarde. Con dos horas, quien las veía al día siguiente ya no podía pedir.
+    expect(evaluarVentana([{ created_at: hace(180), delivered_at: hace(179) }], AHORA).abierta).toBe(true);
+    expect(evaluarVentana([{ created_at: hace(18 * 60), delivered_at: hace(18 * 60) }], AHORA).abierta).toBe(true);
+  });
+
+  it("pasado el día, cierra", () => {
+    expect(evaluarVentana([{ created_at: hace(25 * 60), delivered_at: hace(25 * 60) }], AHORA)).toEqual({
       abierta: false,
       motivo: "fuera_de_plazo",
     });
   });
 
-  it("el teléfono sin señal toda la mañana: las 2 horas cuentan desde que le llegó", () => {
+  it("el teléfono sin señal toda la mañana también cierra a las 24 h del ENVÍO", () => {
+    // Mientras ventana y tope valgan lo mismo, el tope manda y el anclaje en la
+    // entrega no cambia ningún resultado: la oferta salió hace 9 h, así que
+    // cierra dentro de 15, aunque le llegara hace media hora. Si alguien acorta
+    // la ventana, esta prueba cambia y el anclaje vuelve a importar.
     expect(evaluarVentana([{ created_at: hace(9 * 60), delivered_at: hace(30) }], AHORA)).toEqual({
       abierta: true,
-      cierraEn: AHORA - 30 * MIN + VENTANA_OFERTA_MS,
+      cierraEn: AHORA - 9 * 60 * MIN + TOPE_ENTREGA_TARDIA_MS,
     });
   });
 
@@ -70,7 +86,7 @@ describe("evaluarVentana", () => {
         ],
         AHORA,
       ),
-    ).toEqual({ abierta: true, cierraEn: AHORA - 19 * MIN + VENTANA_OFERTA_MS });
+    ).toEqual({ abierta: true, cierraEn: AHORA - 20 * MIN + TOPE_ENTREGA_TARDIA_MS });
   });
 
   it("un desfase de reloj pequeño no le quita el plazo a nadie", () => {
@@ -85,7 +101,7 @@ describe("evaluarVentana", () => {
   });
 
   it("una entrega fechada en el futuro no deja la ventana abierta para siempre", () => {
-    expect(evaluarVentana([{ created_at: hace(3 * 60), delivered_at: dentroDe(10 * 60) }], AHORA)).toEqual({
+    expect(evaluarVentana([{ created_at: hace(30 * 60), delivered_at: dentroDe(10 * 60) }], AHORA)).toEqual({
       abierta: false,
       motivo: "fuera_de_plazo",
     });
@@ -101,6 +117,82 @@ describe("evaluarVentana", () => {
         AHORA,
       ),
     ).toEqual({ abierta: false, motivo: "sin_envio" });
+  });
+});
+
+/**
+ * La guardia contra volver a atar los dos plazos.
+ *
+ * `VENTANA_OFERTA_MS` se derivaba de `LINK_TTL_HOURS` "para tener una sola fuente
+ * de verdad", y alargar el enlace habría alargado con él el plazo para pedir, que
+ * es lo contrario de la regla del cliente. Hoy los dos valen 24 h, así que
+ * compararlos ya no prueba nada: lo que se comprueba es que este archivo no
+ * dependa del otro. Si alguien vuelve a importar el TTL del enlace aquí, falla.
+ *
+ * Mira IMPORTS, no menciones: el archivo nombra a `link-ttl.ts` en sus
+ * comentarios precisamente para advertir que no hay que atarlos, y esa
+ * advertencia no puede ser lo que rompa la prueba.
+ */
+describe("independencia de los dos plazos", () => {
+  it("la ventana no se deriva del enlace de firma", () => {
+    // Ruta desde la raíz del proyecto: es el cwd con el que corre vitest, y
+    // `import.meta.url` aquí no es una URL de archivo.
+    const fuente = readFileSync("src/lib/contracts/ventana-oferta.ts", "utf8");
+    expect(fuente).not.toMatch(/\bfrom\s*["'][^"']*link-ttl["']/);
+    expect(fuente).not.toMatch(/\brequire\s*\(\s*["'][^"']*link-ttl["']/);
+    expect(fuente).not.toMatch(/\bLINK_TTL_(?:HOURS|MS)\b/);
+  });
+
+  it("y el enlace de firma tampoco se deriva de la ventana", () => {
+    // La guardia va en los dos sentidos: atarlos desde el otro archivo tendría
+    // el mismo efecto —no poder mover uno sin mover el otro— y el primer intento
+    // de separarlos solo miró este lado.
+    const fuente = readFileSync("src/lib/contracts/link-ttl.ts", "utf8");
+    expect(fuente).not.toMatch(/\bfrom\s*["'][^"']*ventana-oferta["']/);
+    expect(fuente).not.toMatch(/\brequire\s*\(\s*["'][^"']*ventana-oferta["']/);
+    expect(fuente).not.toMatch(/\bVENTANA_OFERTA_(?:HORAS|MS)\b/);
+  });
+
+  it("y la declara ella misma, en horas legibles", () => {
+    expect(VENTANA_OFERTA_MS).toBe(24 * 60 * 60 * 1000);
+  });
+});
+
+/**
+ * (E) El anclaje en `delivered_at` se conserva aunque hoy no cambie ningún
+ * resultado —ventana y tope valen lo mismo, así que manda el tope—. Sin inyectar
+ * un plazo más corto no habría forma de probarlo y se podría borrar entero con la
+ * suite en verde. Estos casos son la ventana de 2 h que hubo hasta el 2026-09-24.
+ */
+describe("el anclaje en la entrega, con una ventana más corta que el tope", () => {
+  const DOS_HORAS = 2 * 60 * 60 * 1000;
+
+  it("el teléfono sin señal toda la mañana cuenta desde que le LLEGÓ", () => {
+    expect(evaluarVentana([{ created_at: hace(9 * 60), delivered_at: hace(30) }], AHORA, DOS_HORAS)).toEqual({
+      abierta: true,
+      cierraEn: AHORA - 30 * MIN + DOS_HORAS,
+    });
+  });
+
+  it("sin aviso de entrega cuenta desde que salió", () => {
+    expect(evaluarVentana([{ created_at: hace(30), delivered_at: null }], AHORA, DOS_HORAS)).toEqual({
+      abierta: true,
+      cierraEn: AHORA - 30 * MIN + DOS_HORAS,
+    });
+  });
+
+  it("entregada hace más de dos horas: cerrada", () => {
+    expect(evaluarVentana([{ created_at: hace(9 * 60), delivered_at: hace(150) }], AHORA, DOS_HORAS)).toEqual({
+      abierta: false,
+      motivo: "fuera_de_plazo",
+    });
+  });
+
+  it("y el tope sigue cortando la entrega que llega días después", () => {
+    expect(evaluarVentana([{ created_at: hace(30 * 60), delivered_at: hace(10) }], AHORA, DOS_HORAS)).toEqual({
+      abierta: false,
+      motivo: "fuera_de_plazo",
+    });
   });
 });
 
@@ -189,8 +281,8 @@ describe("ventanaDeLaPersona", () => {
   });
 
   it("juzga con el momento en que la persona pidió, no con el de procesarlo", async () => {
-    // Entregada hace 125 min: la ventana cerró hace 5.
-    const fila = { created_at: hace(125), delivered_at: hace(125) };
+    // Entregada hace 24 h y 5 min: la ventana cerró hace 5.
+    const fila = { created_at: hace(24 * 60 + 5), delivered_at: hace(24 * 60 + 5) };
     clienteCon(consulta({ data: [fila], error: null }), consulta({ data: [fila], error: null }));
 
     expect((await ventanaDeLaPersona("emp-1", AHORA - 10 * MIN)).abierta).toBe(true);

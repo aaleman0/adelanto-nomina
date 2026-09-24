@@ -99,7 +99,7 @@ El detalle largo de cada fase está en [go-live.md](go-live.md); esto es la ruta
 
 19. Entrar con tu cuenta y confirmar que solo entran los correos autorizados.
 20. Enviar la oferta a **un solo empleado de prueba** y recorrer el flujo completo:
-    llega el mensaje → "Sí, lo quiero" (dentro de las 2 h de la ventana) → llega el enlace → firmar dentro de 24 horas.
+    llega el mensaje → "Sí, lo quiero" (dentro del día que dura la ventana) → llega el enlace → firmar dentro de 24 horas.
 21. Revisar en los logs que aparece `queue.driver.selected { kind: 'cloud-tasks' }`
     (que el envío se está drenando por la cola y no en línea).
 

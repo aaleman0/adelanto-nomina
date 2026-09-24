@@ -33,7 +33,7 @@ Son consistentes en todo el código; romperlas crea inconsistencia visible para 
 
 - Validar oferta vigente, elegible y cuenta bancaria activa antes de crear una solicitud.
 - Una solicitud por oferta; una sola solicitud activa por empleado. Ambas garantizadas por constraints.
-- Reutilizar el link vigente; regenerar como **nuevo intento** si expiró (TTL 2 h).
+- Reutilizar el link vigente; regenerar como **nuevo intento** si expiró (TTL 24 h).
 - Persistir estado antes de llamar a un servicio externo cuando sirva para reintentar.
 - Devolver respuestas pequeñas y estables a quien consume desde WhatsApp.
 - Guardar el `wamid` de cada mensaje para rastrear entrega.

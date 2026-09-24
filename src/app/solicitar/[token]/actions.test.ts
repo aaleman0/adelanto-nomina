@@ -116,6 +116,51 @@ describe("solicitarContratoAction", () => {
     expect(requestContractFromWhatsApp).toHaveBeenCalledWith(expect.anything(), { skipSend: false });
   });
 
+  /**
+   * El caso que rompió al alargar la ventana. Con la ventana abierta un día
+   * entero, el segundo clic de quien YA pidió sigue cayendo en "pedir" —la
+   * ventana manda sobre el estado de la oferta—, así que atar el `skipSend` al
+   * paso dejaba de funcionar y la plantilla de pago se reenviaba en cada toque
+   * durante veinticuatro horas. Lo que decide es lo que la persona TIENE.
+   */
+  it("con la ventana abierta y un enlace ya vivo, no reenvía la plantilla", async () => {
+    baseCon("solicitada");
+    vi.mocked(ventanaDeLaPersona).mockResolvedValue({ abierta: true, cierraEn: Date.now() + 60_000 });
+    vi.mocked(solicitudPrevia).mockResolvedValue("enlace_vigente");
+    vi.mocked(requestContractFromWhatsApp).mockResolvedValue({
+      ok: true,
+      status: "contract_ready",
+      link_easylex: "https://easylex.test/firma/abc",
+    } as never);
+
+    await expect(solicitarContratoAction(formulario())).rejects.toThrow("REDIRECT https://easylex.test/firma/abc");
+    expect(requestContractFromWhatsApp).toHaveBeenCalledWith(expect.anything(), { skipSend: true });
+  });
+
+  /**
+   * El otro lado de la misma condición: solo un enlace VIGENTE apaga el envío.
+   * Sin esto, `skipSend: previa !== null` pasaría la suite igual y le negaría su
+   * copia del enlace a quien está reintentando porque el contrato se le cayó.
+   */
+  it("con la ventana abierta y la solicitud en mal estado, sí le manda su copia", async () => {
+    for (const previa of ["fallo", "en_proceso", "enlace_vencido", "sin_verificar"] as const) {
+      baseCon("solicitada");
+      vi.mocked(requestContractFromWhatsApp).mockReset();
+      vi.mocked(ventanaDeLaPersona).mockResolvedValue({ abierta: true, cierraEn: Date.now() + 60_000 });
+      vi.mocked(solicitudPrevia).mockResolvedValue(previa);
+      vi.mocked(requestContractFromWhatsApp).mockResolvedValue({
+        ok: true,
+        status: "contract_ready",
+        link_easylex: "https://easylex.test/firma/nuevo",
+      } as never);
+
+      await expect(solicitarContratoAction(formulario()), previa).rejects.toThrow(
+        "REDIRECT https://easylex.test/firma/nuevo",
+      );
+      expect(requestContractFromWhatsApp, previa).toHaveBeenCalledWith(expect.anything(), { skipSend: false });
+    }
+  });
+
   it("quien ya firmó pasa aunque haya cerrado: el sistema solo se lo confirma", async () => {
     baseCon("firmada");
     vi.mocked(ventanaDeLaPersona).mockResolvedValue({ abierta: false, motivo: "fuera_de_plazo" });

@@ -9,12 +9,14 @@
  * la INE a mano ni un rato tranquilo para firmar desde el celular, y un enlace
  * que muere en dos horas lo obliga a resolverlo ahí mismo o perder el adelanto.
  *
- * Este plazo NO es el de la ventana para PEDIR el adelanto. Esa la abre la
- * empresa al mandar la oferta, sigue siendo corta y vive en `ventana-oferta.ts`.
- * Son dos reglas con dueños distintos —cuánto tiempo la empresa acepta
- * solicitudes, y cuánto tiempo la persona tiene para firmar lo que ya pidió— y
- * estuvieron atadas a este mismo número hasta que se separaron. No volver a
- * derivar una de la otra por parecerse.
+ * Este plazo NO es el de la ventana para PEDIR el adelanto, que vive en
+ * `ventana-oferta.ts` y desde el 2026-09-24 también vale 24 h. Que coincidan en
+ * el número es casualidad de los dos valores, no una relación: son reglas con
+ * dueños distintos —cuánto tiempo la empresa acepta solicitudes, y cuánto tiempo
+ * tiene para firmar quien ya pidió— y se miden desde momentos distintos: este
+ * desde que se generó el contrato, aquel desde que salió la oferta. Estuvieron
+ * atadas a este mismo número y no se podía mover una sin la otra. No volver a
+ * derivarlas: hay pruebas en los dos sentidos que lo impiden.
  */
 export const LINK_TTL_HOURS = 24;
 

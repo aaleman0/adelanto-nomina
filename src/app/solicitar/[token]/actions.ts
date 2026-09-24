@@ -52,13 +52,18 @@ export async function solicitarContratoAction(formData: FormData) {
     oferta?.status as string | null | undefined,
     await ventanaDeLaPersona(verified.employeeId),
   );
+  // Qué tiene ya esta persona. Se consulta SIEMPRE que haya pedido, no solo
+  // cuando el paso es "ya_pidio": con la ventana abierta un día entero, el
+  // segundo clic de quien ya pidió sigue cayendo en "pedir" —la ventana manda
+  // sobre el estado de la oferta—, y aun así hay que saber si ya tiene enlace.
+  const ofertaId = (oferta?.id as string | undefined) ?? null;
+  const yaPidio = oferta?.status === "solicitada";
+  const previa = yaPidio && ofertaId !== null ? await solicitudPrevia(ofertaId) : null;
+
   // Quien ya pidió solo sigue si tiene un enlace vigente: el pipeline lo reusa y
   // no crea otro contrato. En cualquier otro caso vuelve a la página, que calcula
   // de nuevo su situación real y le explica qué pasó.
-  const ofertaId = (oferta?.id as string | undefined) ?? null;
-  const puedeSeguir =
-    paso === "pedir" ||
-    (paso === "ya_pidio" && ofertaId !== null && (await solicitudPrevia(ofertaId)) === "enlace_vigente");
+  const puedeSeguir = paso === "pedir" || (paso === "ya_pidio" && previa === "enlace_vigente");
   if (!puedeSeguir) {
     redirect(back);
   }
@@ -69,12 +74,16 @@ export async function solicitarContratoAction(formData: FormData) {
       rfc: emp.rfc,
       telefono_normalizado: emp.telefono_normalizado,
     });
-    // A quien ya pidió no se le reenvía la plantilla: ya tiene el enlace en su
-    // WhatsApp y en este mismo clic se va a firmar. Reenviarla por cada toque
-    // cobra un mensaje, le ensucia el historial y desplaza a la oferta como
-    // "último mensaje" en el tablero; con el enlace vivo un día entero, eso se
-    // repetiría toda la tarde. En el primer pedido sí se manda: es su copia.
-    result = await requestContractFromWhatsApp(input, { skipSend: paso === "ya_pidio" });
+    // A quien ya tiene su enlace vivo no se le reenvía la plantilla: ya la tiene
+    // en su WhatsApp y en este mismo clic se va a firmar. Reenviarla por cada
+    // toque cobra un mensaje, le ensucia el historial y desplaza a la oferta como
+    // "último mensaje" en el tablero. En el primer pedido sí se manda: es su copia.
+    //
+    // La condición mira lo que la persona TIENE, no el paso que le tocó. Atarlo
+    // al paso funcionaba solo mientras la ventana fuera más corta que el enlace;
+    // al subir la ventana a un día, el segundo clic volvía a caer en "pedir" y la
+    // plantilla se reenviaba en cada toque durante veinticuatro horas.
+    result = await requestContractFromWhatsApp(input, { skipSend: previa === "enlace_vigente" });
   } catch {
     redirect(`${back}?status=error`);
   }

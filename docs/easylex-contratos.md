@@ -15,7 +15,7 @@ contract_requests          una por oferta — UNIQUE (offer_id)
       │
       │  un intento por generación de link
       ▼
-contract_attempts          attempt_number 1, 2, 3…  TTL 2 h
+contract_attempts          attempt_number 1, 2, 3…  TTL 24 h
       │
       │  el empleado firma en EasyLex
       ▼
@@ -42,7 +42,7 @@ Implementadas en `requestContractFromWhatsApp()` (`src/lib/contracts/request-con
 7. **Si el link expiró, se regenera como nuevo intento** dentro de la misma solicitud.
 8. **Snapshot congelado.** Al crear la solicitud se guarda `contract_snapshot` con nombre, apellidos, RFC, CURP, CLABE, banco, monto, empleador, teléfono, email y procedencia. Una reimportación posterior no altera lo firmado.
 
-`LINK_TTL_HOURS = 24`, declarado en un solo archivo (`src/lib/contracts/link-ttl.ts`) del que salen también `LINK_TTL_MS` y el texto `DURACION_DEL_ENLACE` que ven los empleados. Cambiar el plazo es cambiar ese número. **No** toca la ventana para pedir el adelanto, que vive aparte en `ventana-oferta.ts` (2 h).
+`LINK_TTL_HOURS = 24`, declarado en un solo archivo (`src/lib/contracts/link-ttl.ts`) del que salen también `LINK_TTL_MS` y el texto `DURACION_DEL_ENLACE` que ven los empleados. Cambiar el plazo es cambiar ese número. **No** toca la ventana para pedir el adelanto, que vive aparte en `ventana-oferta.ts` (24 h desde que salió la oferta). Coinciden en el número; no derivar una de la otra.
 
 ## Generación del PDF
 
