@@ -16,7 +16,7 @@ Cada tema tiene **un solo documento**. Si un dato aparece en dos sitios, uno de 
 | [Migrar base de producción](migrar-base-produccion.md) | Runbook: aplicar migraciones y verificar RLS en una base de prod nueva |
 | [Testing](testing.md) | Vitest, Playwright, comandos, cobertura y huecos |
 | [Scripts](scripts.md) | Utilidades de `scripts/` |
-| [Infraestructura](infraestructura.md) | Despliegue: Docker, Cloud Run, CI/CD, Cloud Tasks |
+| [Infraestructura](infraestructura.md) | Despliegue: Docker, Railway, CI/CD, Cloud Tasks |
 | [Go-live](go-live.md) | Checklist ordenado de puesta en producción — **empieza aquí para desplegar** |
 
 ## Por dónde empezar
