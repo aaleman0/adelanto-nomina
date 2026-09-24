@@ -28,8 +28,9 @@ const PUBLIC_PATHS = ["/login", "/auth/callback"];
  *
  * - `/solicitar/<token>`: token HMAC firmado con `SOLICITAR_TOKEN_SECRET`.
  * - `/firmar/<signerId>`: identificador de firmante que EasyLex emite por
- *   contrato. La página lo valida contra `contract_attempts` y contra la
- *   vigencia de 2 horas antes de redirigir; si no cuadra, no muestra nada.
+ *   contrato. La página lo valida contra `contract_attempts`, contra el estado
+ *   del intento y contra su vigencia antes de redirigir; si no cuadra, no
+ *   muestra nada.
  *   Sin esto, el enlace de firma que se guarda como `signing_url` mandaba al
  *   empleado a `/login`, donde nunca podrá entrar.
  */

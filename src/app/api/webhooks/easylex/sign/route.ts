@@ -5,6 +5,7 @@ import { easylexEnv } from "@/lib/env";
 import { verifyEasylexWebhook, isProduction, enforceSignatures } from "@/lib/security/webhook-signatures";
 import { redactPII } from "@/lib/audit/redact";
 import { deliverSignedContract } from "@/lib/contracts/deliver-signed-contract";
+import { queHacerConLaFirma } from "@/lib/contracts/firma-tardia";
 import { randomUUID } from "node:crypto";
 
 import { enforceRateLimit } from "@/lib/security/rate-limit";
@@ -237,20 +238,44 @@ async function handleDocumentSigned(
 
   if (crError) throw crError;
 
+  // Una firma puede llegar sobre una solicitud que ya no está en curso: matamos
+  // el enlace al reemplazar el ciclo, pero el documento sigue vivo en EasyLex,
+  // que no expone forma de cancelarlo. Ver `firma-tardia.ts` para el porqué.
+  const queHacer = queHacerConLaFirma(contractRequest?.status);
+  const eventoDeFirma = queHacer === "registrar" ? "contract.signed" : "contract.signed_fuera_de_curso";
+
   if (contractRequest) {
-    const { error: updateCrError } = await supabase
-      .from("contract_requests")
-      .update({ status: "firmado", signed_at: signedAt })
-      .eq("id", contractRequest.id);
+    if (queHacer === "registrar") {
+      const { error: updateCrError } = await supabase
+        .from("contract_requests")
+        .update({ status: "firmado", signed_at: signedAt })
+        .eq("id", contractRequest.id);
 
-    if (updateCrError) throw updateCrError;
+      if (updateCrError) throw updateCrError;
 
-    const { error: offerError } = await supabase
-      .from("advance_offers")
-      .update({ status: "firmada" })
-      .eq("id", contractRequest.offer_id);
+      const { error: offerError } = await supabase
+        .from("advance_offers")
+        .update({ status: "firmada" })
+        .eq("id", contractRequest.offer_id);
 
-    if (offerError) throw offerError;
+      if (offerError) throw offerError;
+    } else {
+      // No se pisa el estado: revivirla metería este pago —con el monto de un
+      // ciclo ya cerrado— en el Excel de dispersión, y sin aparecer en el
+      // tablero. Se deja constancia ruidosa para que operación lo resuelva.
+      logger.error(
+        "easylex.webhook.document_signed.fuera_de_curso",
+        new Error("Firma recibida sobre una solicitud que ya no está en curso."),
+        {
+          attemptId: attempt.id,
+          contractRequestId: contractRequest.id,
+          offerId: contractRequest.offer_id,
+          estadoSolicitud: contractRequest.status,
+          documentId,
+          correlationId,
+        },
+      );
+    }
 
     // El audit_event de firma es la evidencia legal. Idempotente: si un reintento
     // vuelve a entrar tras haberlo insertado, no se duplica. Su fallo NO se traga
@@ -259,7 +284,7 @@ async function handleDocumentSigned(
       .from("audit_events")
       .select("id")
       .eq("entity_id", contractRequest.id)
-      .eq("event_name", "contract.signed")
+      .eq("event_name", eventoDeFirma)
       .limit(1)
       .maybeSingle();
 
@@ -267,15 +292,18 @@ async function handleDocumentSigned(
 
     if (!existingAudit) {
       const { error: auditError } = await supabase.from("audit_events").insert({
-        event_name: "contract.signed",
+        event_name: eventoDeFirma,
         entity_type: "contract_requests",
         entity_id: contractRequest.id,
         employee_id: contractRequest.employee_id,
         correlation_id: correlationId,
         source: "easylex",
         previous_state: contractRequest.status,
-        new_state: "firmado",
-        summary: "Contrato firmado confirmado por webhook de EasyLex.",
+        new_state: queHacer === "registrar" ? "firmado" : contractRequest.status,
+        summary:
+          queHacer === "registrar"
+            ? "Contrato firmado confirmado por webhook de EasyLex."
+            : "Se firmó un contrato de una solicitud que ya no estaba en curso. No se registró como firma: requiere revisión.",
         metadata: {
           contract_attempt_id: attempt.id,
           easylex_contract_id: documentId,
@@ -330,6 +358,7 @@ async function handleDocumentSigned(
       contractAttemptId: attempt.id,
       employeeId: contractRequest.employee_id,
       correlationId,
+      soloArchivar: queHacer !== "registrar",
     });
   }
 

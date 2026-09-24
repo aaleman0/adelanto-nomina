@@ -111,6 +111,9 @@ describe("solicitarContratoAction", () => {
 
     await expect(solicitarContratoAction(formulario())).rejects.toThrow("REDIRECT https://easylex.test/firma/abc");
     expect(requestContractFromWhatsApp).toHaveBeenCalledTimes(1);
+    // Es su primer pedido: el enlace sí se le manda por WhatsApp, para que le
+    // quede una copia aunque cierre la pestaña.
+    expect(requestContractFromWhatsApp).toHaveBeenCalledWith(expect.anything(), { skipSend: false });
   });
 
   it("quien ya firmó pasa aunque haya cerrado: el sistema solo se lo confirma", async () => {
@@ -147,5 +150,9 @@ describe("solicitarContratoAction: quien ya pidió con la ventana cerrada", () =
     await expect(solicitarContratoAction(formulario())).rejects.toThrow("REDIRECT https://easylex.test/firma/regenerado");
     expect(solicitudPrevia).toHaveBeenCalledWith("of-1");
     expect(requestContractFromWhatsApp).toHaveBeenCalledTimes(1);
+    // No se le reenvía la plantilla: ya tiene el enlace y en este mismo clic se
+    // va a firmar. Sin esto, cada toque le costaba un mensaje de pago a la
+    // empresa, y con enlaces de un día el botón sigue ahí toda la tarde.
+    expect(requestContractFromWhatsApp).toHaveBeenCalledWith(expect.anything(), { skipSend: true });
   });
 });

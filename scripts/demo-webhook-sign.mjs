@@ -43,7 +43,7 @@ const requestId = cr.b[0].id;
 const at = await post("contract_attempts", {
   contract_request_id: requestId, attempt_number: 1, easylex_contract_id: contractId,
   signing_url: `https://easylex.com/documento/firma/sig-demo`, status: "generado",
-  expires_at: new Date(Date.now() + 2 * 3600e3).toISOString(), generated_at: now,
+  expires_at: new Date(Date.now() + 24 * 3600e3).toISOString(), generated_at: now,
 });
 if (at.s >= 300) { console.error("  ✗ error creando attempt:", JSON.stringify(at.b)); await del(`contract_requests?id=eq.${requestId}`); process.exit(1); }
 const attemptId = at.b[0].id;

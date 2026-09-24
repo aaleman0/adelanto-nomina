@@ -89,7 +89,7 @@ Una reimportación sin cambios reales no crea nada. Con cambios, se crea una **n
 Al crear la solicitud se guarda `contract_snapshot` con los datos usados. Una importación posterior puede cambiar el monto del empleado sin alterar lo que ya se firmó.
 
 ### Intentos, no sobrescritura de links
-Regenerar un link expirado crea un **nuevo `contract_attempts`** dentro de la misma solicitud. El historial de intentos queda íntegro. TTL del link: **2 horas** (`LINK_TTL_HOURS`).
+Regenerar un link expirado crea un **nuevo `contract_attempts`** dentro de la misma solicitud. El historial de intentos queda íntegro. TTL del link: **24 horas** (`LINK_TTL_HOURS`). No confundirlo con la **ventana para pedir** (2 h, `VENTANA_OFERTA_HORAS`): son dos plazos independientes desde que se separaron.
 
 ### Idempotencia
 - Solicitud de contrato: `UNIQUE (offer_id)` en `contract_requests`, más un índice único parcial que impide más de una solicitud activa por empleado.

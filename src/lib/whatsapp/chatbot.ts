@@ -2,7 +2,13 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getWhatsAppClient } from "@/lib/whatsapp/client";
 import { variantesDeTelefono } from "@/lib/whatsapp/phone-utils";
 import { parseRequestContractPayload, requestContractFromWhatsApp } from "@/lib/contracts/request-contract";
-import { pasoAlPedir, ventanaDeLaPersona, type PasoAlPedir } from "@/lib/contracts/ventana-oferta";
+import {
+  DURACION_DE_LA_VENTANA,
+  pasoAlPedir,
+  ventanaDeLaPersona,
+  type PasoAlPedir,
+} from "@/lib/contracts/ventana-oferta";
+import { DURACION_DEL_ENLACE } from "@/lib/contracts/link-ttl";
 import { solicitudPrevia, type SolicitudPrevia } from "@/lib/contracts/solicitud-previa";
 import { logger } from "@/lib/logger";
 
@@ -59,6 +65,26 @@ export function siSuccessMessage(
   );
 }
 
+/**
+ * Cuando solo se le devuelve el enlace que ya tenía. Antes casi no ocurría —el
+ * enlace moría junto con la ventana— y se reusaba el mensaje de éxito; con un
+ * enlace que vive un día, esta rama se vuelve la habitual y decirle "Generamos
+ * tu contrato" cada vez le haría creer que se le están generando varios.
+ */
+export function reenvioDeEnlaceMessage(
+  firstName: string,
+  montoStr: string,
+  link: string,
+  expiresPhrase: string,
+): string {
+  const hola = firstName ? `, ${firstName}` : "";
+  return (
+    `Aquí está de nuevo tu enlace${hola}, el mismo de antes por ${montoStr}. Sigue sirviendo.\n\n` +
+    `${link}\n\n` +
+    `⏳ ${expiresPhrase} Fírmalo con tu identificación (INE) desde tu celular.`
+  );
+}
+
 export function noMessage(firstName: string): string {
   const hola = firstName ? `, ${firstName}` : "";
   return `👍 Gracias por confirmar${hola}. No haremos el adelanto este periodo.`;
@@ -70,7 +96,7 @@ export const ALREADY_REQUESTED_MESSAGE = (firstName: string) =>
   `Ya solicitaste tu adelanto${firstName ? `, ${firstName}` : ""}. Revisa el mensaje anterior con tu enlace de firma.`;
 export const VENTANA_CERRADA_MESSAGE =
   "El plazo para pedir este adelanto ya cerró ⏳\n\n" +
-  "La oferta estuvo disponible por 2 horas. Tu empresa te avisará cuando vuelva " +
+  `La oferta estuvo disponible por ${DURACION_DE_LA_VENTANA}. Tu empresa te avisará cuando vuelva ` +
   "a estar abierta.";
 
 export const NO_OFFER_MESSAGE =
@@ -117,7 +143,7 @@ export const VENTANA_SIN_VERIFICAR_MESSAGE =
 /** Pidió a tiempo, pero su enlace de firma ya venció. No se le genera otro fuera de la ventana. */
 export const ENLACE_VENCIDO_MESSAGE =
   "Tu enlace para firmar ya venció ⏳\n\n" +
-  "Los enlaces duran 2 horas. Tu empresa te avisará cuando el adelanto vuelva a estar disponible.";
+  `Los enlaces duran ${DURACION_DEL_ENLACE}. Tu empresa te avisará cuando el adelanto vuelva a estar disponible.`;
 
 /** Pidió a tiempo, pero el contrato no se pudo preparar. No se le promete un enlace que nunca tuvo. */
 export const CONTRATO_NO_PREPARADO_MESSAGE =
@@ -213,16 +239,18 @@ export function classifyTextReply(body?: string | null): OfferReply | null {
  * Meta reintenta la entrega cuando el webhook no responde —por ejemplo durante
  * un redespliegue—, y se han visto entregas con 4 y 7 horas de retraso. Actuar
  * sobre un mensaje tan viejo hace daño: contestar una guía de madrugada por un
- * "hola" de la mañana confunde, y peor, un "Sí, lo quiero" rezagado genera un
- * contrato —gastando una firma de EasyLex— con un enlace de 2 horas que vence
- * mientras la persona duerme y nunca lo ve.
+ * "hola" de la mañana confunde, y un "Sí, lo quiero" rezagado se atendería como
+ * si la persona estuviera ahí, mirando el teléfono.
  *
- * Se descarta en silencio: si la persona sigue interesada, vuelve a tocar el
- * botón y recibe un enlace fresco que sí alcanza a usar.
+ * Se descarta en silencio: si sigue interesada, vuelve a tocar el botón y se le
+ * atiende con la hora correcta.
  *
- * Media hora es holgado para un reintento normal de Meta y sigue muy por debajo
- * de las 2 horas que dura el enlace de firma: un mensaje más viejo que eso
- * generaría un contrato que nace casi vencido.
+ * El plazo con el que compite es la VENTANA para pedir (`VENTANA_OFERTA_MS`, dos
+ * horas), no la vida del enlace de firma: media hora es holgado para un
+ * reintento normal de Meta y sigue muy por debajo de la ventana, que de todos
+ * modos le cerraría el paso al llegar a las dos horas. Antes esto se justificaba
+ * contra el enlace —"nacería casi vencido"—, cuando enlace y ventana eran el
+ * mismo plazo; el enlace dura ahora un día y ya no nace vencido nunca.
  */
 export const MAX_ANTIGUEDAD_MS = 30 * 60 * 1000;
 
@@ -316,13 +344,17 @@ async function handleSi(from: string, found: FoundEmployee): Promise<void> {
 
   let text: string;
   if (result.ok && result.status === "contract_ready" && result.link_easylex) {
-    // Tiempo real de expiración (no un "2 horas" fijo): si el intento se reusó,
-    // quedan < 2 h y el mensaje debe decir la verdad. Usa el expires_at del
+    // Tiempo real de expiración, no el plazo nominal: si el intento se reusó le
+    // queda menos y el mensaje debe decir la verdad. Usa el expires_at del
     // resultado, que es el mismo que enforza /firmar y EasyLex.
     const expiresPhrase = result.expires_at_formatted
       ? `El enlace vence el ${result.expires_at_formatted}.`
-      : "El enlace vence en 2 horas.";
-    text = siSuccessMessage(
+      : `El enlace vence en ${DURACION_DEL_ENLACE}.`;
+    // Qué se le dice depende de si de verdad se generó algo o se le devolvió lo
+    // que ya tenía, NO de la puerta por la que entró: el doble toque dentro de
+    // la ventana también reusa el enlace, y ahí el paso sigue siendo "pedir".
+    const armarMensaje = result.link_reusado ? reenvioDeEnlaceMessage : siSuccessMessage;
+    text = armarMensaje(
       first,
       money(Number(offer?.monto_prestamo_autorizado ?? 0)),
       result.link_easylex,
@@ -425,7 +457,8 @@ export async function handleOfferReply(
   if (paso === "ya_pidio") {
     // Ya pidió dentro del plazo: no se le genera otro contrato. Si tiene un
     // enlace vigente —el suyo, o uno que le regeneró un operador— se le entrega:
-    // handleSi lo reusa y no llama a EasyLex.
+    // handleSi lo reusa y no llama a EasyLex; el mensaje sale como reenvío solo
+    // porque el resultado viene reusado, no por haber entrado por aquí.
     const previa = await solicitudPrevia(found.offer.id);
     if (previa === "enlace_vigente") {
       await handleSi(from, found);

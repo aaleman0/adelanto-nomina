@@ -1,15 +1,18 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
-import { LINK_TTL_HOURS } from "./link-ttl";
 
 /**
  * Ventana para PEDIR el adelanto.
  *
  * Regla del cliente: el adelanto no queda disponible para pedirlo cuando uno
- * quiera. Lo abre la EMPRESA al mandar la oferta y dura lo mismo que el enlace
- * de firma; fuera de ahí nadie lo puede pedir por su cuenta. Aplica igual al
- * chatbot y al enlace de auto-servicio `/solicitar`, que son dos puertas al
- * mismo contrato.
+ * quiera. Lo abre la EMPRESA al mandar la oferta y dura poco; fuera de ahí nadie
+ * lo puede pedir por su cuenta. Aplica igual al chatbot y al enlace de
+ * auto-servicio `/solicitar`, que son dos puertas al mismo contrato.
+ *
+ * No confundirla con la vida del ENLACE DE FIRMA (`link-ttl.ts`, un día). Son
+ * dos reglas distintas: cuánto tiempo la empresa acepta solicitudes, y cuánto
+ * tiempo tiene para firmar quien ya pidió. Se derivaban del mismo número y
+ * separarlas fue el punto de este cambio: no volver a atarlas.
  *
  * Todo lo que se decide aquí falla en CERRADO. Negarle el adelanto a quien sí
  * lo merecía se arregla en un minuto —el operador le reenvía la oferta y la
@@ -18,8 +21,16 @@ import { LINK_TTL_HOURS } from "./link-ttl";
  * teléfono del empleado o su enlace.
  */
 
-/** Dura lo mismo que el enlace de firma: una sola fuente de verdad. */
-export const VENTANA_OFERTA_MS = LINK_TTL_HOURS * 60 * 60 * 1000;
+/**
+ * Cuánto tiempo la empresa acepta solicitudes después de mandar la oferta.
+ * Corto a propósito: es el control de la empresa sobre cuándo se puede pedir, y
+ * no tiene por qué durar lo que dura el enlace de firma.
+ */
+export const VENTANA_OFERTA_HORAS = 2;
+export const VENTANA_OFERTA_MS = VENTANA_OFERTA_HORAS * 60 * 60 * 1000;
+
+/** Cómo se le nombra el plazo a la persona, derivado para que no se desfase. */
+export const DURACION_DE_LA_VENTANA = `${VENTANA_OFERTA_HORAS} horas`;
 
 /**
  * Hasta cuándo se respeta una entrega tardía.
@@ -31,6 +42,11 @@ export const VENTANA_OFERTA_MS = LINK_TTL_HOURS * 60 * 60 * 1000;
  * reaparece una semana después no debe abrir un adelanto que la empresa ya dio
  * por cerrado. Un día cubre un turno sin señal o una noche con el teléfono
  * apagado.
+ *
+ * Este día no tiene nada que ver con el día que dura el enlace de firma
+ * (`link-ttl.ts`) ni con la ventana de sesión de 24 h de Meta. Son tres plazos
+ * de tres reglas distintas que coinciden en el número; unificarlos por
+ * parecerse es justo el error que aquí se acaba de deshacer.
  */
 export const TOPE_ENTREGA_TARDIA_MS = 24 * 60 * 60 * 1000;
 
@@ -49,10 +65,12 @@ const DESFASE_TOLERADO_MS = 10 * 60 * 1000;
  * Los demás mensajes que salen hacia la persona NO cuentan, porque los provoca
  * la propia solicitud:
  * - `contract_link` lo manda el sistema cada vez que se pide el contrato,
- *   también en cada clic de /solicitar. Contarlo dejaría que cada solicitud se
- *   abriera otra ventana, y como el enlace se registra después de fijar su
- *   vencimiento, esa ventana cerraría siempre más tarde que el enlace: se podría
- *   pedir un contrato nuevo tras otro sin que la empresa ofreciera nada.
+ *   también en cada clic de /solicitar. Contarlo dejaría que cada solicitud
+ *   abriera otra ventana, y esa ventana daría pie a la siguiente: se podría
+ *   pedir un contrato nuevo tras otro sin que la empresa ofreciera nada. El
+ *   bucle es toda la razón, y se sostiene sola —antes se argumentaba además
+ *   comparándola con la vida del enlace, cuando ambas duraban lo mismo; ya no
+ *   duran lo mismo y el argumento no hacía falta.
  * - `contract_offer` lo escribe el sistema cuando la persona pide.
  *
  * Un operador que genera el contrato desde el expediente no necesita ventana: el
@@ -124,7 +142,7 @@ export function evaluarVentana(envios: EnvioDeOferta[], ahora = Date.now()): Est
  *   que ya firmó, no genera nada.
  * - `solicitada` con la ventana cerrada NO sigue: ya pidió dentro del plazo y
  *   tiene su enlace, y si se le venció, pedir de nuevo generaría un contrato
- *   fuera de la ventana. Quien alcanzó a pedir tiene sus 2 horas para firmar.
+ *   fuera de la ventana. Quien alcanzó a pedir tiene todo el día para firmar.
  */
 export type PasoAlPedir = "pedir" | "ya_pidio" | "sin_envio" | "fuera_de_plazo" | "error";
 

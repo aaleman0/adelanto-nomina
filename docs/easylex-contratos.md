@@ -42,7 +42,7 @@ Implementadas en `requestContractFromWhatsApp()` (`src/lib/contracts/request-con
 7. **Si el link expiró, se regenera como nuevo intento** dentro de la misma solicitud.
 8. **Snapshot congelado.** Al crear la solicitud se guarda `contract_snapshot` con nombre, apellidos, RFC, CURP, CLABE, banco, monto, empleador, teléfono, email y procedencia. Una reimportación posterior no altera lo firmado.
 
-`LINK_TTL_HOURS = 2`, definido en tres archivos (`request-contract.ts`, `backoffice-actions.ts`, `create-easylex-attempt.ts`). Cambiar el TTL exige tocar los tres.
+`LINK_TTL_HOURS = 24`, declarado en un solo archivo (`src/lib/contracts/link-ttl.ts`) del que salen también `LINK_TTL_MS` y el texto `DURACION_DEL_ENLACE` que ven los empleados. Cambiar el plazo es cambiar ese número. **No** toca la ventana para pedir el adelanto, que vive aparte en `ventana-oferta.ts` (2 h).
 
 ## Generación del PDF
 
@@ -134,7 +134,7 @@ Dos cabeceras: `access-key-id` (llave pública) y `secret-access-key` (llave pri
 | `signatories[i][firstName\|lastName\|motherLastName\|email]` | datos del firmante |
 | `files[0]` | el PDF generado |
 
-Expiración por defecto del documento en EasyLex: **+30 días** (`getDefaultExpiration`). No confundir con el TTL de 2 horas del link, que es una regla propia de este sistema.
+Expiración por defecto del documento en EasyLex: **+30 días** (`getDefaultExpiration`). No confundir con el TTL de 24 horas del link, que es una regla propia de este sistema. Pendiente de confirmar con EasyLex si respeta la **hora** del `expirationDate` o lo trunca al día: con enlaces de un día la fecha casi siempre cruza la medianoche, y nuestro cliente manda dos formatos distintos (ISO completo al crear el intento, `YYYY-MM-DD` en `getDefaultExpiration`).
 
 ### Validaciones biométricas
 

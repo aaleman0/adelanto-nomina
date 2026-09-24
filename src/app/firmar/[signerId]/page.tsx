@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { estaVencido } from "@/lib/contracts/link-expiry";
+import { DURACION_DEL_ENLACE } from "@/lib/contracts/link-ttl";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +17,10 @@ type FirmarPageProps = {
  * vencido), y entonces dice qué pasó y qué hacer.
  *
  * La abre el empleado desde su teléfono y no tiene cuenta: la autenticación es
- * el identificador de firmante, que además se valida contra la base y su
- * vigencia de 2 horas.
+ * el identificador de firmante, que además se valida contra la base, contra el
+ * estado del intento y contra su vigencia de un día. Ojo: con el enlace vivo
+ * tanto tiempo, la defensa real contra un enlace reenviado no es el plazo sino
+ * la validación biométrica de EasyLex (INE + prueba de vida).
  */
 export default async function FirmarPage({ params }: FirmarPageProps) {
   const { signerId } = await params;
@@ -42,7 +45,12 @@ export default async function FirmarPage({ params }: FirmarPageProps) {
     );
   }
 
-  if (estaVencido(intento.expires_at)) {
+  // Un intento que ya no está "generado" no sirve, aunque su fecha no haya
+  // pasado: `expirado` es lo que escribe un ciclo nuevo al reemplazar el
+  // contrato anterior. Mientras el enlace duraba dos horas la fecha alcanzaba
+  // para taparlo; con un día, esa rendija dejaba firmar —y colar al Excel de
+  // dispersión— el contrato de un ciclo que la empresa ya cerró.
+  if (intento.status !== "generado" || estaVencido(intento.expires_at)) {
     return (
       <Aviso
         tono="alto"
@@ -51,7 +59,7 @@ export default async function FirmarPage({ params }: FirmarPageProps) {
           // Antes invitaba a responder "SÍ" para obtener otro enlace. Ya no
           // aplica: el adelanto solo se puede pedir dentro de la ventana que
           // abre la empresa al enviar la oferta, no en cualquier momento.
-          "Los enlaces de firma duran 2 horas por seguridad.\n\n" +
+          `Los enlaces de firma duran ${DURACION_DEL_ENLACE} por seguridad.\n\n` +
           "Tu empresa te avisará cuando el adelanto vuelva a estar disponible."
         }
       />

@@ -69,7 +69,12 @@ export async function solicitarContratoAction(formData: FormData) {
       rfc: emp.rfc,
       telefono_normalizado: emp.telefono_normalizado,
     });
-    result = await requestContractFromWhatsApp(input);
+    // A quien ya pidió no se le reenvía la plantilla: ya tiene el enlace en su
+    // WhatsApp y en este mismo clic se va a firmar. Reenviarla por cada toque
+    // cobra un mensaje, le ensucia el historial y desplaza a la oferta como
+    // "último mensaje" en el tablero; con el enlace vivo un día entero, eso se
+    // repetiría toda la tarde. En el primer pedido sí se manda: es su copia.
+    result = await requestContractFromWhatsApp(input, { skipSend: paso === "ya_pidio" });
   } catch {
     redirect(`${back}?status=error`);
   }

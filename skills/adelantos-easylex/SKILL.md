@@ -22,7 +22,7 @@ Existen dos rutas de generación de PDF: la activa usa `pdf-lib` sobre una plant
 - **No llamar a EasyLex** si el empleado no tiene oferta vigente, elegible y cuenta bancaria activa.
 - **No confiar en campos que lleguen desde fuera** si la base tiene datos normalizados.
 - **Congelar el snapshot** al generar el link, para que cambios posteriores del CSV no alteren lo firmado.
-- **TTL del link: 2 horas.** La constante `LINK_TTL_HOURS` está declarada en **tres archivos**; cambiarla exige tocar los tres.
+- **TTL del link: 24 horas.** `LINK_TTL_HOURS` vive en un solo archivo (`src/lib/contracts/link-ttl.ts`), junto con `LINK_TTL_MS` y el texto `DURACION_DEL_ENLACE` que leen los empleados. **No** es la ventana para pedir el adelanto: esa son 2 h y vive en `ventana-oferta.ts` (`VENTANA_OFERTA_HORAS`). Nunca derivar una de la otra.
 - **Regenerar crea un intento nuevo**, nunca sobrescribe el anterior. El historial de `contract_attempts` debe quedar íntegro.
 - **No revertir una firma** desde el backoffice.
 - Guardar errores de EasyLex con código, mensaje, endpoint y correlación en `integration_logs`.

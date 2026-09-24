@@ -195,12 +195,55 @@ describe("quien ya pidió", () => {
       status: "contract_ready",
       link_easylex: "https://easylex.test/firma/regenerado",
       expires_at_formatted: "7 sep, 4:00 p.m.",
+      link_reusado: true,
     } as never);
 
     await handleInboundMessage(boton("Sí, lo quiero"));
 
     expect(requestContractFromWhatsApp).toHaveBeenCalledTimes(1);
     expect(enviar).toHaveBeenCalledWith(TELEFONO, expect.stringContaining("https://easylex.test/firma/regenerado"));
+    // Se le devuelve lo que ya tenía: el mensaje no puede decir que se generó algo.
+    expect(enviar).toHaveBeenCalledWith(TELEFONO, expect.not.stringContaining("Generamos"));
+  });
+
+  /**
+   * El doble toque real: dentro de la ventana, minutos después del primero. Aquí
+   * `pasoAlPedir` devuelve "pedir" —la ventana manda sobre el estado de la
+   * oferta—, así que no se pasa por la rama de "ya pidió"; el texto tiene que
+   * salir del reuso que reporta el pipeline, no de la rama que se tomó.
+   */
+  it("el doble toque dentro de la ventana tampoco dice que se generó un contrato", async () => {
+    baseCon({ employees: [{ data: [EMPLEADO], error: null }], advance_offers: [{ data: OFERTA_SOLICITADA, error: null }] });
+    vi.mocked(ventanaDeLaPersona).mockResolvedValue({ abierta: true, cierraEn: Date.now() + 60_000 });
+    vi.mocked(requestContractFromWhatsApp).mockResolvedValue({
+      ok: true,
+      status: "contract_ready",
+      link_easylex: "https://easylex.test/firma/abc",
+      expires_at_formatted: "8 sep, 9:05 a.m.",
+      link_reusado: true,
+    } as never);
+
+    await handleInboundMessage(boton("Sí, lo quiero"));
+
+    expect(solicitudPrevia).not.toHaveBeenCalled();
+    expect(enviar).toHaveBeenCalledWith(TELEFONO, expect.stringContaining("de nuevo"));
+    expect(enviar).toHaveBeenCalledWith(TELEFONO, expect.not.stringContaining("Generamos"));
+  });
+
+  it("el primer toque sí anuncia que se generó el contrato", async () => {
+    baseCon({ employees: [{ data: [EMPLEADO], error: null }], advance_offers: [{ data: OFERTA_VIGENTE, error: null }] });
+    vi.mocked(ventanaDeLaPersona).mockResolvedValue({ abierta: true, cierraEn: Date.now() + 60_000 });
+    vi.mocked(requestContractFromWhatsApp).mockResolvedValue({
+      ok: true,
+      status: "contract_ready",
+      link_easylex: "https://easylex.test/firma/nuevo",
+      expires_at_formatted: "8 sep, 9:00 a.m.",
+      link_reusado: false,
+    } as never);
+
+    await handleInboundMessage(boton("Sí, lo quiero"));
+
+    expect(enviar).toHaveBeenCalledWith(TELEFONO, expect.stringContaining("Generamos"));
   });
 
   it("con la ventana abierta va directo al pipeline, sin revisar su solicitud", async () => {

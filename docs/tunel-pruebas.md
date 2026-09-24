@@ -100,8 +100,8 @@ comportamiento de las plantillas viejas y Meta rechazaría el mensaje.
 3. **Tocar "Sí, lo quiero"** → en la terminal del servidor debe aparecer
    `whatsapp.chatbot.inbound` con `kind: "si"`, y en el teléfono llega el mensaje
    con el enlace de firma y la hora de vencimiento.
-4. **Abrir el enlace dentro de las 2 horas** → entra a firmar.
-   Pasadas las 2 horas → "Este enlace ya venció".
+4. **Abrir el enlace dentro de las 24 horas** → entra a firmar.
+   Pasadas las 24 horas → "Este enlace ya venció".
 5. Con otro empleado, **tocar "No, gracias"** → llega el "gracias" y la oferta
    queda como rechazada.
 

@@ -478,9 +478,14 @@ async function supersedePreviousContract(offerId: string): Promise<void> {
   const requestIds = (reqs ?? []).map((r) => r.id as string);
   if (requestIds.length === 0) return;
 
+  // Se le adelanta el vencimiento, no solo el estado: `/firmar` y el reuso de
+  // intentos se guían por `expires_at`, así que el enlace del ciclo anterior
+  // seguiría sirviendo mientras su fecha no pasara. Con enlaces de dos horas la
+  // rendija se cerraba sola; con enlaces de un día dejaba firmar el contrato
+  // reemplazado —con el monto viejo— y ese pago se cuela al Excel del ciclo.
   const { error: attErr } = await supabase
     .from("contract_attempts")
-    .update({ status: "expirado" })
+    .update({ status: "expirado", expires_at: new Date().toISOString() })
     .in("contract_request_id", requestIds)
     .in("status", ["generando", "generado"]);
   if (attErr) throw attErr;

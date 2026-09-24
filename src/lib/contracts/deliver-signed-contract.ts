@@ -34,6 +34,13 @@ export type DeliverSignedContractInput = {
   contractAttemptId: string;
   employeeId: string;
   correlationId: string;
+  /**
+   * Archivar el PDF pero NO avisarle a la persona. Para la firma que llega sobre
+   * una solicitud que ya no está en curso (ver `firma-tardia.ts`): la evidencia
+   * sí se guarda, pero decirle "tu contrato está listo" le prometería un pago
+   * que la empresa no va a hacer con ese monto. Lo resuelve operación.
+   */
+  soloArchivar?: boolean;
 };
 
 export type DeliverSignedContractResult = {
@@ -101,7 +108,7 @@ async function run(input: DeliverSignedContractInput): Promise<DeliverSignedCont
   }
 
   // 3) Enviar al empleado por WhatsApp (best-effort).
-  const sent = await sendToEmployee(input, storagePath);
+  const sent = input.soloArchivar ? false : await sendToEmployee(input, storagePath);
 
   await recordAuditEvent({
     eventName: "contract.signed_delivered",
@@ -112,7 +119,9 @@ async function run(input: DeliverSignedContractInput): Promise<DeliverSignedCont
     source: "backend",
     summary: sent
       ? "Contrato firmado archivado y enviado al empleado por WhatsApp."
-      : "Contrato firmado archivado; el envío por WhatsApp no se completó.",
+      : input.soloArchivar
+        ? "Contrato firmado archivado sin avisar al empleado: la solicitud ya no estaba en curso."
+        : "Contrato firmado archivado; el envío por WhatsApp no se completó.",
     metadata: { storage_path: storagePath, sent, document_id: input.documentId },
     actorType: "system",
   });

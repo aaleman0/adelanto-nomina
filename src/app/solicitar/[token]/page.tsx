@@ -1,7 +1,13 @@
 import { solicitarContratoAction } from "./actions";
 import { verifySolicitarToken } from "@/lib/contracts/solicitar-token";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { pasoAlPedir, ventanaDeLaPersona, type PasoAlPedir } from "@/lib/contracts/ventana-oferta";
+import {
+  DURACION_DE_LA_VENTANA,
+  pasoAlPedir,
+  ventanaDeLaPersona,
+  type PasoAlPedir,
+} from "@/lib/contracts/ventana-oferta";
+import { DURACION_DEL_ENLACE } from "@/lib/contracts/link-ttl";
 import { solicitudPrevia, type SolicitudPrevia } from "@/lib/contracts/solicitud-previa";
 
 export const dynamic = "force-dynamic";
@@ -243,7 +249,7 @@ function avisoParaPaso(paso: PasoAlPedir, previa: SolicitudPrevia | null): Aviso
       return {
         tono: "espera",
         titulo: "El plazo para pedir este adelanto ya cerró",
-        texto: "La oferta estuvo disponible por 2 horas. Tu empresa te avisará cuando vuelva a estar abierta.",
+        texto: `La oferta estuvo disponible por ${DURACION_DE_LA_VENTANA}. Tu empresa te avisará cuando vuelva a estar abierta.`,
       };
     case "sin_envio":
       return {
@@ -273,7 +279,7 @@ function avisoParaQuienYaPidio(previa: SolicitudPrevia | null): AvisoTexto | nul
       return {
         tono: "espera",
         titulo: "Tu enlace para firmar ya venció",
-        texto: "Los enlaces duran 2 horas. Tu empresa te avisará cuando el adelanto vuelva a estar disponible.",
+        texto: `Los enlaces duran ${DURACION_DEL_ENLACE}. Tu empresa te avisará cuando el adelanto vuelva a estar disponible.`,
       };
     case "fallo":
       return {

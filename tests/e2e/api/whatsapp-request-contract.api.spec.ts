@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { LINK_TTL_MS } from "../../../src/lib/contracts/link-ttl";
 import {
   createEmployeeWithOfferFixture,
   getRequiredSupabaseTestClient,
@@ -102,6 +103,8 @@ test("idempotencia: segunda llamada con mismo RFC reutiliza request vigente", as
   expect(first.status()).toBe(200);
   const firstBody = await first.json();
   expect(firstBody.status).toBe("contract_ready");
+  // El primero genera de verdad: nada que reusar todavía.
+  expect(firstBody.link_reusado).toBe(false);
 
   const second = await request.post("/api/whatsapp/request-contract", { data: payload });
   expect(second.status()).toBe(200);
@@ -111,9 +114,19 @@ test("idempotencia: segunda llamada con mismo RFC reutiliza request vigente", as
   expect(secondBody.ok).toBe(true);
   expect(["contract_ready", "already_signed"]).toContain(secondBody.status);
   expect(secondBody.request_id).toBe(firstBody.request_id);
+
+  // Y debe DECIR que reusó. De esta bandera cuelga el texto que le llega a la
+  // persona: si el pipeline deja de reportarla, el chatbot vuelve a anunciarle
+  // "Generamos tu contrato" cada vez que toca el botón. Es la única prueba que
+  // recorre el cableado real —las del chatbot mockean el pipeline entero—, así
+  // que vive aquí aunque CI no corra la suite e2e.
+  if (secondBody.status === "contract_ready") {
+    expect(secondBody.link_reusado).toBe(true);
+    expect(secondBody.link_easylex).toBe(firstBody.link_easylex);
+  }
 });
 
-test("link generado tiene TTL aproximado de 2 horas", async ({ request }) => {
+test("link generado tiene el TTL configurado", async ({ request }) => {
   const supabase = getRequiredSupabaseTestClient();
   const { employee } = await createEmployeeWithOfferFixture(supabase, "ttl", true);
 
@@ -130,11 +143,11 @@ test("link generado tiene TTL aproximado de 2 horas", async ({ request }) => {
 
   const expiresAt = new Date(body.expires_at).getTime();
   const now = Date.now();
-  const twoHoursMs = 2 * 60 * 60 * 1000;
 
-  // expires_at debe estar entre 1h55m y 2h05m desde ahora
-  expect(expiresAt).toBeGreaterThan(now + twoHoursMs - 5 * 60 * 1000);
-  expect(expiresAt).toBeLessThan(now + twoHoursMs + 5 * 60 * 1000);
+  // expires_at debe caer dentro de ±5 min del TTL configurado. Se lee del propio
+  // LINK_TTL_MS para que al cambiar el plazo la prueba no quede exigiendo el viejo.
+  expect(expiresAt).toBeGreaterThan(now + LINK_TTL_MS - 5 * 60 * 1000);
+  expect(expiresAt).toBeLessThan(now + LINK_TTL_MS + 5 * 60 * 1000);
 });
 
 test("genera contrato y queda reflejado en BD", async ({ request }) => {

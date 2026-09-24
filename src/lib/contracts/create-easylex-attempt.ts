@@ -5,7 +5,7 @@ import { generateContractPdf } from "@/lib/easylex/contract-pdf";
 import { easylexEnv } from "@/lib/env";
 import { getCompanySettings } from "@/lib/company-settings";
 import { logger } from "@/lib/logger";
-import { LINK_TTL_HOURS } from "./link-ttl";
+import { LINK_TTL_MS } from "./link-ttl";
 
 export type Employee = {
   id: string;
@@ -121,8 +121,11 @@ export async function createEasyLexAttempt(
   const fileName = `contrato_${employee.rfc}_${attemptId.slice(0, 8)}`;
   const validation = buildValidationConfig(companySettings);
 
-  // El TTL de la app coincide con la expiración real del documento en EasyLex.
-  const expiresAt = new Date(now.getTime() + LINK_TTL_HOURS * 60 * 60 * 1000);
+  // Se le manda a EasyLex la misma fecha que enforza `/firmar`, para que el
+  // documento no muera antes que nuestro enlace. Pendiente de confirmar con el
+  // proveedor si respeta la HORA o trunca al día: mientras el enlace duraba dos
+  // horas no cruzaba la medianoche y daba igual; con un día, casi siempre cruza.
+  const expiresAt = new Date(now.getTime() + LINK_TTL_MS);
 
   const client = new EasyLexClient();
   const easylexResult = await client.createDocument({

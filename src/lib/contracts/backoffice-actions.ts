@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { LINK_TTL_HOURS } from "./link-ttl";
+import { LINK_TTL_MS } from "./link-ttl";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { createEasyLexAttempt, type ContractAttempt } from "@/lib/contracts/create-easylex-attempt";
 import { easylexEnv } from "@/lib/env";
@@ -414,7 +414,7 @@ async function createMockAttempt(
 ) {
   const supabase = getSupabaseAdmin();
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + LINK_TTL_HOURS * 60 * 60 * 1000);
+  const expiresAt = new Date(now.getTime() + LINK_TTL_MS);
   const attemptNumber = (latestAttempt?.attempt_number ?? 0) + 1;
   const attemptId = randomUUID();
   const mockContractId = `mock_${attemptId}`;

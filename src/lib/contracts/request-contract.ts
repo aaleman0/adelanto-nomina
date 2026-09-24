@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { LINK_TTL_HOURS } from "./link-ttl";
+import { DURACION_DEL_ENLACE, LINK_TTL_MS } from "./link-ttl";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { normalizePhoneFromCsv } from "@/lib/whatsapp/phone-utils";
 import { createEasyLexAttempt } from "@/lib/contracts/create-easylex-attempt";
@@ -113,6 +113,13 @@ type RequestContractResult = {
   link_enviado?: boolean;
   expires_at?: string;
   expires_at_formatted?: string;
+  /**
+   * El enlace que se devuelve ya existía y se reusó; no se generó nada nuevo ni
+   * se gastó una firma. Quien le escriba a la persona debe decirle eso y no
+   * "generamos tu contrato": con enlaces de un día, el reuso es el caso normal
+   * durante el resto del día.
+   */
+  link_reusado?: boolean;
 };
 
 export function parseRequestContractPayload(
@@ -323,7 +330,7 @@ export async function requestContractFromWhatsApp(
       ? "Link vigente reutilizado."
       : isEasyLex
         ? "Contrato creado en EasyLex y link de firma generado."
-        : "Link mock de firma generado por 2 horas.",
+        : `Link mock de firma generado por ${DURACION_DEL_ENLACE}.`,
     metadata: {
       contract_request_id: contractRequest.id,
       offer_id: offer.id,
@@ -361,6 +368,7 @@ export async function requestContractFromWhatsApp(
     expires_at_formatted: attempt.expires_at
       ? formatDateForDisplay(attempt.expires_at)
       : undefined,
+    link_reusado: isReused,
   };
 
   if (!skipLog) await logBusinessResult(input, employee.id, result, correlationId);
@@ -665,7 +673,7 @@ async function regenerateMockAttempt(
 ) {
   const supabase = getSupabaseAdmin();
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + LINK_TTL_HOURS * 60 * 60 * 1000);
+  const expiresAt = new Date(now.getTime() + LINK_TTL_MS);
   const attemptNumber = (latestAttempt?.attempt_number ?? 0) + 1;
   const attemptId = randomUUID();
   const mockContractId = `mock_${attemptId}`;

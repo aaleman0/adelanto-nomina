@@ -11,6 +11,7 @@ import {
   VENTANA_CERRADA_MESSAGE,
   extractButtonReply,
   siSuccessMessage,
+  reenvioDeEnlaceMessage,
   noMessage,
   mensajeAntesDePedir,
   momentoDeLaRespuesta,
@@ -22,6 +23,8 @@ import {
   SOLICITUD_EN_PROCESO_MESSAGE,
   type InboundMessage,
 } from "./chatbot";
+import { DURACION_DE_LA_VENTANA } from "@/lib/contracts/ventana-oferta";
+import { LINK_TTL_MS } from "@/lib/contracts/link-ttl";
 
 describe("classifyOfferReply", () => {
   it("reconoce los textos de botón exactos", () => {
@@ -81,7 +84,7 @@ describe("mensajes", () => {
       "Angel",
       "$4,000.00",
       "https://easylex.com/documento/firma/sig-abc",
-      "El enlace vence en 2 horas.",
+      "El enlace vence el 24 de septiembre de 2026, 2:46 p.m.",
     );
     expect(m).toContain("Angel");
     expect(m).toContain("$4,000.00");
@@ -90,9 +93,31 @@ describe("mensajes", () => {
   });
 
   it("el mensaje de éxito funciona sin nombre", () => {
-    const m = siSuccessMessage("", "$4,000.00", "https://x/y", "El enlace vence en 2 horas.");
+    const m = siSuccessMessage("", "$4,000.00", "https://x/y", "El enlace vence en 24 horas.");
     expect(m).toContain("¡Listo!");
     expect(m).not.toContain(", !");
+  });
+
+  it("el mensaje de reenvío dice que es el mismo enlace, no un contrato nuevo", () => {
+    const m = reenvioDeEnlaceMessage(
+      "Angel",
+      "$4,000.00",
+      "https://easylex.com/documento/firma/sig-abc",
+      "El enlace vence el 24 de septiembre de 2026, 2:46 p.m.",
+    );
+    expect(m).toContain("Angel");
+    expect(m).toContain("$4,000.00");
+    expect(m).toContain("https://easylex.com/documento/firma/sig-abc");
+    expect(m).toContain("de nuevo");
+    // Lo que NO debe decir: es justo la confusión que esta función evita.
+    expect(m).not.toContain("Generamos");
+    expect(m).not.toContain("¡Listo");
+  });
+
+  it("el mensaje de reenvío funciona sin nombre", () => {
+    const m = reenvioDeEnlaceMessage("", "$4,000.00", "https://x/y", "El enlace vence en 24 horas.");
+    expect(m).not.toContain(", !");
+    expect(m).not.toContain(", ,");
   });
 
   it("el mensaje de 'No' es corto y sin la línea de reconsideración", () => {
@@ -206,9 +231,9 @@ describe("variantesDeTelefono", () => {
 /**
  * Meta reintenta la entrega cuando el webhook no responde, y se vieron entregas
  * con 4 y 7 horas de retraso tras un redespliegue. Actuar sobre un mensaje tan
- * viejo confunde a la persona y, en el caso del "Sí", gasta una firma de EasyLex
- * en un enlace que vence mientras duerme. El corte son 30 minutos: holgado para
- * un reintento normal y muy por debajo de las 2 horas que dura el enlace.
+ * viejo confunde a la persona: se le contesta como si estuviera mirando el
+ * teléfono. El corte son 30 minutos: holgado para un reintento normal de Meta y
+ * muy por debajo de la VENTANA para pedir, que es el plazo con el que compite.
  */
 describe("mensajeDemasiadoViejo", () => {
   const ahora = new Date("2026-09-07T12:00:00Z").getTime();
@@ -239,14 +264,21 @@ describe("mensajeDemasiadoViejo", () => {
 });
 
 /**
- * La ventana la abre la EMPRESA al enviar la oferta y dura lo mismo que el
- * enlace. Fuera de ella el empleado no puede pedir el adelanto por su cuenta:
- * la idea del cliente es ofrecerlo cuando él quiere, no dejarlo disponible de
- * forma permanente.
+ * La ventana la abre la EMPRESA al enviar la oferta. Fuera de ella el empleado no
+ * puede pedir el adelanto por su cuenta: la idea del cliente es ofrecerlo cuando
+ * él quiere, no dejarlo disponible de forma permanente.
+ *
+ * Es un plazo INDEPENDIENTE de lo que vive el enlace de firma. Durante un tiempo
+ * se derivó del TTL del enlace "para tener una sola fuente de verdad", y al
+ * querer alargar el enlace se habría alargado con él la ventana, que es
+ * exactamente lo contrario de la regla del cliente. La prueba de abajo es la
+ * guardia contra volver a atarlos.
  */
 describe("ventana para pedir el adelanto", () => {
-  it("dura lo mismo que el enlace de firma (una sola fuente de verdad)", () => {
+  it("dura dos horas, sin importar lo que dure el enlace de firma", () => {
     expect(VENTANA_OFERTA_MS).toBe(2 * 60 * 60 * 1000);
+    expect(LINK_TTL_MS).toBe(24 * 60 * 60 * 1000);
+    expect(VENTANA_OFERTA_MS).not.toBe(LINK_TTL_MS);
   });
 
   it("el aviso de ventana cerrada no invita a pedirlo por su cuenta", () => {
@@ -255,7 +287,7 @@ describe("ventana para pedir el adelanto", () => {
   });
 
   it("el aviso explica el plazo sin jerga", () => {
-    expect(VENTANA_CERRADA_MESSAGE).toMatch(/2 horas/);
+    expect(VENTANA_CERRADA_MESSAGE).toContain(DURACION_DE_LA_VENTANA);
     expect(VENTANA_CERRADA_MESSAGE).not.toMatch(/webhook|token|API|null/i);
   });
 });

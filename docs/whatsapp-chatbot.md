@@ -32,12 +32,12 @@ El nuevo diseño lo vuelve un **chatbot**:
         │                                                      │
         ├─ ¿fuera de la ventana? ► "El plazo cerró ⏳" (§2.1)  │
         ├─ ¿ya firmó? ───────────► "Ya firmaste ✅"            │
-        ├─ ¿link vivo (<2h)? ────► reenvía el MISMO link       │
-        ├─ ¿link expiró (>2h)? ──► uno NUEVO si hay ventana    │
+        ├─ ¿link vivo (<24h)? ───► reenvía el MISMO link       │
+        ├─ ¿link expiró (>24h)? ─► uno NUEVO si hay ventana    │
         ├─ ¿sin oferta/no elegible? ─► "No tienes adelanto…"   │
         ├─ ¿falla EasyLex? ──────► "Hubo un problema…"         │
         └─ normal ──► genera contrato ──► manda link           └─► oferta = rechazada
-                       "⏳ Tienes 2h para firmar: <link>"           "Gracias por confirmar 👍"
+                     "⏳ Vence el <fecha y hora>: <link>"           "Gracias por confirmar 👍"
 ```
 
 ### Mensajes (finales)
@@ -46,7 +46,7 @@ El nuevo diseño lo vuelve un **chatbot**:
 ```
 ✅ ¡Listo, [Nombre]! Generamos tu contrato de adelanto por [Monto].
 
-⏳ Tienes 2 horas para firmarlo antes de que expire el enlace:
+⏳ El enlace vence el [fecha y hora] (24 h desde que se generó):
 [link de firma]
 
 Firmas con tu identificación (INE) desde tu celular.
@@ -61,7 +61,7 @@ Firmas con tu identificación (INE) desde tu celular.
 
 | Caso | Riesgo si no se maneja | Manejo |
 |---|---|---|
-| Doble tap en "Sí" (<2h) | Genera 2 contratos → **gasta 2 firmas** | Reusa el link vivo (índice *una-activa-por-empleado* + `getReusableAttempt`) |
+| Doble tap en "Sí" (link vivo) | Genera 2 contratos → **gasta 2 firmas** | Reusa el link vivo (índice *una-activa-por-empleado* + `getReusableAttempt`) y avisa que es un reenvío, no un contrato nuevo |
 | Toca "Sí" con el enlace vencido | Link muerto | Dentro de la ventana genera uno nuevo; fuera, "Ya solicitaste tu adelanto" y no genera nada |
 | Ya firmó | Contrato de más | "Ya firmaste ✅" |
 | No elegible / sin oferta | Algo inválido | "No tienes adelanto disponible…" |
@@ -204,9 +204,10 @@ Escenarios:
 - Botones quick-reply Sí/No (no URL). Categoría **Marketing** (entrega a contactos
   nuevos ya comprobada en esta cuenta). Textos de mensaje finales (§2).
 - Export **B** (nombre + RFC + monto). Re-ofertar a "No" cada ciclo. Confirmación post-firma: **sí**.
-- Empate de empleado por RFC. El "2 horas" va en el mensaje del link (sesión), no en la oferta.
-- **Ventana para pedir** (§2.1): solo la abre el envío de ofertas, corre desde la entrega, tope de 24 h
-  desde el envío, sin anclarse a la oferta, por persona (no por teléfono), cerrada ante cualquier falla.
+- Empate de empleado por RFC. El plazo del enlace (24 h) va en el mensaje del link (sesión), no en la oferta.
+- **Ventana para pedir** (§2.1): **2 h**, solo la abre el envío de ofertas, corre desde la entrega, tope de
+  24 h desde el envío, sin anclarse a la oferta, por persona (no por teléfono), cerrada ante cualquier falla.
+  Es un plazo **distinto** del que vive el enlace de firma (24 h): 2 h para decir "Sí", el día para firmar.
   Aplica también a `/solicitar`.
 
 **Abiertas:**

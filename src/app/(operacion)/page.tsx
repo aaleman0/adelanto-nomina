@@ -5,6 +5,7 @@ import {
   type ContractControlRow,
   type ContractOperationalStatus,
   type ExpiringLinkRow,
+  HORAS_VENCEN_PRONTO,
 } from "@/lib/backoffice/contract-control";
 import { getCurrentActor, hasRole } from "@/lib/auth/roles";
 import { Screen } from "@/ui/screen";
@@ -155,7 +156,7 @@ export default async function PantallaPendientes() {
               <div className="mb-5">
                 <h2 className="text-[23px] font-bold leading-tight text-ink">Enlaces que vencen pronto</h2>
                 <p className="mt-1 max-w-2xl text-[15px] leading-snug text-ink-3">
-                  Enlaces de firma con menos de 24 horas de plazo. Incluye también a quienes ya firmaron: este dato
+                  Enlaces de firma con menos de {HORAS_VENCEN_PRONTO} horas de plazo. Incluye también a quienes ya firmaron: este dato
                   no los separa, así que abre el expediente antes de volver a avisarle a alguien.
                 </p>
               </div>
@@ -166,7 +167,9 @@ export default async function PantallaPendientes() {
                   enlaces por vencer.
                 </ProblemNote>
               ) : kpis.expiringLinks.length === 0 ? (
-                <p className="text-[17px] text-ink-3">Ningún enlace vence en las próximas 24 horas.</p>
+                <p className="text-[17px] text-ink-3">
+                  Ningún enlace vence en las próximas {HORAS_VENCEN_PRONTO} horas.
+                </p>
               ) : (
                 <ul className="-mx-2 divide-y divide-line">
                   {kpis.expiringLinks.map((enlace) => (

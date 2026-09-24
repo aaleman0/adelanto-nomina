@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseTestClient } from "./supabase";
+import { LINK_TTL_MS } from "../../../src/lib/contracts/link-ttl";
 
 export type TestEmployee = {
   id: string;
@@ -287,7 +288,7 @@ async function createContractAttemptFixture(
   const expiresAt =
     state === "link_expirado"
       ? new Date(Date.now() - 5 * 60 * 1000)
-      : new Date(Date.now() + 2 * 60 * 60 * 1000);
+      : new Date(Date.now() + LINK_TTL_MS);
   const signedAt = state === "firmado" ? now.toISOString() : null;
   const status =
     state === "firmado"

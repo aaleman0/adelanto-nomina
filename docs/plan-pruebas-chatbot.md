@@ -63,8 +63,8 @@ where employee_id = 'ec0b2388-78f6-4fc7-b35f-a5512dc81833' and is_current = true
   `easylex.com`.
 
 ### 2.2 Doble toque — **no debe gastar otra firma**
-- [ ] Tocar **"Sí"** otra vez, dentro de las 2 horas.
-- Debe llegar **el mismo enlace**, no uno nuevo.
+- [ ] Tocar **"Sí"** otra vez, con el enlace todavía vivo.
+- Debe llegar **el mismo enlace**, no uno nuevo, y el mensaje debe decir que es un reenvío ("Aquí está de nuevo tu enlace"), no "Generamos tu contrato".
 - Comprobar en el expediente que sigue habiendo **un solo** intento.
 
 ### 2.3 Cambiar de opinión después de pedir
@@ -72,17 +72,18 @@ where employee_id = 'ec0b2388-78f6-4fc7-b35f-a5512dc81833' and is_current = true
 - No debe pisar la solicitud en curso; debe responder que ya lo solicitó.
 
 ### 2.4 Firmar
-- [ ] Abrir el enlace **dentro de las 2 horas** y firmar.
+- [ ] Abrir el enlace **dentro de las 24 horas** y firmar.
 - [ ] Revisar si el expediente cambia solo a **Firmado** (eso probaría que el
       webhook de EasyLex ya funciona) o si sigue pendiente.
 - [ ] Si sigue pendiente: **"Comprobar si ya firmó"** en el expediente.
 
 ### 2.5 Enlace vencido
-- [ ] Con un contrato de más de 2 horas, abrir su enlace → *"Este enlace ya venció"*.
+- [ ] Con un contrato de más de 24 horas, abrir su enlace → *"Este enlace ya venció"*.
 - [ ] Abrir el enlace **directo de EasyLex** (el que queda en el navegador al
       firmar) → **si EasyLex deja firmar, es un hallazgo grave** que hay que
       hablar con ellos.
-- [ ] Tocar **"Sí"** otra vez → debe generar uno nuevo con 2 horas frescas.
+- [ ] Tocar **"Sí"** otra vez, **dentro de la ventana de 2 h** → debe generar uno nuevo con 24 horas frescas.
+      Fuera de la ventana no debe generar nada: la ventana para pedir (2 h) y la vida del enlace (24 h) son plazos distintos.
 
 ---
 

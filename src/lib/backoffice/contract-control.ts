@@ -1,4 +1,13 @@
 import { getReadClient } from "@/lib/supabase/read-client";
+import { LINK_TTL_HOURS } from "@/lib/contracts/link-ttl";
+
+/**
+ * Horizonte del panel "Enlaces que vencen pronto". Tiene que quedar MUY por
+ * debajo de lo que dura el enlace: un horizonte igual al TTL no filtra nada,
+ * porque todo enlace vivo vence, por definición, dentro de un TTL. Eso fue justo
+ * lo que pasó al subir el enlace a un día con el horizonte puesto en 24 h.
+ */
+export const HORAS_VENCEN_PRONTO = Math.min(3, LINK_TTL_HOURS);
 
 export type ContractControlRow = {
   employee_id: string;
@@ -388,7 +397,7 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
   const supabase = await getReadClient();
 
   const now = new Date();
-  const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const horizonte = new Date(now.getTime() + HORAS_VENCEN_PRONTO * 60 * 60 * 1000);
 
   const [eligibleResult, firmadosResult, expiringResult] = await Promise.all([
     // Total de empleados elegibles
@@ -403,12 +412,12 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
       .select("employee_id", { count: "exact", head: true })
       .eq("operational_status", "firmado"),
 
-    // Links que expiran en las próximas 24h (solo los aún vigentes)
+    // Links que expiran dentro del horizonte (solo los aún vigentes)
     supabase
       .from("backoffice_contract_control_v1")
       .select("employee_id, empleado, empleador, monto_prestamo_autorizado, link_expires_at, signing_url")
       .gt("link_expires_at", now.toISOString())
-      .lte("link_expires_at", in24h.toISOString())
+      .lte("link_expires_at", horizonte.toISOString())
       .order("link_expires_at", { ascending: true }),
   ]);
 
