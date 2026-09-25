@@ -99,17 +99,20 @@ El idioma de cada mensaje es el **idioma real de la plantilla** que trae la sinc
 
 ### Categoría de plantilla y entrega (importante)
 
-Meta **acepta** un envío (devuelve `message_status: accepted` y un `wamid`) pero puede **no entregarlo** sin dar error. La causa más común aquí:
+Meta **acepta** un envío (devuelve `message_status: accepted` y un `wamid`) pero puede **no entregarlo** sin dar error: una entrega filtrada no produce ninguna señal de fallo. Por eso conviene tener claro qué está comprobado y qué no.
 
-- **MARKETING** (`adelanto_nomina_v2`, `adelanto_nomina`) → a un contacto **frío** de un negocio **sin verificar**, Meta filtra la entrega en silencio. No llega y no hay error.
-- **UTILITY** (`adelanto_contrato_listo`) → entrega de forma fiable, aunque el negocio no esté verificado. Es la categoría correcta para lo transaccional (el link de firma).
+**En esta cuenta, el envío masivo con plantilla MARKETING SÍ llega.** No es una suposición: la plantilla de ofertas en uso, `adelanto_nomina_oferta_v2`, está en categoría **MARKETING** y entregó **16 de 16** en los dos envíos reales —el 2026-09-07 y el 2026-09-23—, con la verificación del negocio todavía en `pending_submission`. En el del 23-sep, además, 11 de los 16 lo abrieron. Así que el miedo original —que Meta filtrara el marketing en silencio por no estar verificados— **no se materializó**, y el outreach masivo no está bloqueado por la verificación.
 
-Dos formas de que un mensaje llegue sin depender de la verificación:
+| Categoría | Plantillas | Entrega comprobada |
+|---|---|---|
+| **MARKETING** | `adelanto_nomina_oferta_v2` (la que se usa), `adelanto_nomina_oferta`, `adelanto_nomina_v3`, `adelanto_nomina_v2`, `adelanto_nomina` | Sí: 16/16 en dos envíos reales, sin verificación del negocio |
+| **UTILITY** | `adelanto_contrato_listo` (el enlace de firma) | Sí. Es la categoría correcta para lo transaccional y la más fiable por diseño |
 
-1. **Ventana de 24 h.** Si el empleado le escribe primero al número del negocio, se abre una ventana de 24 h en la que hasta el marketing suele entregarse (y se puede enviar texto libre).
-2. **Usar una plantilla UTILITY.**
+Lo que sigue siendo cierto, y por qué no hay que bajar la guardia:
 
-**El pendiente de fondo para el outreach masivo en frío** es completar la **verificación del negocio** en Meta Business Settings (`business_verification_status: pending_submission` mientras no se haga). Eso destraba la entrega de marketing a contactos que nunca han escrito.
+1. **Entregar no es lo mismo que estar autorizado.** La entrega quedó comprobada con 16 personas de una empresa; no prueba que aguante a otra escala ni que Meta no cambie el criterio. Y hay un asunto aparte y más serio: la política de WhatsApp Business (§4) prohíbe los "anticipos de sueldo". Eso no se arregla verificando el negocio. → [Arquitectura](arquitectura.md)
+2. **La verificación del negocio sigue pendiente** (`business_verification_status: pending_submission`). Ya no bloquea la entrega, pero es lo que permite que el número muestre un nombre en vez del número a secas.
+3. **La ventana de 24 h de Meta** sigue siendo la vía más segura: si el empleado escribe primero, se puede responder con texto libre sin plantilla. Es por donde va todo el seguimiento del chatbot.
 
 Diagnóstico rápido de "no llega": consultar el estado del número/WABA/plantilla con la Graph API (`GET /{PHONE_NUMBER_ID}`, `GET /{WABA_ID}?fields=business_verification_status`, `GET /{WABA_ID}/message_templates`). Un token caducado da código 190; una entrega filtrada no da error.
 

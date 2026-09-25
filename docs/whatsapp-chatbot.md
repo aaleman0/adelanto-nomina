@@ -183,14 +183,12 @@ Escenarios:
 
 ## 7. Configuración en Meta (checklist)
 
-> **La entrega de una plantilla Marketing no se decide aquí.** Depende de la
-> categoría y del estado de verificación del negocio, y el documento propietario
-> de eso es [WhatsApp](whatsapp.md#categoría-de-plantilla-y-entrega-importante).
-> Este checklist decía que la entrega a contactos fríos "ya está comprobada" y
-> ese doc dice lo contrario —que Meta filtra Marketing en silencio mientras la
-> verificación siga pendiente—. Se quitó de aquí para que no haya dos versiones:
-> la diferencia decide si un envío masivo llega o se pierde sin error, y hay que
-> resolverla mirando la cuenta en Meta, no este archivo.
+> **Lo de la entrega no se decide aquí.** El documento propietario es
+> [WhatsApp](whatsapp.md#categoría-de-plantilla-y-entrega-importante), donde está
+> con su evidencia: en esta cuenta una plantilla MARKETING **sí entrega** —16 de
+> 16 en los dos envíos reales, con el negocio aún sin verificar—. Este checklist
+> lo afirmaba por su cuenta y con otras palabras; se quitó para que el dato viva
+> en un solo sitio.
 
 - [ ] **Plantilla de oferta** `adelanto_nomina_oferta` — categoría **Marketing**,
       idioma **Español**,

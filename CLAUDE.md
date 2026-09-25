@@ -91,6 +91,9 @@ asumir que ya se resolvieron.
 - **WhatsApp — identidad a medias.** El nombre visible "Adelanto Nómina" sigue en
   revisión (el activo es "Orbitware"); la verificación del negocio está en
   `pending_submission`; el perfil del número (logo, descripción, web) está vacío.
+  Ojo: eso **no bloquea la entrega**. El envío masivo con plantilla MARKETING está
+  comprobado —16 de 16 en dos envíos reales a contactos fríos, sin verificación—;
+  verificar sirve para el nombre y el límite, no para que llegue. → `docs/whatsapp.md`
 - **CI corre en Node 20, pero `@supabase/supabase-js` pide `>=22`.** Local va en
   22. Pendiente subir `NODE_VERSION` en `.github/workflows/ci.yml`.
 
