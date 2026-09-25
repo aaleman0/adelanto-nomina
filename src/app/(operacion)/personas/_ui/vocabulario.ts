@@ -26,6 +26,7 @@ import type { Tone } from "@/ui/status";
 export const ESTADOS_EN_ORDEN: ContractOperationalStatus[] = [
   "pendiente_envio",
   "mensaje_enviado",
+  "rechazado",
   "solicitado",
   "contrato_en_proceso",
   "contrato_generado",
@@ -48,7 +49,8 @@ export const CONTADOR: Record<
   { filtro: ContractOperationalStatus; label: string; tone: Tone; nota?: string }
 > = {
   pendingSend: { filtro: "pendiente_envio", label: "Sin enviar", tone: "attention" },
-  messageSent: { filtro: "mensaje_enviado", label: "Con mensaje enviado", tone: "progress" },
+  messageSent: { filtro: "mensaje_enviado", label: "Esperando respuesta", tone: "progress" },
+  declined: { filtro: "rechazado", label: "Dijeron que no", tone: "wait" },
   requested: {
     filtro: "solicitado",
     label: "Pidieron su adelanto",

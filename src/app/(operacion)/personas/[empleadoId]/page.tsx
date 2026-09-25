@@ -208,6 +208,10 @@ function accionQueToca(
   if (estado === "error") return "reintentar";
   if (estado === "link_expirado") return "regenerar";
   if (estado === "no_elegible") return "ninguna";
+  // Dijo que no. Ofrecerle "generar el contrato" como acción principal empuja al
+  // operador a contratar por su cuenta a quien acaba de rechazarlo; si de verdad
+  // cambió de opinión, la vía es reenviarle la oferta.
+  if (estado === "rechazado") return "ninguna";
   if (!haySolicitud) return "solicitar";
   return "ninguna";
 }

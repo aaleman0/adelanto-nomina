@@ -28,11 +28,15 @@ type StatusDef = { label: string; tone: Tone };
  */
 const MAP: Record<string, StatusDef> = {
   // ── Estado operativo del expediente (backoffice_contract_control_v1) ──
-  // Son los 9 valores que ordenan todo el trabajo del operador. Viven aquí para
+  // Son los 10 valores que ordenan todo el trabajo del operador. Viven aquí para
   // que ninguna pantalla invente su propia traducción y los conteos se lean
   // igual en todas partes. El orden de precedencia lo define el SQL, no la UI.
   pendiente_envio: { label: "Sin enviar", tone: "wait" },
   mensaje_enviado: { label: "Mensaje enviado", tone: "progress" },
+  // Dos estados distintos que antes se veían iguales: quien contestó que no y
+  // quien no ha contestado. Se dice en las palabras del operador —"dijo que
+  // no"— y no "rechazado", que suena a que el sistema le negó algo.
+  rechazado: { label: "Dijo que no", tone: "wait" },
   solicitado: { label: "Pidió su adelanto", tone: "progress" },
   contrato_en_proceso: { label: "Preparando contrato", tone: "progress" },
   contrato_generado: { label: "Falta que firme", tone: "attention" },

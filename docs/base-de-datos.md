@@ -325,12 +325,20 @@ Es un `CASE` y **gana la primera coincidencia**, en este orden:
 | 3 | `link_expirado` | `expires_at <= now()` y no firmado |
 | 4 | `contrato_generado` | hay `signing_url` |
 | 5 | `contrato_en_proceso` | solicitud en `recibida` o `generando` |
-| 6 | `solicitado` | el mensaje registra `click` |
-| 7 | `mensaje_enviado` | status en `sent`, `enviado`, `delivered`, `entregado`, `read` |
-| 8 | `pendiente_envio` | la oferta es elegible |
-| 9 | `no_elegible` | resto |
+| 6 | `rechazado` | la oferta vigente está en `rechazada` (contestó "No, gracias") |
+| 7 | `solicitado` | el mensaje registra `click` |
+| 8 | `mensaje_enviado` | status en `sent`, `enviado`, `delivered`, `entregado`, `read` |
+| 9 | `pendiente_envio` | la oferta es elegible |
+| 10 | `no_elegible` | resto |
 
-Los dos vocabularios (inglés/español) en el paso 7 son el mecanismo que hace convivir filas migradas y nuevas.
+`rechazado` se añadió el 2026-09-25 (`20260925_estado_rechazado_en_control.sql`).
+El dato existía desde el primer "No, gracias" —`handleNo` pone la oferta en
+`rechazada`—, pero el `CASE` no lo miraba y el tablero mostraba `mensaje_enviado`
+tanto para quien dijo que no como para quien nunca abrió el mensaje. Va **después**
+de las ramas de contrato, para que quien cambie de opinión dentro de la ventana
+se vea por su contrato y no por el rechazo anterior.
+
+Los dos vocabularios (inglés/español) en el paso 8 son el mecanismo que hace convivir filas migradas y nuevas.
 
 `last_movement_at` es un `greatest()` sobre 9 timestamps, con `-infinity` como relleno para los nulos.
 

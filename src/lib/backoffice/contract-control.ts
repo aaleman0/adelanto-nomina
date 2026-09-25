@@ -54,6 +54,7 @@ export type ContractControlRow = {
 export type ContractOperationalStatus =
   | "pendiente_envio"
   | "mensaje_enviado"
+  | "rechazado"
   | "solicitado"
   | "contrato_en_proceso"
   | "contrato_generado"
@@ -65,6 +66,7 @@ export type ContractOperationalStatus =
 export type ContractControlMetricKey =
   | "pendingSend"
   | "messageSent"
+  | "declined"
   | "requested"
   | "contractGenerated"
   | "signed"
@@ -151,7 +153,9 @@ export const CONTRACT_CONTROL_SELECT = [
 /**
  * Estados en los que el OPERADOR es el bloqueo, ordenados por urgencia. Los
  * demás están en vuelo (esperando al empleado) o cerrados, y no requieren
- * acción. Esta es la diferencia de propósito entre el cockpit y Contratos: el
+ * acción. `rechazado` es de los cerrados a propósito: quien dijo que no no es
+ * trabajo pendiente, y meterlo aquí pondría a la cola a perseguir a quien ya
+ * contestó. Esta es la diferencia de propósito entre el cockpit y Contratos: el
  * cockpit muestra "lo que hay que hacer"; Contratos es el archivo completo.
  */
 export const ACTION_REQUIRED_STATUSES: ContractOperationalStatus[] = [
@@ -289,6 +293,7 @@ export function parseContractOperationalStatus(value: string | undefined) {
   const allowed = new Set<ContractOperationalStatus>([
     "pendiente_envio",
     "mensaje_enviado",
+    "rechazado",
     "solicitado",
     "contrato_en_proceso",
     "contrato_generado",
@@ -344,6 +349,11 @@ function buildContractControlMetrics(
       key: "messageSent",
       label: "Mensaje enviado",
       value: count("mensaje_enviado"),
+    },
+    {
+      key: "declined",
+      label: "Dijeron que no",
+      value: count("rechazado"),
     },
     {
       key: "requested",
