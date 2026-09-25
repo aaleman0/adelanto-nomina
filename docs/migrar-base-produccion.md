@@ -31,9 +31,10 @@ de `supabase/migrations/` **en este orden** (orden de nombre de archivo):
 20260730_signed_contracts.sql             # bucket de contratos firmados + signed_pdf_path
 20260731_bulk_send_mode_status.sql        # CHECK de whatsapp_bulk_sends.mode
 20260901_contract_request_reemplazada_status.sql  # estado 'reemplazada' al reaplicar un ciclo
+20260925_estado_rechazado_en_control.sql  # estado operativo 'rechazado' (quien dijo que no)
 ```
 
-> La lista de arriba es la del 2026-09-15. Antes de empezar, compárala con el contenido real de
+> La lista de arriba es la del 2026-09-25. Antes de empezar, compárala con el contenido real de
 > `supabase/migrations/`: manda la carpeta, no este documento.
 
 Todas son idempotentes: si tienes que re-correr una, no rompe.
