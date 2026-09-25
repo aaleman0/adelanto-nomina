@@ -41,10 +41,13 @@ cp .env.example .env.local
 | `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | sí | Valor inventado, debe coincidir con el de Meta |
 | `WHATSAPP_APP_SECRET` | sí | Verifica la firma HMAC del webhook. **Sin él, en producción el webhook rechaza todo** |
 | `WHATSAPP_BUSINESS_NUMBER` | no | Formato `^\+?\d{10,15}$` |
-| `WHATSAPP_TEMPLATE_HEADER_IMAGE_URL` | no | Añade cabecera de imagen a `adelanto_nomina_v2` |
+| `WHATSAPP_TEMPLATE_HEADER_IMAGE_URL` | no | Añade cabecera de imagen a `adelanto_nomina_v2` y `adelanto_nomina_v3` |
 | `WHATSAPP_DEBUG_AUTO_REPLY` | no | `"true"` para responder mensajes entrantes. Solo desarrollo |
+| `WHATSAPP_CONTRACT_TEMPLATE` | no | Plantilla con la que sale el enlace de firma. Default `adelanto_contrato_listo` |
+| `WHATSAPP_GRAPH_VERSION` | no | Versión de la Graph API de Meta. Default `v21.0`, configurable por si Meta rota versiones |
+| `WHATSAPP_TEMPLATE_LANGUAGE` | no | Idioma de las plantillas. Default `es_MX` |
 
-Las dos últimas **no están en el esquema de `src/lib/env.ts`**: se leen directamente de `process.env`, así que no aparecen en los health checks ni en los errores de validación.
+Ninguna de esas cinco **está en el esquema de `src/lib/env.ts`**: se leen directamente de `process.env`, así que no aparecen en los health checks ni en los errores de validación.
 
 > `WHATSAPP_APP_SECRET` es obligatorio en producción: el webhook verifica `X-Hub-Signature-256` con él y, si no está definido, rechaza todos los eventos con `401`. Ver [WhatsApp](whatsapp.md#webhook-de-meta).
 
@@ -55,17 +58,31 @@ Las dos últimas **no están en el esquema de `src/lib/env.ts`**: se leen direct
 | `EASYLEX_ACCESS_KEY_ID` | sí | |
 | `EASYLEX_SECRET_ACCESS_KEY` | sí | |
 | `EASYLEX_BASE_URL` | **sí en prod** | Default en código = sandbox. **Producción: `https://api.easylex.com`** (la cuenta solo existe en prod) |
-| `EASYLEX_SIGNING_LINK_BASE_URL` | **sí en prod** | Default en código (`widgetsandbox…`) **no existe / NXDOMAIN**. **Producción: `https://easylex.com/documento/firma`** |
+| `EASYLEX_SIGNING_LINK_BASE_URL` | **sí en prod** | **Ya no tiene default**: vacía, construir el link de firma lanza excepción. Es mejor que el viejo default a `widgetsandbox…`, que era NXDOMAIN y fallaba callado con un link roto en el mensaje. **Producción: `https://easylex.com/documento/firma`** |
 | `EASYLEX_CALLBACK_URL` | sí en prod | **Debe terminar en `/api/webhooks/easylex/sign`** y ser una **URL pública** (EasyLex no alcanza `localhost`) |
 | `EASYLEX_WEBHOOK_SECRET` | sí en producción | El mismo valor que se configure en EasyLex. Si está vacío, en producción **el webhook rechaza todo** con `401` |
 
-**Los defaults en código apuntan a sandbox/dominios muertos.** Sin fijar `EASYLEX_BASE_URL` y `EASYLEX_SIGNING_LINK_BASE_URL` explícitamente en producción, la firma no funciona. Además, `easylex_validate_biometric`/`_liveness` **exigen** `easylex_validate_id`+`_picture` en `true` (ver [EasyLex y contratos](easylex-contratos.md#validaciones-biométricas)). Detalle completo de la integración en ese doc.
+**Sin fijar `EASYLEX_BASE_URL` y `EASYLEX_SIGNING_LINK_BASE_URL` explícitamente en producción, la firma no funciona.** Son dos fallos distintos: la primera tiene default a sandbox y apunta a una cuenta que no existe; la segunda ya no tiene default y el cliente lanza excepción antes de construir el link. Además, `easylex_validate_biometric`/`_liveness` **exigen** `easylex_validate_id`+`_picture` en `true` (ver [EasyLex y contratos](easylex-contratos.md#validaciones-biométricas)). Detalle completo de la integración en ese doc.
 
 ### Aplicación
 
 | Variable | Requerida | Notas |
 |---|---|---|
-| `NEXT_PUBLIC_APP_URL` | sí | Base del `redirectTo` de Google OAuth. Única variable expuesta al cliente |
+| `NEXT_PUBLIC_APP_URL` | sí | Base del `redirectTo` de Google OAuth —de respaldo, porque el login prefiere el host de la petición—, del enlace de firma (`/firmar/<signerId>`) y del de auto-servicio (`/solicitar/<token>`). **Se inlinea en build**: cambiarla en runtime no basta |
+| `SOLICITAR_TOKEN_SECRET` | sí | Firma HMAC del token de `/solicitar/<token>`, una de las dos puertas por las que entra un empleado. **Sin ella esa página rechaza a todo el mundo** con «Este enlace no funciona», indistinguible de un link roto, y no se pueden generar los enlaces del botón de la oferta. Debe ser estable — rotarla invalida los enlaces ya enviados |
+
+Los `NEXT_PUBLIC_SENTRY_*` de más abajo también viajan en el bundle del navegador; `NEXT_PUBLIC_APP_URL` no es la única variable expuesta al cliente.
+
+### Seguridad y operación (todas opcionales)
+
+| Variable | Notas |
+|---|---|
+| `RLS_SESSION_READS` | `on` mueve las lecturas del backoffice al cliente de sesión, sujetas a las políticas por rol. Default = service role (bypass de RLS). **Encenderla sin las políticas de `20260722` aplicadas devuelve cero filas** |
+| `ALLOWED_EMAILS` | Correos exactos autorizados a entrar, separados por coma. Vacío = sin restricción |
+| `ALLOWED_EMAIL_DOMAINS` | Dominios autorizados, separados por coma. Se suma al anterior; defensa en profundidad frente a un OAuth permisivo con RBAC en `warn` |
+| `WEBHOOK_ENFORCE_SIGNATURES` | `true` exige firma en los webhooks aunque `NODE_ENV` no sea `production` |
+| `TRUSTED_PROXY_COUNT` | Nº de proxies de confianza al resolver la IP real para el rate limiting. Sin ella se toma la primera IP de `x-forwarded-for`, que es falsificable |
+| `ENABLE_MOCK_SIGN` | `"true"` habilita `/api/webhooks/easylex/mock-sign`. **Se ignora en producción** |
 
 ### Cola de envío masivo (opcional)
 
@@ -85,7 +102,7 @@ Si falta una sola de las cuatro obligatorias, el sistema **degrada a inline y lo
 
 `QUEUE_DRIVER=inline` desactiva la cola sin desmontar el resto de la configuración — útil para volver atrás rápido.
 
-La autenticación usa ADC (Application Default Credentials), que en Cloud Run funciona sin configuración adicional. Ver [WhatsApp](whatsapp.md#cola).
+La autenticación usa ADC (Application Default Credentials), que en Cloud Run funcionaba sin configuración adicional. **Producción corre en Railway, fuera de GCP**, así que ahí ADC no resuelve sola: encender la cola pediría credenciales explícitas antes que las cuatro variables. Una razón más para que siga siendo opt-in. Ver [WhatsApp](whatsapp.md#cola).
 
 ### Observabilidad de errores (Sentry) — opcional
 
@@ -102,9 +119,18 @@ No se usa `withSentryConfig` (el envoltorio webpack de Sentry) para no chocar co
 
 ### Google Docs (obligatorio para generar contratos)
 
-**No usa variables de entorno.** `src/lib/google/auth.ts` lee `google_oauth_client.json` y `token.json` desde `process.cwd()`. El `token.json` se genera una sola vez con `pnpm dlx tsx scripts/google-auth.ts`: abre una URL, inicias sesión con la cuenta dueña de la plantilla del contrato, apruebas Drive + Docs, y guarda el token.
+**Dos formas de darle las credenciales, y en Railway sólo sirve la segunda.** `src/lib/google/auth.ts` acepta el JSON como archivo o como contenido de una variable:
 
-> No es opcional: la generación de contratos pasa por Google Docs. Sin esos dos archivos, `POST /api/whatsapp/request-contract` falla con `ENOENT` y devuelve `400`. En un contenedor hay que montarlos explícitamente (por ejemplo, como volumen desde Secret Manager). Ver [EasyLex y contratos](easylex-contratos.md#generación-del-pdf).
+| Variable | Notas |
+|---|---|
+| `GOOGLE_OAUTH_CLIENT_PATH` | Ruta del `google_oauth_client.json`. Default: `process.cwd()` |
+| `GOOGLE_TOKEN_PATH` | Ruta del `token.json`. Default: `process.cwd()` |
+| `GOOGLE_OAUTH_CLIENT_JSON` | El JSON completo del cliente OAuth, en línea. **Gana sobre el archivo** |
+| `GOOGLE_TOKEN_JSON` | El JSON completo del token, en línea. **Gana sobre el archivo** |
+
+Las variables con el JSON existen porque en Railway (igual que Fly o Heroku) no hay forma de montar un archivo secreto: sin ellas la generación del contrato fallaría en producción y desde fuera se vería como «no se pudo generar tu contrato», sin pista de la causa. El `token.json` se genera una sola vez con `pnpm dlx tsx scripts/google-auth.ts`: abre una URL, inicias sesión con la cuenta dueña de la plantilla del contrato, apruebas Drive + Docs, y guarda el token.
+
+> No es opcional: la generación de contratos pasa por Google Docs. Sin credenciales por ninguna de las dos vías, `POST /api/whatsapp/request-contract` devuelve `400` con el mensaje «Faltan las credenciales de Google (…)» — ya no un `ENOENT` crudo. Ojo con el refresh token rotado: si las credenciales vienen en variable no hay archivo que actualizar y el guardado se omite; si vienen de un archivo montado de sólo lectura, el guardado falla y sólo se registra un aviso. En ninguno de los dos casos es fatal —el cliente ya tiene las credenciales en memoria—, sólo se pierde la persistencia. Ver [EasyLex y contratos](easylex-contratos.md#generación-del-pdf).
 
 ## Roles y permisos (RBAC)
 
@@ -131,7 +157,7 @@ select email, role from public.profiles order by role, email;
 
 ## Tabla `settings`
 
-La escribe el formulario `Ajustes → Conexión` (`/settings/whatsapp`) vía `POST /api/whatsapp/config`, que exige rol `admin`.
+La escribe la pantalla «Conexión de WhatsApp» (`Ajustes → WhatsApp`, en `/ajustes/whatsapp`) vía `POST /api/whatsapp/config`, que exige rol `admin`.
 
 Claves: `whatsapp_phone_number_id`, `whatsapp_business_number`, `whatsapp_webhook_verify_token`.
 
@@ -147,7 +173,7 @@ Configuración de negocio, editable en base sin redeploy. Se lee con `getCompany
 
 ### Datos del acreedor (contrato)
 
-Todas se editan desde la pantalla **"Datos de empresa"** (`/settings/empresa`, admin) o en base. Dos grupos según qué pasa si están vacías:
+Todas se editan desde la pantalla **"Datos del acreedor"** (`Ajustes → Empresa`, en `/ajustes/empresa`, admin) o en base. Dos grupos según qué pasa si están vacías:
 
 | Clave | Estado | Si está vacía |
 |---|---|---|
@@ -183,7 +209,7 @@ Configuración:
 - [x] **RLS aplicada y verificada (2026-07-21).** Se descubrió (2026-07-20) que la anon key **pública** leía todas las tablas (504 empleados, 48 cuentas bancarias, 310 solicitudes, 347 logs) porque la migración nunca se había aplicado. Se aplicaron las tres migraciones y se verificó el cierre: la anon key sin sesión devuelve **0 filas** en las 18 tablas.
 - [x] Aplicadas, en orden: `20260720_enable_rls_deny_all.sql` (deny-all), `20260721_profiles_provisioning_and_roles.sql` (perfiles), `20260722_rls_policies_phase_b.sql` (políticas por rol)
 - [ ] **Aplicar `20260723_restrict_sensitive_reads.sql`** (M1): restringe la lectura de `employee_bank_accounts` y `raw_import_rows` a `operaciones`+. Hacerlo **antes** de encender `RLS_SESSION_READS`.
-- [ ] **Al aprovisionar una base de producción separada, aplicar TODAS las migraciones de `supabase/migrations/` en orden** (incluidas `20260723` restricción de lecturas, `20260724` dedup de WhatsApp, `20260730` bucket de contratos firmados + `signed_pdf_path`, `20260731` CHECK de `whatsapp_bulk_sends.mode`) y re-verificar el count 0 — runbook paso a paso en [Migrar base de producción](migrar-base-produccion.md)
+- [ ] **Al aprovisionar una base de producción separada, aplicar TODAS las migraciones de `supabase/migrations/` en orden** (incluidas `20260723` restricción de lecturas, `20260724` dedup de WhatsApp, `20260730` bucket de contratos firmados + `signed_pdf_path`, `20260731` CHECK de `whatsapp_bulk_sends.mode`, `20260901` estado `reemplazada` al reaplicar un ciclo, `20260925` estado operativo `rechazado`) y re-verificar el count 0 — runbook paso a paso en [Migrar base de producción](migrar-base-produccion.md)
 - [x] Test automatizado del invariante de RLS (H2): `pnpm verify:rls` (`RUN_RLS_CHECK=1`) — verifica que la anon key devuelve 0 filas en las 18 tablas. Correrlo en CI/post-deploy.
 - [ ] Tras aplicar M1, poner `RLS_SESSION_READS=on` para que las lecturas del backoffice usen el cliente de sesión
 - [ ] Definir `BOOTSTRAP_ADMIN_EMAILS` **antes** de poner `RBAC_ENFORCEMENT=enforce`

@@ -37,13 +37,14 @@ Mantenerla es la regla que más protege este sistema:
 
 1. **¿Rompe la idempotencia?** Las garantías viven en índices únicos parciales, no en el código. Revísalos en `docs/base-de-datos.md` antes de tocar el flujo de contratos.
 2. **¿Altera un snapshot?** `contract_requests.contract_snapshot` congela lo firmado. No debe recalcularse.
-3. **¿Necesita cola?** Hoy no hay ninguna: el envío masivo corre dentro del request HTTP. Si el trabajo puede tardar, dilo explícitamente en lugar de asumir que hay worker.
+3. **¿Necesita cola?** Hay una, apagada por defecto: `src/lib/queue` conmuta entre `inline` y Cloud Tasks según `QUEUE_DRIVER` y la configuración de GCP, y sin ella el envío masivo corre dentro del request HTTP. Si el trabajo puede tardar, dilo explícitamente en lugar de asumir que hay worker corriendo.
 4. **¿Toca el esquema?** No hay tipos generados; los tipos de `src/lib/backoffice/contract-control.ts` se actualizan a mano y el compilador no avisa.
-5. **¿Añade una ruta?** Todo lo que no esté en la lista pública de `src/proxy.ts` queda protegido por sesión. Es el comportamiento deseado — no lo eludas.
+5. **¿Añade una ruta?** Todo lo que no esté en la lista pública de `src/proxy.ts` queda protegido por sesión. Es el comportamiento deseado — no lo eludas. Las excepciones ya listadas son las pantallas del empleado (`/solicitar/`, `/firmar/`), que se autentican con el identificador de la URL, no con cookie.
+6. **¿Toca un plazo?** Son dos y no se derivan uno del otro: la ventana para PEDIR (`VENTANA_OFERTA_HORAS` en `src/lib/contracts/ventana-oferta.ts`, medida desde que salió la oferta) y la vida del ENLACE de firma (`LINK_TTL_HOURS` en `src/lib/contracts/link-ttl.ts`, medida desde que se generó el contrato). Hoy los dos valen 24 h por casualidad; hay una prueba que falla si alguien vuelve a atarlos.
 
 ## Riesgos vigentes
 
-Enumerados en `docs/arquitectura.md`. Los dos que más condicionan un diseño nuevo: **no existe capa de colas** (el envío masivo corre dentro del request HTTP) y **la autorización es binaria** (sesión sí/no, sin roles aplicados).
+Enumerados en `docs/arquitectura.md`. Los dos que más condicionan un diseño nuevo: **la cola existe pero está apagada por defecto** (el envío masivo corre dentro del request HTTP hasta configurar Cloud Tasks) y **los roles se comprueban pero no bloquean** (`requireRole` registra la violación y deja pasar mientras `RBAC_ENFORCEMENT` no sea `enforce`, así que la autorización efectiva sigue siendo sesión sí/no).
 
 ## Coordinación con otras skills
 

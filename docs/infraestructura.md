@@ -13,6 +13,8 @@
 | `audit` | `pnpm audit --audit-level high` |
 | `db-types` | Detectaría deriva entre el esquema real y `src/types/database.types.ts`. **Ese baseline aún no está commiteado**, así que hay que generarlo primero con `pnpm db:types` (requiere credenciales de Supabase). Mientras no exista, el chequeo se omite y el cliente de Supabase se usa sin el genérico `<Database>` |
 
+**CI corre en Node 20 y `@supabase/supabase-js` pide `>=22`.** `NODE_VERSION` está fijado en `"20"` en el workflow y el `Dockerfile` construye sobre `node:20-slim`, mientras el paquete instalado declara `engines.node: ">=22.0.0"`. Local va en 22, así que el desajuste no se ve al trabajar: se vería en un CI verde que oculta un runtime que el propio cliente de base de datos no soporta. Pendiente subir las dos a 22.
+
 Dependabot (`.github/dependabot.yml`) revisa npm semanalmente y las actions mensualmente, agrupando dev-dependencies y parches para no generar decenas de PRs sueltos. Los majors de Next, React y React DOM están excluidos: van acoplados y se suben a mano de forma coordinada.
 
 **La suite E2E no está en CI**, porque hoy no pasaría: el gate de autenticación rompe la suite `api/`. Ver [Testing](testing.md).
@@ -46,23 +48,20 @@ GitHub Actions ──────► Artifact Registry
 
 ## Componentes
 
-### Docker
-Imagen multi-stage: una etapa compila con `pnpm build`, otra ligera (alpine o distroless) expone el 3000 y ejecuta `next start`. **Sin secretos en la imagen** — se inyectan en runtime.
+De lo que sigue, **solo Docker y GitHub Actions están vivos**: la imagen es la que
+Railway construye y el CI es el que corre en cada PR. Cloud Run, Artifact Registry
+y Cloud Monitoring pertenecen a la opción original y se conservan por su
+dimensionado y su razonamiento, no porque estén en uso.
 
-Para que la imagen sea razonable conviene activar `output: "standalone"` en `next.config.ts`; hoy no está.
+### Docker
+Imagen multi-stage sobre `node:20-slim`, en tres etapas: `deps` instala con pnpm (capa cacheable), `builder` compila con `pnpm build`, y `runner` copia sólo el standalone + `.next/static` + `public`, expone el **8080** y arranca con `node server.js` como usuario `node`, sin privilegios. **Sin secretos en la imagen**: los placeholders de build van inline en el `RUN` que los usa, para que no queden en los metadatos de la capa, y los reales se inyectan en runtime.
+
+`output: "standalone"` **ya está activo** en `next.config.ts`, y es lo que hace que el runner no necesite el árbol completo de `node_modules`. No es cosmético: sin él no se genera el `server.js` que el `CMD` ejecuta.
 
 ### Cloud Run
 Escalado automático, HTTPS y TLS gestionados, dominios personalizados, health checks contra `/api/health`, y rollback a revisiones anteriores desde la consola.
 
-La configuración declarativa vive en **`deploy/cloud-run-service.yaml`** (sizing, escalado, SA, sondas, env vars y secretos desde Secret Manager). El sizing es para **un operador + lotes de miles**: 2 vCPU / 2 GiB, `containerConcurrency: 8`, `minScale: 0` (escala a cero entre lotes) y `maxScale: 10` (protege a Supabase y las cuotas externas). La cola es el throttle real, no la instancia.
-
-**Dos planos, a propósito:**
-
-- **Config (la BASE)** → se aplica una vez, y cada vez que cambie algo que no sea la imagen:
-  ```bash
-  gcloud run services replace deploy/cloud-run-service.yaml --region=REGION
-  ```
-- **Imagen** → el job `deploy` de CI hace `gcloud run deploy --image ...` en cada merge, conservando todo lo del yaml.
+La configuración declarativa vivía en **`deploy/cloud-run-service.yaml`**, que se **eliminó el 2026-09-15** junto con el resto de Cloud Run: ya no hay yaml que aplicar ni `gcloud run services replace` que correr, ni el plano de imagen separado que dependía del job `deploy` de CI. Se conserva aquí el dimensionado por si algún día hace falta un entorno equivalente, porque razonarlo de nuevo cuesta: era para **un operador + lotes de miles** —2 vCPU / 2 GiB, `containerConcurrency: 8`, `minScale: 0` (escala a cero entre lotes) y `maxScale: 10`, que protege a Supabase y las cuotas externas—. La cola es el throttle real, no la instancia.
 
 La sonda de arranque es **TCP** (que el proceso escuche), no HTTP contra `/api/health`: ese endpoint devuelve 503 si Supabase está degradado, y usarlo como sonda reiniciaría el contenedor ante un blip de la base. `/api/health` queda para el **uptime check externo** de Cloud Monitoring.
 
@@ -70,10 +69,11 @@ La sonda de arranque es **TCP** (que el proceso escuche), no HTTP contra `/api/h
 Registro privado de imágenes, una por commit etiquetada con su SHA, con control de acceso vía IAM.
 
 ### GitHub Actions
-El workflow (`ci.yml`) ya incluye el job **`deploy`**: en push a `main`
-(producción) o `develop` (staging), construye la imagen, la sube a Artifact
-Registry etiquetada con el SHA, y despliega en Cloud Run. Se salta si GCP no está
-configurado (mismo patrón que `db-types`), así que no rompe hasta que lo actives.
+Hubo un job **`deploy`** que en push a `main` construía la imagen, la subía a
+Artifact Registry etiquetada con el SHA y desplegaba en Cloud Run. **Se eliminó
+el 2026-09-15**: hoy `ci.yml` sólo tiene `quality`, `secrets`, `audit` y
+`db-types`, y nada en GitHub Actions publica nada. Quien despliega es Railway, al
+recibir el push a `main`.
 
 **Autenticación sin llaves (Workload Identity Federation):** no hay JSON de
 service account en los secretos del repo; GitHub intercambia un token OIDC por
@@ -107,13 +107,13 @@ El logger emite JSON en producción (`src/lib/logger.ts`), listo para consultas 
 
 ## Secretos
 
-Todos los secretos en Google Cloud Secret Manager, inyectados por Cloud Run como variables de entorno. Nunca en el repositorio ni en la imagen. Las variables no sensibles se configuran directamente en el servicio.
+Todos los secretos como variables de entorno del servicio de **Railway**, cargadas en su panel. Secret Manager era del plan de Cloud Run, que no se usó. Nunca en el repositorio ni en la imagen. Las variables no sensibles se configuran en el mismo sitio.
 
 Esto importa especialmente porque la UI permite guardar credenciales de WhatsApp **en texto plano** en la tabla `settings`. Las variables de entorno tienen precedencia, así que definirlas en Secret Manager neutraliza ese riesgo. Ver [Configuración](configuracion.md).
 
 ## Webhooks y dominio
 
-El dominio de producción apunta a Cloud Run. Ahí se configuran:
+El dominio de producción apunta al servicio de Railway (Cloud Run no se usa). Ahí se configuran:
 
 | Webhook | URL |
 |---|---|
@@ -126,7 +126,7 @@ En desarrollo local hace falta un túnel (ngrok o equivalente) para recibirlos.
 
 ## Consideraciones específicas de este proyecto
 
-Cuatro cosas que Cloud Run condiciona directamente:
+Cuatro cosas que el entorno de despliegue condiciona directamente (hoy Railway; se razonaron para Cloud Run, pero valen igual):
 
 1. **El envío masivo puede exceder el timeout** mientras siga en modo inline. El soporte de Cloud Tasks ya está implementado y se activa con cuatro variables de entorno; hasta entonces el envío corre dentro del request en lotes de 100. Es la razón más probable de un envío truncado en producción. Ver [WhatsApp](whatsapp.md#cola).
 2. **La generación de PDF consume CPU y memoria.** Ajustar los límites del servicio en consecuencia.
@@ -143,13 +143,12 @@ código ya está completo (`src/lib/queue/*`, worker en
 `/api/tasks/whatsapp/send-message`, una tarea por mensaje, OIDC, idempotente);
 sólo falta la infraestructura de GCP y 4 variables.
 
-**Script:** `scripts/setup-cloud-tasks.sh` crea la cola (con el throttle
-afinado), la service account invoker y los permisos IAM. Es idempotente.
-
-```bash
-GCP_PROJECT_ID=mi-proyecto RUN_RUNTIME_SA=svc@mi-proyecto.iam.gserviceaccount.com \
-  bash scripts/setup-cloud-tasks.sh
-```
+**Ya no hay script.** `scripts/setup-cloud-tasks.sh` —que creaba la cola con el
+throttle afinado, la service account invoker y los permisos IAM, y era
+idempotente— se eliminó el 2026-09-15 con el resto de Cloud Run. Hoy la cola, la
+service account y los permisos habría que crearlos a mano; y como producción
+corre fuera de GCP, el runtime tampoco encuentra identidad sola: autentica por
+ADC (`src/lib/queue/cloud-tasks.ts`).
 
 Luego define en el servicio de Cloud Run (Secret Manager para lo sensible):
 

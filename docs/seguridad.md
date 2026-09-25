@@ -17,13 +17,14 @@ Estado a 2026-07-21, verificado contra el código y contra la base en vivo.
 | Inicio de sesión | OAuth con Google (Authorization Code + PKCE, vía `@supabase/ssr`). Los tokens viven en cookies, nunca en la URL. `src/app/login/actions.ts`, `src/app/auth/callback/route.ts` | ✅ |
 | Verificación en cada request | `src/proxy.ts` (convención de middleware de Next 16) corre en todas las rutas y llama `supabase.auth.getUser()` — verificación **autoritativa** contra el servidor de Auth, no un decode local. Refresca el token de forma transparente | ✅ |
 | Acceso sin sesión | Redirige a `/login?next=…` (fail-closed). Las rutas privilegiadas además devuelven `401` vía `requireRole()` | ✅ |
+| Páginas públicas del empleado | `/solicitar/<token>` y `/firmar/<signerId>` quedan **fuera** del gate de sesión: el empleado no tiene cuenta en el backoffice. Su autenticación es el identificador que viaja en la URL — un token HMAC-SHA256 firmado con `SOLICITAR_TOKEN_SECRET` que lleva empleado y expiración (`src/lib/contracts/solicitar-token.ts`), y el `signer_id` que emite EasyLex, validado contra `contract_attempts`, el estado del intento y su vigencia (`src/app/firmar/[signerId]/page.tsx`) | ✅ |
 | Open-redirect en `next` | El callback exige que `next` empiece por `/` (`safeNext`), así que no se puede redirigir a un dominio externo | ✅ |
 | Webhook de Meta (público) | Firma HMAC-SHA256 de `X-Hub-Signature-256` sobre el cuerpo crudo, comparada en tiempo constante. `src/lib/security/webhook-signatures.ts` | ✅ |
-| Webhook de EasyLex (público) | Secreto compartido `x-easylex-signature`, comparado en tiempo constante | ✅ |
-| Worker de Cloud Tasks (público) | Token OIDC firmado por Google: valida firma, `audience` y `email_verified`. `src/lib/security/cloud-tasks-auth.ts` | ⚠️ parcial — ver plan |
-| Firma simulada (`mock-sign`) | Responde `404` en producción (oculta su existencia); solo operativa fuera de producción | ✅ |
+| Webhook de EasyLex (público) | `x-easylex-signature`, comparada en tiempo constante contra **dos** esquemas: secreto compartido plano (lo documentado) y HMAC-SHA256 del cuerpo crudo con ese mismo secreto. Se acepta cualquiera de los dos porque no está confirmado cuál manda EasyLex, y equivocarse deja el webhook rechazando todo en silencio. `verifyEasylexWebhook` | ✅ |
+| Worker de Cloud Tasks (público) | Token OIDC firmado por Google: valida firma, `audience` (derivado de `TASKS_WORKER_BASE_URL`, no del `Host` entrante), `email_verified` y la service account emisora. En producción, sin token válido no se pasa y el secreto compartido no se acepta. `src/lib/security/cloud-tasks-auth.ts` | ✅ |
+| Firma simulada (`mock-sign`) | Doble cerrojo, para no depender de un único `NODE_ENV`: exige `ENABLE_MOCK_SIGN="true"` **y** no estar en producción. Cerrada responde `404` (no `403`), para no revelar que existe | ✅ |
 
-**Fail-closed en producción.** Si falta `WHATSAPP_APP_SECRET` o `EASYLEX_WEBHOOK_SECRET`, en producción los webhooks **rechazan todo** (`401`); el modo laxo solo aplica fuera de producción, con log de advertencia. Todo esto depende de un único predicado `NODE_ENV === "production"`.
+**Fail-closed en producción.** Si falta `WHATSAPP_APP_SECRET` o `EASYLEX_WEBHOOK_SECRET`, en producción los webhooks **rechazan todo** (`401`); el modo laxo solo aplica fuera de producción, con log de advertencia. La señal principal sigue siendo el predicado `NODE_ENV === "production"`, pero ya no es la única: `WEBHOOK_ENFORCE_SIGNATURES=true` fuerza el rechazo con independencia de `NODE_ENV` (L6) y `mock-sign` exige además `ENABLE_MOCK_SIGN`. El riesgo que motivó la frase —un despliegue con `NODE_ENV` mal fijado abriendo todo— se cierra definiendo esas dos en producción.
 
 ---
 
@@ -33,10 +34,10 @@ Estado a 2026-07-21, verificado contra el código y contra la base en vivo.
 
 | Caso común | Cómo se resuelve | Estado |
 |---|---|---|
-| Rol mínimo por endpoint | `requireRole(min)` al inicio del handler. `src/lib/auth/roles.ts`. Reparto en [API](api.md#autorización-por-rol) | ⚠️ una excepción — ver plan |
-| Server actions | Comprueban el rol por su cuenta (no pasan por el proxy). `src/app/contracts/actions.ts` | ✅ |
-| UI por rol | `RoleGate` / `useHasRole` ocultan o deshabilitan controles. **Es solo UX**: la barrera real es el servidor | ✅ |
-| Rutas admin-only | Guard de servidor que redirige a quien no sea admin, no solo ocultar el enlace. `src/app/settings/layout.tsx` | ✅ |
+| Rol mínimo por endpoint | `requireRole(min)` al inicio del handler. `src/lib/auth/roles.ts`. Reparto en [API](api.md#autorización-por-rol) | ✅ |
+| Server actions | Comprueban el rol por su cuenta con `requireRole`, porque no pasan por el proxy. Son la vía real del backoffice: `src/app/(operacion)/personas/actions.ts` (solicitar, reintentar, regenerar enlace, reenviar firmado, comprobar firma) y `src/app/(operacion)/nomina/actions.ts` (actualizar estados) | ✅ |
+| UI por rol | La página de servidor resuelve el actor (`getCurrentActor` + `hasRole`) y pasa `puedeOperar` / `rol` a los componentes; `src/ui/nav.tsx` esconde los destinos de admin. **Es solo UX**: la barrera real es el servidor | ✅ |
+| Rutas admin-only | Guard de servidor que redirige a quien no sea admin, no solo ocultar el enlace. `src/app/(operacion)/ajustes/layout.tsx` | ✅ |
 | Default-deny | Todo perfil nace `solo_lectura`; nadie escribe hasta ser promovido | ✅ |
 | Primer admin | `BOOTSTRAP_ADMIN_EMAILS` promueve al iniciar sesión | ✅ |
 
@@ -50,10 +51,11 @@ Estado a 2026-07-21, verificado contra el código y contra la base en vivo.
 
 | Caso común | Cómo se resuelve | Estado |
 |---|---|---|
-| Endpoints limitados | Webhooks (WhatsApp, EasyLex), envío masivo, subida de CSV, acciones admin de WhatsApp, y el lote de backoffice | ⚠️ faltan algunos — ver plan |
+| Endpoints limitados | Webhooks (WhatsApp, EasyLex), envío masivo, subida **y aplicación** de CSV, acciones admin de WhatsApp, solicitud de contrato, el lote de backoffice y sus acciones por expediente (reintentar, regenerar enlace). Las escrituras de Ajustes (`settings/company`, `whatsapp/config`, `whatsapp/templates`, corrección masiva de teléfonos) no llevan límite: son admin-only y su freno es el rol | ✅ M4 resuelto |
 | Algoritmo | Ventana fija en memoria (`src/lib/security/rate-limit.ts`). Clave por IP + nombre de limitador | ✅ |
 | Respuesta al exceder | `429` con `Retry-After` y cabeceras `X-RateLimit-*` | ✅ |
 | Orden en webhooks | Se limita **antes** de verificar la firma, para que el bombardeo no llegue ni a la verificación HMAC | ✅ |
+| Server actions | **Sin límite.** `enforceRateLimit` recibe un `Request` y solo se llama desde route handlers; ninguna server action pasa por él (ni por el proxy). Ahí viven hoy las escrituras caras del backoffice —solicitar contrato, reintentar, regenerar enlace, comprobar firma, actualizar estados— y el auto-servicio público `/solicitar/<token>`, que genera el documento en EasyLex y manda WhatsApp sin sesión | ⚠️ hueco real |
 
 **Límite en memoria, por instancia.** El estado no se comparte entre réplicas: con N instancias el límite efectivo es N× el configurado. Frena el abuso trivial, no un atacante distribuido. Para un límite global exacto habría que mover el store a Redis conservando la misma interfaz.
 
@@ -84,7 +86,7 @@ Estado en la base a 2026-07-21: **RLS activa y verificada.** La `anon key` públ
 
 | Caso común | Cómo se resuelve | Estado |
 |---|---|---|
-| Cuerpo y query | `parseJsonBody` / `parseQuery` con esquemas Zod, formato de error uniforme. `src/lib/api/validation.ts`, `src/lib/whatsapp/schemas.ts` | ⚠️ 5 endpoints sin validar IDs — ver plan |
+| Cuerpo y query | `parseJsonBody` / `parseQuery` con esquemas Zod, formato de error uniforme. `src/lib/api/validation.ts`, `src/lib/whatsapp/schemas.ts` | ⚠️ falta `GET /api/cycles/[cycleId]/export`: usa el id sin `isUuid()`, y un valor malformado revienta contra la columna `uuid` y sale como 500 en vez de 400 |
 | Inyección en filtros | Los valores del `.or()` de PostgREST se escapan (`escapePostgrestValue`), evitando romper la estructura del filtro | ✅ |
 | UUID como Postgres | `uuidParam` acepta cualquier UUID hexadecimal (como el tipo `uuid`), no más estricto que la base | ✅ |
 | Paginación | Se **acota** en vez de rechazar; un valor no numérico cae al default (evita `NaN` → 500) | ✅ |
@@ -117,10 +119,10 @@ Huecos reales encontrados en la auditoría del 2026-07-21, priorizados. Ninguno 
 | ~~M1~~ | RLS | ✅ **Resuelto** (ver sección Resuelto): `employee_bank_accounts` y `raw_import_rows` restringidas a `operaciones`+ vía `20260723_restrict_sensitive_reads.sql`. Queda **valorar** si `whatsapp_contacts/messages` y `easylex_events` merecen el mismo trato (siguen operativas). | Aplicar la migración antes de encender `RLS_SESSION_READS`. |
 | M2 | RLS | **`security_invoker` de las vistas es frágil** (parcial): el `ALTER VIEW` podría fallar en silencio o revertirse al recrear la vista. ✅ El test de invariante (H2) **ahora también comprueba las 2 vistas** (anon = 0 filas), así que una regresión a `security_definer` se detecta. Pendiente: re-aplicar el reloption en cada migración que recree una vista. | Re-aplicar `security_invoker = on` en cada `create view`. Considerar `REVOKE SELECT … FROM anon` como cinturón extra. |
 | ~~M3~~ | Autenticación | ✅ **Resuelto**: en producción se **exige** `TASKS_INVOKER_SERVICE_ACCOUNT`, y el `audience` se deriva del **origen configurado** (`TASKS_WORKER_BASE_URL`) + el path real, no del `Host` entrante. Con test de happy-path OIDC (`cloud-tasks-auth.oidc.test.ts`, `googleapis` mockeado). | — |
-| ~~M4~~ | Rate limiting | ✅ **Resuelto**: `request-contract` (`contractRequest`, 30/min), `imports/[batchId]/apply` (`importUpload`, 20/min) y `backoffice/contracts/*/retry`+`/regenerate-link` (`backofficeAction`, 30/min) tienen rate limit. | — |
-| ~~M5~~ | Rate limiting | ✅ **Resuelto** (opt-in): `getClientIp` toma la IP contando desde la derecha según `TRUSTED_PROXY_COUNT` (los últimos N valores de `x-forwarded-for` los añade tu infra; en Cloud Run, 1), en vez de la primera entrada falsificable. Sin configurar (0) conserva el comportamiento histórico, así que no afecta a dev/tests. Con test unitario. **Definir `TRUSTED_PROXY_COUNT` en producción**, verificado contra el comportamiento real de Cloud Run. | Definir `TRUSTED_PROXY_COUNT`. |
+| ~~M4~~ | Rate limiting | ✅ **Resuelto**, y hoy alcanza a **doce rutas**, no a las tres del hallazgo original: `whatsapp/request-contract`, `imports` y `imports/[batchId]/apply`, los tres de `backoffice/contracts/*` (retry, regenerate-link y batch), `whatsapp/bulk`, `whatsapp/test`, `whatsapp/templates/sync` y los tres webhooks (Meta, EasyLex y mock-sign). Los topes viven en `src/lib/security/rate-limit-config.ts`. **Ojo con el alcance real:** `enforceRateLimit` solo se invoca desde route handlers, así que las **server actions no pasan por él** — ni por `src/proxy.ts`—; lo que las protege es el `requireRole()` que cada una llama por su cuenta. | — |
+| ~~M5~~ | Rate limiting | ✅ **Resuelto** (opt-in): `getClientIp` toma la IP contando desde la derecha según `TRUSTED_PROXY_COUNT` (los últimos N valores de `x-forwarded-for` los añade tu infra), en vez de la primera entrada falsificable. Sin configurar (0) conserva el comportamiento histórico, así que no afecta a dev/tests. Con test unitario. **Definir `TRUSTED_PROXY_COUNT` en producción** contando los proxies que de verdad están delante: el despliegue es Railway, no Cloud Run, así que el 1 que valía para Cloud Run hay que comprobarlo antes de darlo por bueno. | Definir `TRUSTED_PROXY_COUNT`, verificado contra el comportamiento real de Railway. |
 | ~~M6~~ | Autenticación | ✅ **Resuelto** (opt-in): el callback de OAuth valida el correo contra un allow-list (`src/lib/auth/access-allowlist.ts`, con test). Dos formas combinables: **`ALLOWED_EMAILS`** (personas concretas — lo indicado para un equipo chico con PII) y `ALLOWED_EMAIL_DOMAINS` (dominio completo). Si hay alguno, un correo fuera se rechaza (sign-out + redirect); ninguno = sin restricción. | Definir `ALLOWED_EMAILS` en producción y verificar además la restricción en Supabase Auth. |
-| ~~M7~~ | Validación | ✅ **Resuelto**: los 5 endpoints (`/whatsapp/messages/employee`, `/whatsapp/imports`, `/imports/[batchId]/apply`, y los dos de `backoffice/contracts/*`) validan el ID con `isUuid()` y devuelven 400 antes de tocar la base. | — |
+| ~~M7~~ | Validación | ✅ **Resuelto**: los **seis** endpoints que reciben un id por la ruta o la query (`/whatsapp/messages/employee`, `/whatsapp/imports`, `/imports/[batchId]/apply` y los tres de `backoffice/contracts/*`: retry, regenerate-link y signed-pdf) validan el ID con `isUuid()` y devuelven 400 antes de tocar la base. | — |
 
 ### Prioridad baja
 

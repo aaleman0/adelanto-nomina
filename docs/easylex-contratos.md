@@ -35,7 +35,7 @@ Implementadas en `requestContractFromWhatsApp()` (`src/lib/contracts/request-con
 
 1. **Identidad por RFC.** Se busca el empleado por RFC, nunca por teléfono. Si no existe → `not_found`.
 2. **Oferta vigente y elegible.** Sin oferta `is_current` → `no_offer`. Con oferta no elegible → `not_eligible`.
-3. **Cuenta bancaria activa obligatoria.** Sin CLABE activa el contrato no se genera.
+3. **Cuenta bancaria activa: la exige la importación del CSV, no esta función.** Toda fila sin CLABE de 18 dígitos se rechaza al importar, así que en la práctica todo empleado con oferta tiene cuenta. Pero `requestContractFromWhatsApp` **no lo comprueba**: lee la cuenta activa, la pasa al generador y, si no hay, genera el contrato igual. No usar este paso como guardia: la guardia está en el CSV.
 4. **Una solicitud por oferta.** Garantizado por `UNIQUE (offer_id)` y por el índice parcial que impide más de una solicitud activa por empleado.
 5. **Si ya firmó** → `already_signed`, sin generar nada nuevo.
 6. **Si hay un link vigente, se reutiliza.** No se crea un intento nuevo mientras el anterior no expire.
@@ -46,7 +46,7 @@ Implementadas en `requestContractFromWhatsApp()` (`src/lib/contracts/request-con
 
 ## Generación del PDF
 
-> **Requisito de despliegue crítico.** La generación de contratos **depende de Google Docs**, y sus credenciales son **archivos**, no variables de entorno: `src/lib/google/auth.ts` lee `google_oauth_client.json` y `token.json` desde `process.cwd()`. Sin esos dos archivos, cada intento de generar un contrato falla con `ENOENT` y la API devuelve `400`. En un contenedor de Cloud Run no existen salvo que se monten explícitamente.
+> **Requisito de despliegue crítico.** La generación de contratos **depende de Google Docs**, y sus credenciales entran por dos vías, con precedencia: como **contenido JSON** en `GOOGLE_OAUTH_CLIENT_JSON` y `GOOGLE_TOKEN_JSON` —esa gana si está puesta—, o como **archivo** en las rutas de `GOOGLE_OAUTH_CLIENT_PATH` / `GOOGLE_TOKEN_PATH`, que por defecto son `google_oauth_client.json` y `token.json` en `process.cwd()`. La vía de la variable existe porque en Railway no hay forma de montar un archivo secreto dentro del contenedor: sin ella, producción falla al generar el PDF y desde fuera solo se ve "no se pudo generar tu contrato", sin pista de la causa. Sin ninguna de las dos, `generateContractPdf` lanza **antes** de que se llame a EasyLex: la API no devuelve error HTTP, la solicitud queda en `error` con `contract_link_failed` y la persona aparece en el tablero de Pendientes bajo "Con error", lista para reintentar.
 
 El nombre despista: `generateContractPdf` vive en `src/lib/easylex/contract-pdf.ts` y parece la ruta de `pdf-lib`, pero **delega en Google Docs**:
 
@@ -64,13 +64,13 @@ El monto se escribe también en letra mediante `montoEnLetra()` (`src/lib/easyle
 
 ## Datos que necesita el contrato
 
-Del empleado (`employees`): nombre, `apellido_paterno`, `apellido_materno`, RFC, CURP, `estado_civil`, `nacionalidad`, `lugar_origen`, `fecha_nacimiento`, `domicilio`, `cp_csf`. Los siete últimos se añadieron en `20250701_contract_employee_fields.sql` y **son nullable**: si el CSV no los trae, el contrato se genera con huecos.
+Del empleado (`employees`): nombre, `apellido_paterno`, `apellido_materno`, RFC, CURP, `estado_civil`, `nacionalidad`, `lugar_origen`, `fecha_nacimiento`, `domicilio`, `cp_csf`. `apellido_paterno`, `apellido_materno`, `estado_civil`, `nacionalidad`, `lugar_origen`, `fecha_nacimiento` y `domicilio` se añadieron en `20250701_contract_employee_fields.sql` (`curp` y `cp_csf` ya venían del esquema inicial), y todos **son nullable**: si el CSV no los trae, el contrato se genera con huecos.
 
 De la oferta: `monto_prestamo_autorizado` (en número y en letra).
 
-De la cuenta bancaria: CLABE y banco.
+De la cuenta bancaria activa: se leen CLABE y banco y se pasan al generador, pero **no se imprimen en el contrato**. La plantilla no tiene placeholder para la cuenta del empleado, solo para la del acreedor: los datos bancarios del empleado hacen falta para pagarle, no para el documento que firma.
 
-Del acreedor: las claves `acreedor_*` y `testigo_*` de `company_settings`, **todas editables desde la pantalla "Datos de empresa"** (`/settings/empresa`). Dos grupos:
+Del acreedor: las claves `acreedor_*` y `testigo_*` de `company_settings`, **todas editables desde la pantalla "Datos del acreedor"** (`/ajustes/empresa`). Dos grupos:
 
 - **Identidad** (`acreedor_razon_social`, `acreedor_rfc`, `acreedor_representante`, `acreedor_domicilio`): tienen **valor de respaldo** en código (`ACREEDOR_DEFAULTS` en `easylex/contract-pdf.ts`, = los valores actuales de LOZAV). Si el ajuste está vacío se usa el respaldo, así que **nunca salen en blanco**.
 - **Bancarios y testigos** (`acreedor_banco`, `acreedor_cuenta`, `acreedor_clabe`, `testigo_1_nombre`, `testigo_2_nombre`): **sin respaldo**. Si están vacíos, salen en blanco en el contrato. Son los cinco que faltan `(LLENAR)`.
@@ -83,7 +83,9 @@ La plantilla de Google Docs (`TEMPLATE_DOC_ID`) se llena por completo con placeh
 
 **Se adaptan a cada empleado/oferta** (del CSV y la oferta): `{{nombre_completo}}`, `{{estado_civil}}`, `{{nacionalidad}}`, `{{lugar_origen}}`, `{{fecha_nacimiento}}`, `{{rfc}}`, `{{domicilio}}`, `{{empleador}}`, `{{monto_numero}}`, `{{monto_letra}}`, `{{dia_firma}}`/`{{mes_firma}}`/`{{anio_firma}}`.
 
-**Iguales en todos los contratos** (de `company_settings`, vía "Datos de empresa"): `{{banco_acreedor}}`, `{{cuenta_acreedor}}`, `{{clabe_acreedor}}`, `{{testigo_1}}`, `{{testigo_2}}`, y la identidad del acreedor `{{razon_social_acreedor}}`, `{{rfc_acreedor}}`, `{{representante_acreedor}}`, `{{domicilio_acreedor}}`.
+> **Los placeholders del monto no siempre imprimen el monto.** La plantilla repite `{{monto_numero}}` y `{{monto_letra}}`, y el generador los llena **por posición**, con valores distintos: de las cinco primeras ocurrencias de `{{monto_numero}}`, las dos primeras llevan el monto prestado y las tres siguientes el **total a pagar** (monto + 7 % de comisión + su IVA, que calcula `calculateLoanTotals` en `src/lib/contracts/loan-totals.ts`); de `{{monto_letra}}`, la primera lleva el monto en letra y la segunda el total en letra. Por eso importa el ORDEN en que aparecen en el Doc: mover, duplicar o borrar una ocurrencia cambia qué cifra imprime cada hueco sin que nada falle. Si faltan ocurrencias, `buildIndexedReplacements` **lanza** y no se genera el PDF; si sobran, se quedan sin reemplazar.
+
+**Iguales en todos los contratos** (de `company_settings`, vía "Datos del acreedor"): `{{banco_acreedor}}`, `{{cuenta_acreedor}}`, `{{clabe_acreedor}}`, `{{testigo_1}}`, `{{testigo_2}}`, y la identidad del acreedor `{{razon_social_acreedor}}`, `{{rfc_acreedor}}`, `{{representante_acreedor}}`, `{{domicilio_acreedor}}`.
 
 ### Cambios aplicados (2026-07-31)
 
@@ -156,7 +158,7 @@ Se guardan como booleanos en texto. Se pueden cambiar en base sin redeploy.
 
 ### Consultar estado
 
-`getDocumentStatus(documentId)` existe y está disponible, pero **no hay job de polling**: la confirmación de firma depende hoy exclusivamente del webhook.
+`getDocumentStatus(documentId)` no tiene ningún job de polling detrás, pero **sí dos salidas manuales** que lo usan: "Comprobar si ya firmó" en el expediente de una persona (`syncEmployeeSignature`) y "Actualizar estados" de un ciclo (`syncBatchSignatures`). Las dos marcan la firma con la misma lógica del webhook (`mockSignContract`), así que el resultado es idéntico venga por donde venga, y las dos son idempotentes. Existen porque sin ellas una firma que el aviso automático no reflejara no tendría ninguna otra forma de llegar al expediente —y el caso suelto, alguien dado de alta a mano, no tiene lote que sincronizar—.
 
 ## Link de firma
 
@@ -168,7 +170,7 @@ El `signing_url` se construye a partir del id del firmante. La app expone ademá
 
 **URL correcta de producción: `EASYLEX_SIGNING_LINK_BASE_URL=https://easylex.com/documento/firma`** → el link final es `https://easylex.com/documento/firma/<signerId>`, que abre la página de firma pública (sin cuenta).
 
-> **Cuidado con los dominios muertos.** El default en código y el placeholder que muestra el propio dashboard de EasyLex (`widgetsandbox.easylex.com/firmar`) **NO existen** (NXDOMAIN): el link da "no se puede acceder al sitio". Tampoco sirven `widget.easylex.com/firmar/{id}` (404) ni `app.easylex.com/firmar/{id}` (redirige a login: es el panel con cuenta). El único que funciona para un firmante sin cuenta es `easylex.com/documento/firma/<signerId>`. El `signerId` es el último segmento del path (lo usa `signingUrlSuffix` para la plantilla de WhatsApp).
+> **Cuidado con los dominios muertos.** El placeholder que muestra el propio dashboard de EasyLex (`widgetsandbox.easylex.com/firmar`) **NO existe** (NXDOMAIN): el link da "no se puede acceder al sitio". En código ya no hay ningún default que se le parezca: `EASYLEX_SIGNING_LINK_BASE_URL` sin definir vale cadena vacía y `buildSigningUrl` **lanza**, así que el intento queda en `error` con un mensaje claro en vez de generar un link muerto que el empleado no podría abrir. Tampoco sirven `widget.easylex.com/firmar/{id}` (404) ni `app.easylex.com/firmar/{id}` (redirige a login: es el panel con cuenta). El único que funciona para un firmante sin cuenta es `easylex.com/documento/firma/<signerId>`. El `signerId` es el último segmento del path (lo usa `signingUrlSuffix` para la plantilla de WhatsApp).
 
 El redirector permite usar un dominio propio en las plantillas de WhatsApp, lo cual importa porque Meta solo admite variables en la ruta de un botón URL, no en el dominio.
 
@@ -196,7 +198,7 @@ El envío es **no-fatal**: si falla (WhatsApp mal configurado, plantilla no apro
 - Se autentica por la cabecera `x-easylex-signature`. `verifyEasylexWebhook` acepta **cualquiera de dos esquemas** (verificado E2E): secreto compartido plano **o** HMAC-SHA256 del cuerpo crudo (con prefijo `sha256=` opcional). No está confirmado cuál usa EasyLex, así que se admiten ambos —los dos exigen el secreto, no debilita nada—. Por eso el handler lee `request.text()` (cuerpo crudo) y parsea después: un JSON reserializado invalidaría el HMAC.
 - **En producción, sin secreto configurado se rechaza todo** con `401` (fail closed). Fuera de producción se permite (fail-open) con log, para pruebas.
 - `DOCUMENT_SIGNED` es el evento que cierra el ciclo (busca por `data.id`); `SIGNED_BY_USER` solo deja registro (busca por `data.documentId`).
-- Marca `contract_attempts` → `firmado`, `contract_requests` → `firmado`, `advance_offers` → `firmada`, e inserta el `audit_events` `contract.signed` (la **evidencia legal** de la firma).
+- Marca `contract_attempts` → `firmado` siempre, pero **qué pasa con la solicitud depende de si sigue en curso** (`queHacerConLaFirma`, `src/lib/contracts/firma-tardia.ts`). Solo desde `recibida`, `generando` o `link_generado` se marcan `contract_requests` → `firmado` y `advance_offers` → `firmada`, con el `audit_events` `contract.signed` (la **evidencia legal** de la firma). Desde cualquier otro estado —`reemplazada`, típicamente, porque entró un ciclo nuevo— la firma **se guarda como evidencia pero NO revive la solicitud**: se archiva el PDF sin avisarle a la persona (`soloArchivar`), se registra el `audit_events` `contract.signed_fuera_de_curso` y se deja un `logger.error` para que operación lo resuelva. Revivirla metería un pago con el monto de un ciclo ya cerrado en el Excel de dispersión, y encima invisible: el tablero solo arma filas sobre la oferta vigente. La lista de estados es blanca a propósito: uno nuevo que nadie previó cae del lado que no mueve dinero.
 - Idempotencia por `easylex_events.event_id`, con la salvedad de que si falta `webhookId` el id se sintetiza con `Date.now()` y por tanto nunca colisiona.
 - **Ante un error de procesamiento devuelve `500`** (no `200`) para que EasyLex **reintente**; los manejadores son idempotentes, así que un fallo transitorio de BD no pierde la firma. (Antes respondía `200` y la firma se perdía en silencio.)
 
@@ -223,17 +225,17 @@ Es **best-effort y NUNCA lanza**: un fallo aquí no debe convertir el webhook en
 | Descargar contrato firmado | `GET /api/backoffice/contracts/[contractRequestId]/signed-pdf` | Redirige a una signed URL de descarga del PDF archivado. Rol `operaciones`. `404` si aún no hay archivo |
 | Reenviar al empleado | `resendSignedContractAction` (server action) | Re-corre `deliverSignedContract` (re-archiva + reintenta el WhatsApp). Útil si la entrega automática falló |
 
-Ambas aparecen en `ActionsCard` solo cuando el contrato está firmado.
+Ambas viven en `AccionesExpediente` (`src/app/(operacion)/personas/_ui/acciones-expediente.tsx`) y **no se ocultan cuando no aplican**: se ven apagadas y dicen por qué ("El PDF existe cuando la persona ya firmó", "Solo se puede reenviar cuando el contrato ya está firmado"). La regla del bloque es que nada desaparezca: un botón que no está hace dudar de si la función existe.
 
 ## Firma simulada
 
 `POST /api/webhooks/easylex/mock-sign` marca un contrato como firmado sin pasar por EasyLex, para pruebas.
 
-**Deshabilitado en producción**: responde `404`. Fuera de producción no tiene autenticación, así que sigue siendo una herramienta de desarrollo, no un mecanismo operativo.
+**Deshabilitado por defecto en todas partes**, con doble cerrojo: hay que activarlo explícitamente con `ENABLE_MOCK_SIGN="true"` **y** no estar en producción. Si falta cualquiera de las dos condiciones responde `404` —no `403`, para no delatar que existe—. Los dos candados son a propósito: con uno solo, un despliegue con `NODE_ENV` mal fijado reabriría un endpoint que no tiene autenticación ninguna. Sigue siendo una herramienta de desarrollo, no un mecanismo operativo.
 
 ## Acciones desde el backoffice
 
-En el detalle de un empleado (`/contracts/[employeeId]`):
+En el expediente de una persona (`/personas/[empleadoId]`):
 
 | Acción | Endpoint | Resultado |
 |---|---|---|
@@ -251,11 +253,11 @@ Ambas devuelven `already_signed` si el contrato ya está firmado — no se puede
 | link vencido | `expirado` |
 | error de la API | `error` |
 
-Estados de la solicitud (`contract_request_status`): `recibida` → `generando` → `link_generado` → `firmado`, con `error` como salida lateral.
+Estados de la solicitud (`contract_request_status`): `recibida` → `generando` → `link_generado` → `firmado`, con `error` como salida lateral y `reemplazada` como cierre cuando entra un ciclo nuevo (`supersedePreviousContract` en `src/lib/imports/apply.ts`, que además adelanta el `expires_at` de los intentos vivos: el reloj es la única revocación que hay). `reemplazada` se añadió en `20260901_contract_request_reemplazada_status.sql` y es el estado por el que una firma tardía se guarda como evidencia sin revivir el pago.
 
 ## Ambiente y configuración de producción
 
-Los **defaults en código apuntan a sandbox / dominios muertos** — es el footgun más fácil de pasar por alto al desplegar. La cuenta real solo existe en producción, así que hay que fijar explícitamente:
+El default en código de `EASYLEX_BASE_URL` **apunta al sandbox** (`https://sandboxapi.easylex.com`) — es el footgun más fácil de pasar por alto al desplegar, porque la cuenta real solo existe en producción y contra el sandbox nada autentica (`code 106`). `EASYLEX_SIGNING_LINK_BASE_URL` ya no tiene default: sin ella no se construye ningún link, se lanza. Hay que fijar explícitamente:
 
 ```
 EASYLEX_BASE_URL=https://api.easylex.com

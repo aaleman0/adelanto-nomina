@@ -1,8 +1,12 @@
 # WhatsApp Chatbot — Oferta de adelanto (plan maestro)
 
-> Estado: **plan** (antes de codear). Este documento es el mapa del cambio:
-> reemplazar el botón-URL de la oferta por un flujo **conversacional** (botones
-> de respuesta rápida Sí/No) manejado por webhook + código.
+> Estado: **construido y en producción**. Este documento nació como el mapa del
+> cambio —reemplazar el botón-URL de la oferta por un flujo **conversacional**
+> (botones de respuesta rápida Sí/No) manejado por webhook + código— y se
+> conserva porque sigue siendo el único sitio donde están escritas las razones de
+> cada rama. El flujo vive en `src/lib/whatsapp/chatbot.ts`. Los checklists de §7
+> y §8 son del plan original y no dicen lo que falta hoy; lo que sigue pendiente
+> de verdad está marcado en §3 y §10.
 
 ## 1. Objetivo y por qué
 
@@ -42,15 +46,25 @@ El nuevo diseño lo vuelve un **chatbot**:
 
 ### Mensajes (finales)
 
-**Rama "Sí, lo quiero":**
+**Rama "Sí, lo quiero"** cuando se genera el contrato:
 ```
 ✅ ¡Listo, [Nombre]! Generamos tu contrato de adelanto por [Monto].
 
-⏳ El enlace vence el [fecha y hora] (24 h desde que se generó):
 [link de firma]
 
-Firmas con tu identificación (INE) desde tu celular.
+⏳ El enlace vence el [fecha y hora]. Fírmalo con tu identificación (INE) desde tu celular.
 ```
+
+**Rama "Sí, lo quiero"** cuando solo se le devuelve el enlace que ya tenía:
+```
+Aquí está de nuevo tu enlace, [Nombre], el mismo de antes por [Monto]. Sigue sirviendo.
+
+[link de firma]
+
+⏳ El enlace vence el [fecha y hora]. Fírmalo con tu identificación (INE) desde tu celular.
+```
+
+Son dos textos y no uno porque con un enlace de un día el reenvío pasó a ser la rama habitual, y decirle "Generamos tu contrato" cada vez le haría creer que se le están generando varios. La fecha es la real del intento (`expires_at`), no el plazo nominal: si el enlace se reusó, le queda menos. Cuál de los dos sale lo decide si el resultado vino reusado, no la puerta por la que entró.
 
 **Rama "No, gracias":**
 ```
@@ -62,14 +76,15 @@ Firmas con tu identificación (INE) desde tu celular.
 | Caso | Riesgo si no se maneja | Manejo |
 |---|---|---|
 | Doble tap en "Sí" (link vivo) | Genera 2 contratos → **gasta 2 firmas** | Reusa el link vivo (índice *una-activa-por-empleado* + `getReusableAttempt`) y avisa que es un reenvío, no un contrato nuevo |
-| Toca "Sí" con el enlace vencido | Link muerto | Dentro de la ventana genera uno nuevo; fuera, "Ya solicitaste tu adelanto" y no genera nada |
+| Toca "Sí" con el enlace vencido | Link muerto | Dentro de la ventana genera uno nuevo; fuera no genera nada y se le dice qué pasó DE VERDAD con su solicitud (`solicitudPrevia`): enlace vencido, contrato que no se pudo preparar, o solicitud en proceso. Nunca se le promete un enlace que no existe |
 | Ya firmó | Contrato de más | "Ya firmaste ✅" |
 | Contesta a la oferta del ciclo ANTERIOR | Contrato por un monto que nunca vio | Si la respuesta es anterior a la oferta vigente (`respuestaEsDeOtraOferta`), no se genera nada y se le dice que busque el mensaje más reciente. Aplica también al "No", que si no rechazaría la oferta nueva |
 | Mensaje que Meta entrega con retraso | Un "Sí" válido tirado en silencio, o una guía de madrugada | Dos cortes: `MAX_ANTIGUEDAD_RESPUESTA_MS` (= la ventana) para el Sí/No, `MAX_ANTIGUEDAD_MS` (30 min) para todo lo demás |
 | No elegible / sin oferta | Algo inválido | "No tienes adelanto disponible…" |
 | EasyLex caído | El empleado queda sin respuesta | "Hubo un problema, intenta más tarde" |
 | Escribe texto (no botón) | El bot parece muerto | Acepta SÍ/NO escritos (lista cerrada); cualquier otra cosa recibe la guía y queda visible en el expediente |
-| No → luego Sí (cambia de opinión) | Queda bloqueado como rechazada | Permitir reactivar |
+| Manda nota de voz, foto, sticker, ubicación o documento | Se ignoraba en silencio y la persona quedaba esperando una respuesta que nunca llegaba | Recibe `UNSUPPORTED_MESSAGE`: "por aquí solo puedo leer texto", con la instrucción de escribir SÍ o NO |
+| No → luego Sí (cambia de opinión) | Queda bloqueado como rechazada | **No se reactiva** (sigue en v2, §11): una oferta `rechazada` sale por `not_eligible` y la persona oye "no tienes un adelanto disponible". Tampoco se le puede reenviar la oferta del ciclo actual, porque `rechazada` no es elegible para envío; la vuelta es el **ciclo nuevo**, que le crea una oferta fresca `vigente` |
 | Teléfono no está en la BD | Error en el webhook | "No encontramos tu número… contacta a tu empresa" |
 
 ### 2.1 Ventana para pedir
@@ -109,18 +124,21 @@ y se le entrega en cuanto conteste "Sí" o abra /solicitar, mientras siga vigent
 
 ### Puntos críticos a resolver ANTES de codear
 
-1. **Empate del teléfono (casi resuelto — solo confirmar).** La normalización de
-   **salida ya funciona** (probado con varios teléfonos). Falta confirmar la dirección
-   **inversa**: que el entrante `msg.from` (MX suele venir como `521XXXXXXXXXX`) empate
-   con el `telefono_normalizado` guardado. Al conectar el webhook: **loguear `msg.from`
-   y confirmar que cae en el empleado correcto** — chequeo de 1 minuto, no rediseño.
+1. **Empate del teléfono (RESUELTO).** El entrante llega como `521XXXXXXXXXX`, pero en la
+   base conviven las dos convenciones —con el `1` de móvil y sin él— y uno de cada tres
+   empleados está guardado sin el `1`: buscar por igualdad exacta los dejaba fuera,
+   contestaban al chatbot y el sistema decía no conocerlos. `variantesDeTelefono`
+   (`phone-utils.ts`) busca ambas formas, y cuando ninguna empata la persona recibe
+   `UNKNOWN_NUMBER_MESSAGE` en vez de silencio.
 2. **Ack rápido + procesamiento async.** Hoy el webhook hace `await handleWebhook`
    y *luego* responde 200. Generar el contrato tarda segundos → Meta hace **timeout
    y reintenta** → doble procesamiento. Solución: **responder 200 de inmediato** y
    procesar en la **cola** (`src/lib/queue`, hoy inline).
-3. **Idempotencia de entrada.** Meta puede **reentregar** el mismo evento. Hay que
-   **deduplicar por el id del mensaje entrante** (guardar procesados) para no generar
-   dos veces.
+3. **Idempotencia de entrada (RESUELTA).** Meta puede **reentregar** el mismo evento. El
+   webhook busca en `integration_logs` un inbound con el mismo `correlation_id` antes de
+   procesar; si ya está, lo salta y deja `whatsapp.webhook.duplicate_inbound_skipped`.
+   Queda una ventana de carrera mínima, tolerable porque las operaciones de fondo (reuso
+   del contrato, rechazar la oferta) son idempotentes de todos modos.
 4. **Seguridad del webhook.** Poner `WHATSAPP_APP_SECRET` para validar la firma
    `x-hub-signature-256` (hoy falta; en dev se deja pasar, en prod se rechaza).
 
@@ -129,7 +147,7 @@ y se le entrega en cuanto conteste "Sí" o abra /solicitar, mientras siga vigent
 No hay máquina de estados nueva:
 - `advance_offers.status`: `vigente` / `reemplazada` / `solicitada` / `firmada` / `rechazada`
 - `contract_requests.status`: `recibida` / `generando` / `link_generado` / `firmado` / `error` / `reemplazada`
-- `contract_attempts`: `generado` / `expirado` / `firmado` / `error` + `expires_at` (las 24 h)
+- `contract_attempts`: `generando` / `generado` / `expirado` / `firmado` / `error` + `expires_at` (las 24 h)
 
 El webhook, en cada tap, **lee el estado actual** (`is_current` = oferta de ESTE ciclo)
 y responde según la tabla de edge cases.
@@ -144,6 +162,7 @@ Un **lote de importación nuevo = ciclo nuevo**:
 - La solicitud ACTIVA del ciclo pasado → `reemplazada`, intentos vivos → `expirado`
   (libera el candado de "una activa por empleado").
 - **Las solicitudes `firmado` NO se tocan → evidencia de quién firmó preservada.**
+- **Una firma que llega DESPUÉS de reemplazar el ciclo se guarda como evidencia pero NO revive la solicitud** (`queHacerConLaFirma`, `firma-tardia.ts`). EasyLex no expone forma de cancelar un documento, así que quien ya tenía abierta la pantalla de firma puede terminarla horas más tarde y el webhook llega igual. Revivir esa solicitud metería un pago con el monto ANTERIOR en un ciclo que la empresa ya cerró, y encima invisible: el Excel de dispersión arma el pago con las solicitudes en `firmado` y el tablero solo mira la oferta vigente. Con el enlace de dos horas esto casi no podía pasar; con uno de un día la rendija dura toda la tarde.
 - Reaplicar el MISMO lote sin cambios = no-op (idempotente).
 - El empate del empleado entre ciclos es **por RFC** (`upsertEmployee`). Mismo RFC =
   misma fila = historia limpia. ⚠️ Cuidar RFC consistente en los Excel de import
@@ -157,16 +176,24 @@ Escenarios:
 
 ## 6. Export (flujo de regreso del operador)
 
-- `/api/cycles/[cycleId]/export` → CSV **por ciclo**.
-- Columnas (decisión **B**): **nombre + RFC + monto**. Sin datos bancarios.
+- `/api/cycles/[cycleId]/export` → **Excel** (`.xlsx`) **por ciclo**, rol `operaciones`. El archivo hereda el nombre del que se importó, con "firmados" al final, para saber de un vistazo a qué carga corresponde.
+- Columnas: **nombre + RFC + monto autorizado + total a pagar**. La decisión **B** (nombre + RFC + monto, sin datos bancarios) se cumple, y se le añadió el **total a pagar** —con comisión e IVA, lo que se le descuenta de nómina— porque son cifras distintas y se necesitan las dos: una para dispersar, otra para el descuento. El total se calcula con la MISMA función que llena el contrato, para que el Excel y el pagaré que firmó la persona no puedan discrepar.
 - "Firmó" = `contract_requests.status = 'firmado'` de la oferta de ese lote.
 - Cada ciclo exporta a sus propios firmantes (los ciclos anteriores quedan intactos).
 
 ## 7. Configuración en Meta (checklist)
 
-- [ ] **Plantilla de oferta** `adelanto_nomina_oferta` — categoría **Marketing**
-      (en esta cuenta la entrega a contactos nuevos/fríos **ya está comprobada**, así que
-      Marketing sí entrega; Servicio exigiría copy factual), idioma **Español**,
+> **La entrega de una plantilla Marketing no se decide aquí.** Depende de la
+> categoría y del estado de verificación del negocio, y el documento propietario
+> de eso es [WhatsApp](whatsapp.md#categoría-de-plantilla-y-entrega-importante).
+> Este checklist decía que la entrega a contactos fríos "ya está comprobada" y
+> ese doc dice lo contrario —que Meta filtra Marketing en silencio mientras la
+> verificación siga pendiente—. Se quitó de aquí para que no haya dos versiones:
+> la diferencia decide si un envío masivo llega o se pierde sin error, y hay que
+> resolverla mirando la cuenta en Meta, no este archivo.
+
+- [ ] **Plantilla de oferta** `adelanto_nomina_oferta` — categoría **Marketing**,
+      idioma **Español**,
       header con imagen, **botones "Personalizado"** (quick reply): `Sí, lo quiero` /
       `No, gracias`. 3 variables: `{{1}}` Nombre, `{{2}}` Empleador, `{{3}}` Monto. → a aprobación.
 - [ ] **Webhook** (Meta for Developers → App → WhatsApp → Configuración):

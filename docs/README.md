@@ -17,7 +17,13 @@ Cada tema tiene **un solo documento**. Si un dato aparece en dos sitios, uno de 
 | [Testing](testing.md) | Vitest, Playwright, comandos, cobertura y huecos |
 | [Scripts](scripts.md) | Utilidades de `scripts/` |
 | [Infraestructura](infraestructura.md) | Despliegue: Docker, Railway, CI/CD, Cloud Tasks |
-| [Go-live](go-live.md) | Checklist ordenado de puesta en producción — **empieza aquí para desplegar** |
+| [Go-live](go-live.md) | Checklist ordenado de puesta en producción. **Sus fases de GCP están obsoletas** (producción es Railway); sigue vigente lo de base de datos, seguridad y verificación de terceros |
+| [WhatsApp chatbot](whatsapp-chatbot.md) | Plan del flujo conversacional Sí/No: botones de respuesta rápida, webhook, estados de la oferta. El flujo ya está en código (`src/lib/whatsapp/chatbot.ts`) |
+| [Túnel para pruebas](tunel-pruebas.md) | Runbook: exponer el local con ngrok y registrar el webhook de Meta |
+| [Plan de pruebas del chatbot](plan-pruebas-chatbot.md) | Orden de pruebas pensado para gastar el mínimo de firmas de EasyLex |
+| [Primera prueba end-to-end](primera-prueba-e2e.md) | Runbook de la primera prueba real con un empleado |
+| [Consulta a EasyLex](consulta-easylex.md) | Los asuntos abiertos con su soporte, listos para enviar |
+| [Pasos de deploy](pasos-deploy.md) | Ruta corta del despliegue — **obsoleta: describe el plan de Cloud Run** |
 
 ## Por dónde empezar
 
@@ -39,7 +45,7 @@ Tres hechos que afectan a casi cualquier trabajo sobre este código:
 
 1. **RBAC no bloquea por defecto.** Los roles se comprueban con `requireRole()` y se registran, pero solo devuelven `403` con `RBAC_ENFORCEMENT=enforce`. Hasta activarlo, la autorización efectiva sigue siendo "hay sesión o no". → [Configuración](configuracion.md#roles-y-permisos-rbac)
 2. **El envío masivo corre inline dentro del request HTTP por defecto.** Existe una **cola opt-in** (Cloud Tasks) que se activa por configuración (`QUEUE_DRIVER`/GCP); sin ella, el envío inline es el límite de escalado. → [WhatsApp](whatsapp.md#envío-masivo)
-3. **EasyLex apunta a sandbox por defecto.** Dos variables lo determinan. → [Configuración](configuracion.md#easylex)
+3. **EasyLex no queda listo para producción por defecto.** Dos variables lo determinan: una cae en sandbox si no se fija, y la otra ya no tiene default y lanza excepción. → [Configuración](configuracion.md#easylex)
 
 ## Sobre `skills/`
 

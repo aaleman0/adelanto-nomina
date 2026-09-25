@@ -11,7 +11,7 @@ Las migraciones viven en `supabase/migrations/` y **se aplican manualmente pegá
 | `20250516_whatsapp_migration.sql` | Migración ManyChat → WhatsApp: renombres y tablas `whatsapp_*` |
 | `20250520_fix_backoffice_view_whatsapp.sql` | Redefine las vistas tras el renombre |
 | `20250526_contract_requests_whatsapp_subscriber.sql` | `whatsapp_subscriber_id`; valor `whatsapp` en dos enums |
-| `20250612_fix_whatsapp_message_status_text.sql` | `status` pasa a `text`; **versión autoritativa de las vistas** |
+| `20250612_fix_whatsapp_message_status_text.sql` | `status` pasa a `text`; **versión autoritativa de `backoffice_contract_timeline_v1`** |
 | `20250701_contract_employee_fields.sql` | Campos de empleado para el contrato + `company_settings` |
 | `20250701_easylex_validation_settings.sql` | Flags de validación de EasyLex en `company_settings` |
 | `20260720`–`20260722` | RLS: deny-all, aprovisionamiento de perfiles/roles, políticas por rol (fase B) |
@@ -19,6 +19,8 @@ Las migraciones viven en `supabase/migrations/` y **se aplican manualmente pegá
 | `20260724_whatsapp_message_dedup.sql` | `dedup_key` + índice único parcial (idempotencia de envíos) |
 | `20260730_signed_contracts.sql` | Bucket privado `contratos-firmados` + columna `contract_attempts.signed_pdf_path` (PDF firmado archivado) |
 | `20260731_bulk_send_mode_status.sql` | Amplía el CHECK de `whatsapp_bulk_sends.mode` a `('import','manual','status')` |
+| `20260901_contract_request_reemplazada_status.sql` | Valor `reemplazada` en `contract_request_status`: cierra la solicitud del ciclo anterior al reimportar |
+| `20260925_estado_rechazado_en_control.sql` | Reescribe `backoffice_contract_control_v1` con el estado `rechazado`; **versión autoritativa de esa vista** |
 
 RLS se activa en modo deny-all con `20260720` y se completa con las políticas por rol de `20260722`. Storage tiene tres buckets: `imports`, `import-reports` y `contratos-firmados` (privado, `application/pdf`). Ver [Seguridad](#seguridad-y-control-de-acceso).
 
@@ -31,7 +33,7 @@ RLS se activa en modo deny-all con `20260720` y se completa con las políticas p
 | `import_status` | `recibida`, `validando`, `aplicada`, `aplicada_con_errores`, `fallida` |
 | `row_status` | `pendiente`, `valida`, `invalida`, `duplicada`, `sin_cambios`, `aplicada` |
 | `offer_status` | `vigente`, `reemplazada`, `solicitada`, `firmada`, `rechazada` |
-| `contract_request_status` | `recibida`, `generando`, `link_generado`, `firmado`, `error` |
+| `contract_request_status` | `recibida`, `generando`, `link_generado`, `firmado`, `error`, `reemplazada` |
 | `contract_attempt_status` | `generando`, `generado`, `expirado`, `firmado`, `error` |
 | `integration_status` | `pending`, `success`, `failed`, `retrying` |
 | `integration_provider` | `manychat`, `easylex`, `supabase`, `backend`, `whatsapp` |
@@ -40,6 +42,8 @@ RLS se activa en modo deny-all con `20260720` y se completa con las políticas p
 | `user_role` | `admin`, `operaciones`, `solo_lectura` |
 
 `manychat` y `easylex` siguen presentes en `integration_provider` y `audit_source` por compatibilidad con filas históricas; el código nuevo escribe `whatsapp`.
+
+`reemplazada` en `contract_request_status` es el estado terminal con el que se cierra la solicitud del ciclo ANTERIOR cuando una reimportación crea una oferta nueva para el mismo empleado. Sin él, el índice `contract_requests_one_active_per_employee_idx` impediría generar el contrato del ciclo nuevo. Las solicitudes ya `firmado` no se tocan: ahí vive la evidencia de la firma.
 
 Existe un enum huérfano, `manychat_contract_message_status` (`pendiente_envio`, `enviado`, `entregado`, `click`, `error`, `omitido`). La única columna que lo usaba se convirtió a `text` en `20250612`, así que el tipo ya no gobierna nada.
 
@@ -208,6 +212,7 @@ Cada intento de generar un link de firma dentro de una solicitud.
 | `expires_at`, `generated_at`, `signed_at` | `timestamptz` | |
 | `error_message` | `text` | |
 | `raw_response` | `jsonb` | NOT NULL, default `{}` — respuesta cruda de EasyLex |
+| `signed_pdf_path` | `text` | añadida en `20260730`; ruta del PDF firmado dentro del bucket `contratos-firmados` |
 | `created_at` / `updated_at` | `timestamptz` | trigger `set_updated_at` |
 
 Regenerar un link expirado crea un **nuevo intento** dentro de la misma solicitud; nunca sobrescribe el anterior.
@@ -229,14 +234,14 @@ Columnas: `id`, `employee_id`, `subscriber_id text UNIQUE`, `wa_id`, `telefono_n
 #### `whatsapp_contract_messages`
 Un registro por mensaje de contrato enviado.
 
-Columnas: `id`, `employee_id`, `offer_id`, `contract_request_id`, `whatsapp_subscriber_id`, `message_type text` (default `contract_offer`), `status text`, `bulk_send_id`, `wa_message_id` (el `wamid` de Meta), `delivery_status text` (default `sent`), `delivered_at`, `read_at`, `clicked_at`, `error_message`, `retry_count integer`, `correlation_id`, `metadata jsonb`, `created_at`.
+Columnas: `id`, `employee_id`, `offer_id`, `contract_request_id`, `whatsapp_subscriber_id`, `message_type text` (default `contract_offer`), `status text`, `bulk_send_id`, `wa_message_id` (el `wamid` de Meta), `delivery_status text` (default `sent`), `delivered_at`, `read_at`, `clicked_at`, `error_message`, `retry_count integer`, `correlation_id`, `metadata jsonb`, `created_at`, y al final `dedup_key text` (añadida por `20260724`), sobre la que vive la idempotencia del envío inline.
 
 > **Divergencia real entre instalaciones.** Una base migrada desde ManyChat conserva además `sent_at`, `campaign_name`, `flow_name`, `manychat_contact_id` y `updated_at`; una instalación nueva creada por `20250516` no las tiene. Además, `20250612` quitó el `NOT NULL`, el `DEFAULT` y el tipo enum de `status`, dejándolo como `text` sin restricción: las filas migradas guardan etiquetas en español (`enviado`, `entregado`, `click`) y el código nuevo escribe inglés (`sent`, `delivered`, `read`, `failed`). Las vistas de backoffice aceptan ambos vocabularios.
 
 #### `whatsapp_bulk_sends`
 Un registro por envío masivo.
 
-Columnas: `id`, `mode text CHECK (IN ('import','manual'))`, `import_id`, `employee_ids text[]`, `eligible_count`, `sent_count`, `failed_count`, `delivered_count`, `read_count`, `status text CHECK (IN ('pending','sending','completed','failed'))`, `error_summary text`, `created_by text`, `created_at`.
+Columnas: `id`, `mode text CHECK (IN ('import','manual','status'))`, `import_id`, `employee_ids text[]`, `eligible_count`, `sent_count`, `failed_count`, `delivered_count`, `read_count`, `status text CHECK (IN ('pending','sending','completed','failed'))`, `error_summary text`, `created_by text`, `created_at`.
 
 Los contadores se actualizan con la función `increment_bulk_send_counter`.
 
@@ -295,6 +300,7 @@ La distinción es intencional: `integration_logs` sirve para depurar, `audit_eve
 | `contract_requests_one_active_per_employee_idx` | una sola solicitud activa por empleado (`status IN ('recibida','generando','link_generado')`) |
 | `contract_attempts_easylex_contract_unique_idx` | un `easylex_contract_id` no se repite |
 | `easylex_events_event_id_unique_idx` | idempotencia de webhooks de EasyLex |
+| `uq_whatsapp_messages_dedup` | idempotencia del envío inline: un empleado no recibe dos veces la misma plantilla dentro de una ventana de 5 min |
 
 **De búsqueda:** `employees_telefono_normalizado_idx`, `employees_email_idx`, `advance_offers_employee_status_idx`, `advance_offers_estatus_conversion_idx`, `advance_offers_is_eligible_idx`, `raw_import_rows_batch_status_idx`, `raw_import_rows_rfc_idx`, `contract_requests_status_idx`, `contract_attempts_request_status_idx`, `contract_attempts_expires_at_idx`, `easylex_events_contract_idx`, `integration_logs_provider_created_idx`, `integration_logs_correlation_idx`, `audit_events_employee_created_idx`, `audit_events_entity_idx`, y los `idx_whatsapp_*` sobre las tablas de WhatsApp.
 
@@ -302,7 +308,9 @@ La distinción es intencional: `integration_logs` sirve para depurar, `audit_eve
 
 ## Vistas
 
-Ambas vistas se redefinieron tres veces. **La definición válida es la de `20250612_fix_whatsapp_message_status_text.sql`**; las versiones de `0002` y `20250520` quedaron atrás.
+Ambas vistas nacieron en `0002` y se redefinieron en `20250520` y `20250612`; la de control, además, en `20260925`. **La definición válida de `backoffice_contract_control_v1` es la de `20260925_estado_rechazado_en_control.sql`; la de `backoffice_contract_timeline_v1` sigue siendo la de `20250612_fix_whatsapp_message_status_text.sql`.** Las versiones anteriores quedaron atrás.
+
+`20260925` usa `CREATE OR REPLACE` y no `DROP` + `CREATE` a propósito: un `DROP` perdería el `security_invoker = on` que le puso `20260720`, y la vista volvería a servir datos saltándose la RLS de las tablas base. Por eso repite la definición entera sin cambiar ninguna columna ni su orden.
 
 ### `backoffice_contract_control_v1`
 
@@ -370,12 +378,15 @@ No lo tienen, por diseño: `advance_offer_revisions`, `integration_logs` y `audi
 
 ## Storage
 
-Dos buckets privados creados en `0001` (`ON CONFLICT DO NOTHING`):
+Tres buckets privados, todos con `ON CONFLICT DO NOTHING`: los dos primeros los crea `0001`, el tercero `20260730`.
 
 | Bucket | Límite | MIME permitidos |
 |---|---|---|
 | `imports` | 50 MB | `text/csv`, `application/csv`, `application/vnd.ms-excel`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
 | `import-reports` | 10 MB | `text/csv`, `application/json`, `text/plain` |
+| `contratos-firmados` | 25 MB | `application/pdf` |
+
+`contratos-firmados` guarda el PDF ya firmado que se descarga de EasyLex, y es la fuente de la signed URL temporal que se le manda al empleado: nadie entra directo al bucket. La ruta dentro del bucket vive en `contract_attempts.signed_pdf_path`.
 
 ---
 
@@ -383,7 +394,7 @@ Dos buckets privados creados en `0001` (`ON CONFLICT DO NOTHING`):
 
 **No hay tipos generados.** No existe `database.types.ts` ni un directorio `src/types/`, y no se pasa el genérico `Database` a `createClient` en ningún punto: las consultas a Supabase son sin tipar y cada punto de llamada declara sus propias interfaces.
 
-El espejo más completo del esquema es `src/lib/backoffice/contract-control.ts`, que replica a mano las 41 columnas de `backoffice_contract_control_v1` en `ContractControlRow`, junto con `ContractOperationalStatus` (los 9 valores del `CASE`, en el mismo orden), `ContractControlFilters`, `ContractControlData`, `DashboardKpis` y la constante `CONTRACT_CONTROL_SELECT` con la lista explícita de columnas.
+El espejo más completo del esquema es `src/lib/backoffice/contract-control.ts`, que replica a mano las 39 columnas de `backoffice_contract_control_v1` en `ContractControlRow`, junto con `ContractOperationalStatus` (los 10 valores del `CASE`, `rechazado` incluido, aunque no en el orden en que el `CASE` los evalúa), `ContractControlFilters`, `ContractControlData`, `DashboardKpis` y la constante `CONTRACT_CONTROL_SELECT` con la lista explícita de columnas.
 
 Como no hay generación automática, **cualquier cambio de esquema exige actualizar estos tipos a mano**; el compilador no lo detecta.
 

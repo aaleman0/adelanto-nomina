@@ -26,11 +26,11 @@ Esa separación permite revisar errores antes de comprometer datos. No la fusion
 
 - **Mantener `batch_id` y `row_id` en todo dato derivado.** `employees`, `employee_bank_accounts` y `advance_offers` guardan `source_batch_id` y `source_row_id`; desde cualquier registro se llega a la línea exacta del archivo.
 - **Conservar el valor original.** `raw_payload` guarda la fila tal como llegó; `normalized_payload` la versión limpia. La auditoría depende de esa pareja.
-- **No invalidar el lote por errores aislados.** Solo faltar columnas estructurales lo justifica.
+- **El lote se aplica solo si sale impecable.** Faltar una columna estructural lo deja `fallida`; cualquier fila inválida o duplicada lo deja `aplicada_con_errores` ya en la carga, y el apply lo rechaza porque solo acepta `validando`. Las filas malas se conservan en staging con su detalle: el camino es corregir el archivo y volver a cargarlo, no aplicar a medias.
 - **Preferir upsert por RFC.** El teléfono no autentica identidad: si dos filas lo comparten, resuelve por RFC y registra advertencia.
 - **Convertir montos a decimal**, nunca a texto.
-- **No crear ruido al reimportar.** Sin cambios relevantes → `sin_cambios`, sin oferta ni revisión nuevas. Con cambios → nueva versión de oferta, la anterior a `reemplazada`.
-- **No modificar lo firmado.** Una importación posterior no altera una oferta ya firmada.
+- **No crear ruido al REAPLICAR el mismo lote.** Mismo `source_batch_id` y mismo hash → `sin_cambios`, sin oferta ni revisión nuevas (`isUnchangedReapply`). Un lote NUEVO es un ciclo nuevo: siempre nueva versión de oferta —aunque el monto no cambie—, la anterior a `reemplazada`, y el contrato del ciclo anterior cerrado con su enlace vencido en el acto.
+- **No modificar lo firmado.** Una importación posterior no toca la solicitud en `firmado` ni su snapshot —son la evidencia y la base del pago—, pero sí reemplaza la oferta firmada: el ciclo nuevo necesita la suya.
 
 ## Dos trampas concretas
 
@@ -39,4 +39,4 @@ Esa separación permite revisar errores antes de comprometer datos. No la fusion
 
 ## Salidas esperadas
 
-Tablas actualizadas, reporte de errores por fila accesible desde el backoffice, resumen de cambios aplicados y eventos de auditoría tanto de la importación como de los upserts.
+Tablas actualizadas, detalle de errores por fila guardado en `raw_import_rows` (`errors`/`warnings`; ninguna pantalla lo lista todavía: la carga solo muestra los conteos), resumen de cambios aplicados y eventos de auditoría tanto de la importación como de los upserts.

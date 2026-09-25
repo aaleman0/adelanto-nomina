@@ -2,7 +2,7 @@
 
 ## Qué es este sistema
 
-Un backoffice interno para operar adelantos de nómina masivos. **El empleado nunca entra a esta aplicación**: recibe un mensaje de WhatsApp, toca un botón, y firma en EasyLex. La app existe para que el equipo interno tenga control visual, evidencia y trazabilidad de ese proceso.
+Un backoffice interno para operar adelantos de nómina masivos. **El empleado no usa el backoffice**: recibe un mensaje de WhatsApp, contesta, y firma en EasyLex. Sí pasa por dos pantallas públicas de esta misma app, ninguna con sesión: `/solicitar/[token]`, el auto-servicio donde pide el adelanto por su cuenta (el token firmado es su autenticación), y `/firmar/[signerId]`, que valida el intento y lo manda al enlace de EasyLex. La app existe para que el equipo interno tenga control visual, evidencia y trazabilidad de ese proceso.
 
 ## Componentes y responsabilidades
 
@@ -29,29 +29,49 @@ POST /api/imports ────────► import_batches + raw_import_rows  
   ▼
 POST /api/imports/[batchId]/apply
   │                        upsert por RFC → employees, employee_bank_accounts, advance_offers
+  │                        lote nuevo = ciclo nuevo: la oferta anterior pasa a `reemplazada`
+  │                        y la solicitud que siguiera activa se cierra con su enlace vencido
   ▼
-POST /api/whatsapp/bulk ──► valida elegibilidad → envía plantilla en lotes de 100
+POST /api/whatsapp/bulk ──► valida elegibilidad (oferta vigente y elegible, no
+  │                        rechazada/solicitada/firmada, cuenta bancaria activa)
+  │                        envía la plantilla en lotes de 100
   │                        registra whatsapp_bulk_sends + whatsapp_contract_messages
+  │                        este envío (`bulk_contract_offer`) es lo ÚNICO que abre la
+  │                        ventana para pedir: 24 h, que en la práctica corren desde el envío
   ▼
-El empleado recibe el mensaje y toca el botón
+El empleado recibe el mensaje y contesta
   │
-  ▼
-POST /api/whatsapp/request-contract
-  │   1. busca empleado por RFC
-  │   2. valida oferta vigente + elegible + cuenta bancaria activa
-  │   3. reutiliza solicitud/intento si ya existe (idempotencia)
-  │   4. genera el PDF del contrato
-  │   5. crea el documento en EasyLex
-  │   6. guarda easylex_contract_id, signing_url, expires_at (+24 h)
-  ▼
-El empleado firma en EasyLex
+  ├─ "No, gracias" ──► POST /api/webhooks/whatsapp → advance_offers → rechazada
+  │                    la vista lo muestra como `rechazado`: no es lo mismo que no
+  │                    haber contestado, y a él no se le reenvía la oferta
+  │
+  └─ "Sí, lo quiero" ──► POST /api/webhooks/whatsapp (chatbot), o /solicitar/[token]
+       │                 si pide por su cuenta desde el enlace de auto-servicio
+       │   0. ¿su ventana está abierta? (`ventanaDeLaPersona` + `pasoAlPedir`); si no,
+       │      se le explica por qué y NO se genera nada
+       │   1. busca empleado por RFC (el chatbot entra por teléfono y resuelve su fila)
+       │   2. valida oferta vigente + elegible
+       │   3. reutiliza solicitud/intento si ya existe (idempotencia)
+       │   4. genera el PDF del contrato
+       │   5. crea el documento en EasyLex
+       │   6. guarda easylex_contract_id, signing_url (`/firmar/[signerId]`), expires_at (+24 h)
+       ▼
+El empleado abre /firmar/[signerId] y firma en EasyLex
   │
   ▼
 POST /api/webhooks/easylex/sign  (eventType = DOCUMENT_SIGNED)
-      contract_attempts → firmado
-      contract_requests → firmado
-      advance_offers    → firmada
+      solicitud en curso (recibida/generando/link_generado):
+        contract_attempts → firmado
+        contract_requests → firmado
+        advance_offers    → firmada
+      solicitud fuera de curso (p. ej. `reemplazada` por un ciclo nuevo):
+        se guarda la evidencia y NO se revive la solicitud (`firma-tardia.ts`),
+        porque el Excel de dispersión paga lo que esté en `firmado`
       audit_events + integration_logs
+  │
+  ▼
+GET /api/cycles/[cycleId]/export ──► Excel de dispersión: quienes firmaron el ciclo,
+                                     con monto autorizado y total a pagar
 ```
 
 El backoffice observa todo esto a través de la vista `backoffice_contract_control_v1`, que colapsa el estado a un único `operational_status` por empleado.
@@ -73,7 +93,7 @@ El backoffice observa todo esto a través de la vista `backoffice_contract_contr
 | RLS en Supabase | Fase A (deny-all) y Fase B (políticas por rol, `20260722`) aplicadas. Las lecturas del backoffice usan service role hasta encender `RLS_SESSION_READS` |
 | Roles y permisos | Implementado, en modo `warn` por defecto |
 | Cola de envío masivo | Implementada (Cloud Tasks), desactivada por defecto |
-| Pagos y CEP | **No existe código** |
+| Pagos y CEP | **No existe código.** Lo único que hay es el Excel de dispersión (`GET /api/cycles/[cycleId]/export`): la lista de quienes firmaron el ciclo con monto autorizado y total a pagar. El pago y su comprobante se hacen fuera del sistema |
 
 > Documentación anterior describía EasyLex como "fase 8 pendiente" y el envío de mensajes vía ManyChat. Ambas cosas están obsoletas: ManyChat se retiró y EasyLex está integrado de verdad.
 
@@ -83,7 +103,9 @@ El backoffice observa todo esto a través de la vista `backoffice_contract_contr
 El empleado se identifica por RFC, no por teléfono. Si dos filas comparten teléfono, gana el RFC. Si el mismo RFC llega con otro teléfono, se actualiza el teléfono. `employees.rfc` es `UNIQUE`.
 
 ### Ofertas versionadas, no sobrescritas
-Una reimportación sin cambios reales no crea nada. Con cambios, se crea una **nueva versión** de la oferta y la anterior queda `reemplazada` con `replaced_by_offer_id`. Un índice único parcial garantiza una sola oferta `is_current` por empleado. El motivo del cambio queda en `advance_offer_revisions`.
+Reaplicar el **mismo** lote sin cambios reales no crea nada. Cualquier lote nuevo, en cambio, es un **ciclo nuevo**: crea una **nueva versión** de la oferta —aunque el monto sea idéntico— y la anterior queda `reemplazada` con `replaced_by_offer_id`. Esa es la vía por la que el empleado recurrente vuelve a ser elegible. Un índice único parcial garantiza una sola oferta `is_current` por empleado. El motivo del cambio queda en `advance_offer_revisions`.
+
+Al reemplazar, `supersedePreviousContract` cierra el contrato del ciclo anterior: la solicitud que siguiera activa pasa a `reemplazada` y sus intentos vivos a `expirado` **con el `expires_at` adelantado a ahora**. Adelantar el reloj es la única revocación que existe —EasyLex no expone forma de cancelar un documento—, y sin ella el enlace del ciclo viejo seguiría firmando el monto viejo: mientras el enlace duraba dos horas la rendija se cerraba sola, con un día dura toda la tarde. Las solicitudes ya `firmado` no se tocan: son la evidencia.
 
 ### Snapshot congelado del contrato
 Al crear la solicitud se guarda `contract_snapshot` con los datos usados. Una importación posterior puede cambiar el monto del empleado sin alterar lo que ya se firmó.
@@ -108,7 +130,7 @@ Ninguno de estos es un bug aislado; son propiedades del diseño actual que convi
 
 1. **La cola existe pero no está activada.** El envío masivo soporta Cloud Tasks (una tarea por mensaje, con reintentos e idempotencia), pero por defecto sigue en modo inline dentro del request HTTP. Mientras no se configure GCP, un lote grande depende del timeout del entorno. Ver [WhatsApp](whatsapp.md#cola).
 2. **RBAC arranca en modo `warn`.** Los roles se comprueban y se registran, pero no bloquean hasta poner `RBAC_ENFORCEMENT=enforce`. Es deliberado —todos los perfiles nacen como `solo_lectura`— pero mientras siga en `warn` la autorización sigue siendo efectivamente binaria. La UI sí refleja el rol siempre (oculta Ajustes, deshabilita botones), con independencia del flag.
-3. **RLS sigue en fase A.** Deny-all activo, pero la app consulta con service role, así que las políticas por rol aún no son el punto de aplicación.
+3. **Las políticas de RLS todavía no son el punto de aplicación.** Fase A (deny-all) y fase B (políticas por rol) están aplicadas, pero la app lee con service role mientras `RLS_SESSION_READS` no valga `on`, así que las políticas no deciden nada aún.
 4. **No hay tipos generados de la base.** Los tipos son manuales; un cambio de esquema no rompe la compilación.
 5. **El esquema difiere entre instalación nueva y migrada** en `whatsapp_contract_messages`.
 6. **Rate limiting en memoria, por instancia.** Webhooks y escrituras caras están limitados (`src/lib/security/rate-limit.ts`), pero el estado no se comparte entre instancias: con N réplicas el límite efectivo es N× el configurado. Frena el abuso trivial, no un atacante distribuido. Sustituir el store por Redis cuando haga falta un límite global exacto.
@@ -122,32 +144,33 @@ Los detalles de cada uno están en [Base de datos](base-de-datos.md#seguridad-y-
 ```
 src/
   app/
+    (operacion)/    tablero con sesión: Pendientes (raíz), Nómina, Ofertas, Personas, Ajustes;
+                    cada ruta con su carpeta `_ui/` y sus server actions
     api/            route handlers (ver docs/api.md)
     auth/           callback y logout de OAuth
-    contracts/      control de contratos + detalle + server actions
-    imports/        pantalla de importación
-    whatsapp/       dashboard, envío, historial, detalle de envío
-    settings/       configuración de WhatsApp, plantillas, auditoría de teléfonos
-    firmar/         redirector al link de firma de EasyLex
+    solicitar/      auto-servicio del empleado con token firmado (público, sin sesión)
+    firmar/         redirector al link de firma de EasyLex (público, sin sesión)
     login/          pantalla y acción de Google OAuth
-    layout.tsx      único layout: fuentes, ToastProvider
+    layout.tsx      layout raíz: fuentes y MotionProvider (el grupo (operacion) tiene el suyo)
     globals.css     tokens de diseño (Tailwind v4 CSS-first)
-  components/
-    ui/             primitivas: Button, Card, DataTable, StatusBadge, Toast…
-    layout/         AppShell, SidebarFrame, UserControls
-    contracts/      tabla, filtros, detalle, timeline
-    whatsapp/       dashboard, historial, plantillas, send-flow (asistente de 4 pasos + resultado)
-    imports/        formulario de subida, botón de aplicar
-    dashboard/      cockpit de operación
+  ui/               marco y primitivas del tablero: shell, nav, button, surface, status, toast…
   lib/
-    supabase/       clientes: admin (service role), session (SSR), middleware
-    whatsapp/       cliente Meta, elegibilidad, envío masivo, plantillas, webhooks, teléfonos
-    contracts/      reglas de solicitud, acciones de backoffice, firma mock
+    supabase/       clientes: admin (service role), session (SSR), middleware, read-client
+    whatsapp/       cliente Meta, elegibilidad, envío masivo, plantillas, webhooks, chatbot, teléfonos
+    contracts/      reglas de solicitud, ventana de oferta, TTL del enlace, firma tardía,
+                    acciones de backoffice, sincronización de firmas, firma mock
     easylex/        cliente API, generación de PDF, monto en letra
     imports/        parseo y validación de CSV, aplicación del lote
     backoffice/     modelos de lectura sobre las vistas
     google/         generación alternativa de PDF vía Google Docs
-    env.ts          validación con zod (único uso de zod)
+    auth/           roles (RBAC) y lista de acceso
+    security/       rate limiting, firmas de webhook, auth de Cloud Tasks
+    queue/          driver de cola: inline por defecto, Cloud Tasks si está configurado
+    audit/          audit_events + integration_logs (único punto de escritura)
+    observability/  Sentry opcional
+    api/            validación de entrada con zod (`parseJsonBody`/`parseQuery`)
+    hooks/          hooks de cliente
+    env.ts          validación de variables de entorno con zod
     logger.ts       logging estructurado
   proxy.ts          gate de autenticación (convención Next.js 16)
 supabase/migrations/  esquema, aplicado a mano en el SQL Editor

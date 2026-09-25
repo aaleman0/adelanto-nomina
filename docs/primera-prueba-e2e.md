@@ -15,7 +15,7 @@ Herramienta estrella de observación en todo el proceso: **`node scripts/inspect
    - Datos personales completos (`estado_civil`, `nacionalidad`, `lugar_origen`, `fecha_nacimiento`, `domicilio`) — recuerda: el empleado **no** puede rellenar huecos, el contrato debe salir completo.
    - Oferta vigente y **elegible** + **CLABE activa**.
    - Un **teléfono que tú controles** (para hacer clic y completar los biométricos con un INE real).
-3. **🧑 Las 5 claves `(LLENAR)` de `company_settings`** llenas (banco/cuenta/CLABE del acreedor + 2 testigos), desde "Datos de empresa". La identidad del acreedor ya tiene respaldo, no bloquea.
+3. **🧑 Las 5 claves `(LLENAR)` de `company_settings`** llenas (banco/cuenta/CLABE del acreedor + 2 testigos), desde "Datos del acreedor" (`/ajustes/empresa`). La identidad del acreedor ya tiene respaldo, no bloquea.
 
 > Verifica los prerrequisitos 1 y 2 de un golpe: `pnpm dlx tsx scripts/verify-contracts-batch.ts --audit-only` → el empleado de prueba debe aparecer entre los "listos". Y `node scripts/inspect-employee.mjs <RFC>` para confirmar oferta + CLABE.
 
@@ -25,7 +25,7 @@ Herramienta estrella de observación en todo el proceso: **`node scripts/inspect
 
 | Paso | Verificar |
 |---|---|
-| 🧑 Deploy a Cloud Run con URL pública + `NEXT_PUBLIC_APP_URL` real | La portada carga con sesión |
+| 🧑 Deploy a Railway con URL pública + `NEXT_PUBLIC_APP_URL` real (push a `main`; no hay staging, así que ese entorno público es producción) | La portada carga con sesión |
 | 🧑 Montar credenciales de Google (`google_oauth_client.json` + `token.json`) en el contenedor | Sin esto **ningún** contrato se genera (falla con `ENOENT`) |
 | 🧑 Env vars de prod: `EASYLEX_BASE_URL=https://api.easylex.com`, `EASYLEX_SIGNING_LINK_BASE_URL=https://easylex.com/documento/firma`, llaves de EasyLex/WhatsApp/Supabase | — |
 | 🧑 WhatsApp: **token permanente** (System User) + `WHATSAPP_APP_SECRET` | `GET /api/health/whatsapp` en verde; el banner de salud del portal sin alertas |
@@ -57,7 +57,7 @@ Aquí se prueba lo más incierto **antes** de meter a una persona real.
 
 ## Fase 4 — La corrida real (una persona)
 
-> **Abre la ventana de 24 h primero.** Para que el **PDF firmado regrese automático** por WhatsApp, el empleado debe tener una sesión abierta: que **envíe cualquier mensaje** ("hola") al número del negocio antes de firmar. Hacer clic en el botón del link **no** abre sesión. Sin sesión, el PDF **igual se archiva** y se reenvía a mano desde el backoffice (no se pierde).
+> **Abre la ventana de sesión de Meta (24 h) primero.** No la confundas con las otras dos de 24 h que hay en el sistema: la ventana para PEDIR el adelanto (`VENTANA_OFERTA_HORAS`, que abre la empresa al enviar la oferta) y la vida del enlace de firma (`LINK_TTL_HOURS`, desde que se generó el contrato). Son tres plazos de reglas distintas que hoy coinciden en el número por casualidad; el de aquí es el de Meta. Para que el **PDF firmado regrese automático** por WhatsApp, el empleado debe tener una sesión abierta: que **envíe cualquier mensaje** ("hola") al número del negocio antes de firmar. Hacer clic en el botón del link **no** abre sesión. Sin sesión, el PDF **igual se archiva** y se reenvía a mano desde el backoffice (no se pierde).
 
 | # | Etapa | Acción | Cómo verificar |
 |---|---|---|---|
@@ -70,7 +70,7 @@ Aquí se prueba lo más incierto **antes** de meter a una persona real.
 | 7 | Webhook de firma | 🤖 | Logs del webhook; `audit_events` con `contract.signed`; `inspect-employee` → `firmado` |
 | 8 | PDF firmado de vuelta | 🤖 | `contract_attempts.signed_pdf_path` con archivo; `audit_events` `contract.signed_delivered`; llega el PDF al WhatsApp |
 
-Si algo se atora, ve la tabla de diagnóstico de abajo. El expediente del backoffice (`/contracts/[employeeId]`) debe terminar en **Firmado** con botón para descargar/reenviar el PDF.
+Si algo se atora, ve la tabla de diagnóstico de abajo. El expediente del backoffice (`/personas/[empleadoId]`) debe terminar en **Firmado** con botón para descargar/reenviar el PDF.
 
 ---
 
@@ -95,7 +95,9 @@ Si algo se atora, ve la tabla de diagnóstico de abajo. El expediente del backof
 | El link abre "sitio no disponible" | `EASYLEX_SIGNING_LINK_BASE_URL` mal; debe ser `easylex.com/documento/firma` |
 | No llega el WhatsApp del link | Token/plantilla; `link_enviado:false` en la respuesta; el contrato igual quedó generado |
 | Firma hecha pero expediente no pasa a Firmado | Webhook no cableado / secreto distinto en el dashboard de EasyLex; revisar logs del webhook |
-| No regresa el PDF firmado | Ventana de 24 h cerrada (el empleado no escribió) → archivado; reenviar desde el backoffice |
+| No regresa el PDF firmado | Ventana de sesión de Meta cerrada (el empleado no escribió) → archivado; reenviar desde el backoffice |
+| El link muestra "Este enlace ya venció" en vez de abrir EasyLex | El puente `/firmar/[signerId]` corta antes de redirigir: o el intento pasó su `expires_at`, o dejó de estar en `generado` porque un ciclo nuevo lo reemplazó. Hay que regenerar el enlace desde el expediente |
+| El link muestra "Este contrato ya está firmado" | El mismo puente: el intento está en `firmado`. No hay nada que hacer, el adelanto sigue su curso |
 
 ---
 

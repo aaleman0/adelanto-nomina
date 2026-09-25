@@ -25,7 +25,7 @@ Al probar el webhook de Meta, usa `postSignedWebhook` de `helpers/meta-signature
 
 3. **Los tests escriben en la base real.** No hay base de prueba separada. Nunca apuntes la suite a producción.
 
-CI (`.github/workflows/ci.yml`) corre lint, tipos, tests unitarios, build, Gitleaks y `pnpm audit`. **No corre E2E** hasta que `flows` esté reescrita.
+CI (`.github/workflows/ci.yml`) corre lint, tipos, tests unitarios, build, Gitleaks, `pnpm audit` y —si el repositorio tiene `SUPABASE_PROJECT_ID`— la comprobación de deriva de los tipos de base. **No corre E2E, y no es algo que vaya a resolverse solo:** haría falta un Supabase de prueba y las credenciales de Google montadas. Además `smoke` y `flows` están hoy rotas por otra razón: navegan a `/contracts`, `/imports`, `/settings/whatsapp` y `/whatsapp/*`, rutas que el backoffice reconstruido bajo `src/app/(operacion)/` ya no sirve. Un cambio puede pasar en verde con la suite E2E entera inservible.
 
 ## Cómo validar bien
 
@@ -46,11 +46,11 @@ Mantén las pruebas E2E fuera de `src`. No mezcles pruebas lentas de flujo con s
 
 Los huecos más relevantes hoy, por si el trabajo justifica cerrarlos:
 
-- **No hay ni un test de componente**, pese a que jsdom, Testing Library y `msw` están instalados.
-- **`src/lib/imports/` no tiene tests unitarios.** Normalización, duplicados y versionado de ofertas concentran reglas de negocio y solo se validan indirectamente por E2E.
-- **`src/lib/backoffice/` tampoco.** Los modelos de lectura y la traducción de filtros no están cubiertos.
+- **Testing Library y `msw` siguen sin usarse.** Hay un solo test de componente, `src/app/solicitar/[token]/page.test.tsx`, y no usa ninguna de las dos: llama al componente de servidor como función y serializa su árbol con `renderToStaticMarkup`. No hay nada probado con DOM real ni con peticiones interceptadas.
+- **`src/lib/backoffice/` no tiene tests unitarios.** Los modelos de lectura y la traducción de filtros no están cubiertos, y ahí vive el vocabulario de estados operativos, `rechazado` incluido.
+- **`src/lib/google/` y los route handlers tampoco.**
 
-Los tests unitarios existentes cubren elegibilidad, parseo del payload de contrato, normalización de teléfonos y monto en letra.
+Los tests unitarios son hoy 40 archivos y 434 casos, y cubren bastante más que lo básico: la ventana para pedir (`ventana-oferta`, con las dos pruebas que impiden volver a derivarla del TTL del enlace de firma), la firma tardía, la solicitud previa, el chatbot entero y su paso por la ventana, el CSV de importación completo y las funciones de decisión de `apply.ts`, firmas de webhook de Meta y de EasyLex, rate limit, roles, cola, y el invariante de RLS (20 casos, apagados salvo `RUN_RLS_CHECK=1`).
 
 ## Reglas
 

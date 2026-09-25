@@ -28,7 +28,7 @@ Nombre estable · fecha y hora · entidad afectada · estado anterior y nuevo cu
 
 ## Flujos que deben generar evidencia
 
-Importación recibida, validada y aplicada · fila inválida o duplicada · empleado actualizado · oferta creada o reemplazada · solicitud de contrato recibida · elegibilidad aprobada o rechazada · documento creado en EasyLex · link enviado · contrato firmado · error de integración y reintento · corrección masiva de teléfonos.
+Importación recibida, validada y aplicada · fila inválida o duplicada · empleado actualizado · oferta creada o reemplazada · solicitud de contrato recibida · elegibilidad aprobada o rechazada · oferta rechazada por la persona · documento creado en EasyLex · link enviado · contrato firmado · firma recibida sobre una solicitud que ya no está en curso · error de integración y reintento · corrección masiva de teléfonos.
 
 ## Correlación
 
@@ -45,11 +45,12 @@ Permite cruzar por: `batch_id`, `row_id`, `employee_id`, `offer_id`, `contract_r
 
 Al auditar, empieza por aquí:
 
-1. **Todo pasa por el módulo compartido** (`src/lib/audit/`): `recordAuditEvent` y `recordIntegrationLog`. Ya no hay helpers privados ni inserts directos a `audit_events`/`integration_logs` repartidos por el código; los sitios que los tenían (`request-contract.ts`, `mock-sign.ts`, `imports/apply.ts`, backoffice) delegan en él.
-2. **La idempotencia del webhook de EasyLex tiene un hueco**: si falta `webhookId`, el `event_id` se sintetiza con `Date.now()` y nunca colisiona, así que el evento se procesa siempre.
-3. **La corrección masiva de teléfonos no es transaccional** y registra un único `audit_events` con `entity_id: "bulk"`, sin detalle por empleado. No se puede reconstruir qué número tenía cada uno.
+1. **El módulo compartido (`src/lib/audit/`) es la vía principal, pero no la única.** Delegan en `recordAuditEvent` / `recordIntegrationLog`: `request-contract.ts`, `mock-sign.ts`, `imports/apply.ts`, `deliver-signed-contract.ts`, `phone-audit/fix` y las acciones de backoffice **para `audit_events`**. Siguen escribiendo directo: el webhook de firma de EasyLex (`webhooks/easylex/sign/route.ts`, que inserta su `audit_events` con su propio guard de idempotencia, y su `integration_logs`), el webhook de WhatsApp (`whatsapp/webhooks.ts`) y el helper privado `createIntegrationLog` de `backoffice-actions.ts`. Importa porque la redacción de PII vive en el módulo (`redactPII`), no en la tabla: los dos webhooks la aplican a mano y hay que comprobar que lo sigan haciendo; el de backoffice no la necesita porque solo mete identificadores internos.
+2. **La idempotencia de `easylex_events` tiene un hueco**: si falta `webhookId`, el `event_id` se sintetiza con `Date.now()` y nunca colisiona, así que un reintento de EasyLex duplica la fila de evidencia. La firma en sí no se reprocesa: de eso se encargan el guard `contract_attempts.status = 'firmado'` al entrar y la comprobación previa del `audit_events` de firma por `entity_id` + `event_name`. El hueco ensucia la evidencia, no el estado.
+3. **La corrección masiva de teléfonos no es transaccional**: es un bucle de `update` por empleado y, si uno falla, los anteriores quedan aplicados. Registra un único `audit_events` con `entity_id: null` y el detalle en `metadata` (`fixed`, `errors`, `employee_ids`) — antes iba la cadena `"bulk"` en una columna `uuid`, el insert fallaba en silencio y la corrección se quedaba sin rastro. Lo que sigue faltando es el número ANTERIOR: se sabe a quién se le tocó el teléfono, no qué tenía antes.
 4. **El actor ya se registra** en las acciones de backoffice: `recordAuditEvent` recibe el `Actor` de la sesión y guarda `actor_id`, más el correo y el rol en `metadata`. Al añadir una acción nueva, pásalo — si no, vuelve el problema de no saber quién hizo qué.
 5. **`whatsapp_contract_messages.status` no tiene restricción** y convive en dos idiomas. Cualquier consulta de auditoría debe contemplar ambos vocabularios.
+6. **El rechazo de la oferta no deja evidencia.** `handleNo` pone `advance_offers.status = 'rechazada'` y solo lo escribe en el log de la aplicación (`whatsapp.chatbot.no`), sin `audit_events`. El tablero ya distingue a quien dijo que no (`operational_status = 'rechazado'`), pero el timeline no: la vista no lee `advance_offers`, así que en el expediente de esa persona no aparece nada. Y es la decisión que más importa registrar: a los silenciosos se les reenvía la oferta, a quien dijo que no no se le molesta.
 
 ## Checklist de revisión
 

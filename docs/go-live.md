@@ -83,7 +83,7 @@ Hoy el flujo ya se considera **funcional para pruebas operativas manuales**:
 - [ ] Verificación del negocio en Meta (si se enviará a números fríos / marketing).
 
 *Deploy:*
-- [ ] Desplegar a Cloud Run (URL pública) + `NEXT_PUBLIC_APP_URL` con el dominio real.
+- [x] Desplegar (URL pública): corre en **Railway**, que construye con el `Dockerfile` en cada push a `main`. Queda pendiente `NEXT_PUBLIC_APP_URL` con el dominio real — **se inlinea en build**, así que va como variable de build, no basta cambiarla en runtime.
 - [ ] Variables de prod en el entorno (no en `.env.local`): `EASYLEX_BASE_URL=https://api.easylex.com`, `EASYLEX_SIGNING_LINK_BASE_URL=https://easylex.com/documento/firma`, y las llaves de EasyLex/WhatsApp/Supabase.
 
 *Webhooks (ya con URL pública):*
@@ -124,8 +124,12 @@ Van primero porque tienen tiempos de espera ajenos.
       `20260724_whatsapp_message_dedup.sql` (dedup de envíos),
       `20260730_signed_contracts.sql` (bucket `contratos-firmados` + `signed_pdf_path`),
       `20260731_bulk_send_mode_status.sql` (arregla el CHECK de `whatsapp_bulk_sends.mode`,
-      que hoy hace fallar con 500 el envío en lote por etapa). En una base nueva, aplicar
-      **todas** las de `supabase/migrations/` en orden.
+      que hoy hace fallar con 500 el envío en lote por etapa),
+      `20260901_contract_request_reemplazada_status.sql` (estado `reemplazada` al reaplicar
+      un ciclo),
+      `20260925_estado_rechazado_en_control.sql` (estado operativo `rechazado`: sin ella el
+      tablero no distingue a quien dijo que no de quien nunca contestó). En una base nueva,
+      aplicar **todas** las de `supabase/migrations/` en orden.
 - [ ] **Verificar RLS:** `set -a; . ./.env.local; set +a; pnpm verify:rls` → 18 tablas
       + 2 vistas a 0 filas con la anon key.
 - [ ] 🧑 Completar las **5 claves `(LLENAR)` de `company_settings`** (datos de la
@@ -190,8 +194,9 @@ Van primero porque tienen tiempos de espera ajenos.
       manda el `callbackUrl` por documento. Probar firmando un contrato real → el
       expediente pasa a **Firmado**. Config de EasyLex: [EasyLex y contratos](easylex-contratos.md).
 - [ ] 🧑 **Firma en producción:** `EASYLEX_BASE_URL=https://api.easylex.com` y
-      `EASYLEX_SIGNING_LINK_BASE_URL=https://easylex.com/documento/firma` (los defaults
-      apuntan a sandbox/dominios muertos). Botón de la plantilla `adelanto_contrato_listo`
+      `EASYLEX_SIGNING_LINK_BASE_URL=https://easylex.com/documento/firma` (la primera tiene
+      default a sandbox; la segunda ya no tiene default y lanza excepción si falta). Botón de
+      la plantilla `adelanto_contrato_listo`
       con base `https://easylex.com/documento/firma/` + `{{1}}`.
 ### Chatbot de WhatsApp (botones Sí/No) — ver [whatsapp-chatbot.md](whatsapp-chatbot.md)
 

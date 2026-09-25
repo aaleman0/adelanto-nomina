@@ -19,7 +19,7 @@ Dos vías, y **las variables de entorno tienen precedencia** sobre lo guardado e
 
 **Variables de entorno** — recomendado. Ver [Configuración](configuracion.md).
 
-**UI del backoffice** — `Ajustes → Conexión` (`/settings/whatsapp`), requiere rol `admin`. Escribe en `settings` vía `POST /api/whatsapp/config`.
+**UI del backoffice** — `Ajustes → WhatsApp` (`/ajustes/whatsapp`), requiere rol `admin`. Escribe en `settings` vía `POST /api/whatsapp/config`.
 
 > La UI ya **no acepta** el access token ni el app secret: se guardaban en texto plano y las variables de entorno tienen precedencia de todas formas. Solo se configuran por entorno.
 
@@ -57,9 +57,13 @@ En desarrollo local hace falta un túnel público (ngrok o equivalente); `localh
 
 ### Qué hace al recibir eventos
 
-Busca el mensaje por `wa_message_id` y actualiza `delivered_at`, `read_at` o `error_message` en `whatsapp_contract_messages`, además de incrementar los contadores del envío masivo vía el RPC `increment_bulk_send_counter`.
+Dos cosas distintas, según el evento.
 
-Solo responde a mensajes entrantes si `WHATSAPP_DEBUG_AUTO_REPLY === "true"`.
+**Estados de entrega:** busca el mensaje por `wa_message_id` y actualiza `delivered_at`, `read_at` o `error_message` en `whatsapp_contract_messages`, además de incrementar los contadores del envío masivo vía el RPC `increment_bulk_send_counter`. Un estado que no encuentra su mensaje deja el log `whatsapp.delivery_status.no_match` en vez de perderse en silencio.
+
+**Mensajes entrantes:** los atiende el **chatbot** (`handleInboundMessage`), que es quien decide la rama Sí/No y genera el contrato. Ver [WhatsApp Chatbot](whatsapp-chatbot.md). Antes de procesar, cada mensaje se guarda en `integration_logs` y se descarta si ya hay uno inbound con el mismo `correlation_id`: Meta reentrega el mismo evento y sin eso se generarían contratos por duplicado.
+
+`WHATSAPP_DEBUG_AUTO_REPLY === "true"` **bypassa el chatbot** y contesta un eco de conectividad. Es solo para comprobar que el webhook llega: con esa variable puesta nadie puede pedir su adelanto por WhatsApp.
 
 ### Seguridad del webhook
 
@@ -73,20 +77,25 @@ Las plantillas se aprueban en Meta y se cachean localmente en `whatsapp_template
 
 | Acción | Cómo |
 |---|---|
-| Sincronizar desde Meta | `Ajustes → Plantillas` o `POST /api/whatsapp/templates/sync` |
+| Sincronizar desde Meta | `Ajustes → Plantillas` (`/ajustes/plantillas`) o `POST /api/whatsapp/templates/sync` |
 | Listar las guardadas | `GET /api/whatsapp/templates` |
+| Fijar cuál es LA plantilla de ofertas | `Ajustes → Plantillas`, o `POST /api/whatsapp/templates` (rol `admin`); se guarda el nombre en `settings.whatsapp_offer_template` |
 
-La sincronización trae hasta 100 plantillas y hace upsert por `meta_template_id`. Requiere `WHATSAPP_BUSINESS_ACCOUNT_ID`.
+Fijar la plantilla de ofertas importa: el portal acumula todas las que Meta aprobó alguna vez —las de prueba, las obsoletas, la de ejemplo— y elegir de una lista larga en el paso del envío ya hizo que los empleados recibieran un enlace roto. Con el ajuste puesto, el paso 2 del envío solo ofrece esa.
+
+La sincronización recorre **todas** las plantillas de la cuenta —páginas de 100, siguiendo `paging.next`— y hace upsert por `meta_template_id`. Requiere `WHATSAPP_BUSINESS_ACCOUNT_ID`.
 
 ### Plantilla por defecto
 
 `adelanto_nomina_v2`, con **3 variables de cuerpo**: nombre, empleador, monto.
 
-Existe una plantilla legada `adelanto_nomina` con solo 2 variables. El código distingue entre ambas.
+Cuántas variables y qué componentes lleva el mensaje **se deducen de la plantilla sincronizada**, no de su nombre (`describeTemplateShape`): Meta valida el payload contra la definición aprobada y castiga los dos errores simétricos —mandar una cabecera que la plantilla no declara, y omitirla en una que sí—. El respaldo por nombre solo entra cuando no se conoce la forma real: ahí la legada `adelanto_nomina` manda 2 variables y cualquier otra, 3.
 
-Si `WHATSAPP_TEMPLATE_HEADER_IMAGE_URL` está definida **y** la plantilla es `adelanto_nomina_v2`, se añade un componente de cabecera con imagen.
+Si `WHATSAPP_TEMPLATE_HEADER_IMAGE_URL` está definida **y** la plantilla declara cabecera de imagen, se añade el componente de cabecera. Sin forma conocida, el respaldo la añade a `adelanto_nomina_v2` y `adelanto_nomina_v3`.
 
-El idioma está fijo en `es_MX` y la versión de la Graph API en `v18.0`, ambos hardcodeados en `src/lib/whatsapp/client.ts`.
+El botón de URL sigue la misma regla: solo se manda si la plantilla lo declara. Una plantilla de **respuesta rápida** —la del chatbot Sí/No— no lo acepta, y mandárselo tumba el envío entero.
+
+El idioma de cada mensaje es el **idioma real de la plantilla** que trae la sincronización con Meta; cuando no se conoce, cae al de `WHATSAPP_TEMPLATE_LANGUAGE` (por defecto `es_MX`). La versión de la Graph API es `v21.0` y vive en un único sitio, `src/lib/whatsapp/graph-version.ts`, sobreescribible con `WHATSAPP_GRAPH_VERSION`: estuvo clavada en `v18.0` en dos archivos hasta que esa versión quedó fuera de la ventana de soporte de Meta, y centralizarla fue justo para no volver a quedar atrapados.
 
 ### Categoría de plantilla y entrega (importante)
 
@@ -122,17 +131,18 @@ Un empleado sin CLABE activa **no recibe mensaje**, aunque su oferta sea válida
 
 ### Desde la UI
 
-`WhatsApp → Nuevo envío` (`/whatsapp/send`) es un asistente de **4 pasos** (la UI muestra "Paso X de 4") — **Destinatarios → Mensaje → Revisión → Confirmación** — más una **pantalla de Resultado** al final.
+`Ofertas → Enviar` (`/ofertas`) tiene **4 pasos en UNA sola pantalla**: los tres primeros se recorren en la columna izquierda y el cuarto ("Paso 4 de 4", Enviar) queda fijo a la derecha, para que el botón y el motivo por el que todavía no se puede pulsar nunca se pierdan de vista.
 
-1. Elegir modo: **por importación** (empleados de un lote CSV aplicado) o **manual** (búsqueda y selección individual).
-2. Elegir o renombrar la plantilla.
-3. Revisar: se valida elegibilidad y se muestra el conteo, con posibilidad de deseleccionar.
-4. Confirmar en el modal.
-5. Ver el resultado con enviados y fallidos.
+1. **A quién le llega**: **Un ciclo completo** (empleados de un lote CSV aplicado) o **Personas sueltas** (búsqueda por nombre, RFC o teléfono).
+2. **Qué mensaje reciben**: elegir la plantilla. Si un admin ya fijó la plantilla de ofertas en Ajustes, el paso solo ofrece esa; una plantilla sin aprobar exige marcar la casilla de riesgo.
+3. **Revisar antes de mandar**: se valida elegibilidad y se muestra el conteo, con posibilidad de deseleccionar. Quitar a alguien cambia el envío a modo manual con la lista exacta que quedó marcada, porque en modo `import` el backend ignora `employeeIds` y le manda al lote entero.
+4. **Enviar**: confirmar en el modal, que dice el número exacto de personas.
+
+El resultado aparece arriba de los pasos y distingue cuatro desenlaces: salió, salió con fallos, se encoló, y **no salió nada nuevo porque ya se les había mandado hace minutos** (dedup). Tras un envío el botón queda bloqueado hasta pulsar «Preparar otro envío».
 
 Solo aparecen como origen las importaciones en estado `aplicada`.
 
-El operador no configura el botón ni el link. Si la plantilla tiene botón URL dinámico, el backend genera o reutiliza el contrato de cada empleado y manda a Meta el sufijo del link correspondiente.
+El operador no configura el botón ni el link. Si la plantilla tiene botón URL dinámico, el backend arma el enlace de **auto-servicio** `/solicitar/<token>` de cada empleado y manda a Meta su sufijo. **Al enviar no se genera ningún contrato** (decisión #2): el contrato —y la firma de EasyLex, que cuesta— se crea solo cuando la persona abre el enlace y confirma, o cuando contesta "Sí" al chatbot. Antes se generaba por CADA envío y se gastaba una firma incluso para quien nunca firmaba. Una plantilla de **respuesta rápida** (la del chatbot) no lleva botón de URL, y ahí no hay enlace que armar.
 
 ### Desde la API
 
@@ -152,7 +162,9 @@ curl -X POST "https://tu-dominio.com/api/whatsapp/bulk" \
   -d '{"mode":"import","importId":"uuid","templateName":"adelanto_nomina_v2"}'
 ```
 
-Ambos requieren cookie de sesión — no hay API key. Contrato completo en [API](api.md#whatsapp--envío).
+Hay un tercer modo que la UI no ofrece: `{"mode":"status","status":"pendiente_envio"}` manda a **todos los empleados de una etapa del embudo** (`backoffice_contract_control_v1.operational_status`) sin tener que enumerar ids. Hoy solo se admite `pendiente_envio`: reenviar la plantilla inicial a otra etapa sería incorrecto.
+
+Ambos requieren cookie de sesión — no hay API key. `?action=validate` pide rol `solo_lectura`; enviar pide `operaciones`. Contrato completo en [API](api.md#whatsapp--envío).
 
 ### Cómo se ejecuta
 
@@ -171,7 +183,11 @@ Hay dos modos de transporte, elegidos por configuración. El código de negocio 
 
 Lotes de **100** mensajes con **1 segundo** de pausa (`BATCH_SIZE`, `BATCH_DELAY_MS`). Mil empleados tardan unos 10 segundos.
 
+**Dedup por empleado y plantilla en ventanas de 5 minutos** (`dedup_key` + índice único): volver a pulsar Enviar sobre la misma gente no le repite el mensaje, y esos empleados salen en `skipped`, no en `failed`. El modo cola tiene la misma garantía, pero ahí los repetidos se **pre-filtran** antes de crear las tareas y no viajan en `skipped`: la pantalla los deduce restando. Si la migración `20260724` no está aplicada la columna no existe y el envío **degrada a no tener idempotencia por empleado**, dejando el log `whatsapp.bulk_send.dedup_unavailable`.
+
 Al terminar reconsulta la base y **sobrescribe los contadores en memoria** si no coinciden, dejando el log `whatsapp.bulk_send.count_mismatch`.
+
+Al arrancar cualquier envío se barren los anteriores atascados en `sending` más de **30 minutos** (`reconcileStuckBulkSends`): sus mensajes sin completar pasan a `failed` y el envío se cierra recomputando contadores. Sin eso, un proceso muerto a mitad dejaba el envío en `sending` para siempre.
 
 > El envío ocurre dentro del request HTTP. Un lote grande puede toparse con el timeout del entorno de despliegue. Es la razón de existir del modo cola.
 
@@ -201,7 +217,7 @@ Un rechazo de Meta devuelve `200` a propósito: ya quedó registrado como `faile
 
 **Seguridad del worker.** `/api/tasks/*` queda fuera del gate de sesión porque quien llama es una máquina sin cookie. Se autentica con el token OIDC que firma Cloud Tasks, validando firma, `audience` y service account. Fuera de producción se acepta además la cabecera `x-tasks-secret`; en producción, no.
 
-> **Pendiente:** con la cola activa, la pantalla de resultado muestra 0 enviados porque la respuesta es inmediata. Falta que consulte el detalle del envío periódicamente. Con el modo inline (por defecto) no aplica.
+> **Pendiente:** con la cola activa la pantalla de resultado ya no miente —dice cuántos mensajes se **encolaron** y manda al detalle—, pero no se refresca sola: para ver cómo va cada uno hay que entrar al detalle del envío. Con el modo inline (por defecto) no aplica.
 
 #### Configurar la cola
 
@@ -215,11 +231,9 @@ gcloud tasks queues create whatsapp-bulk \
   --max-backoff=300s
 
 gcloud iam service-accounts create cloud-tasks-invoker
-
-gcloud run services add-iam-policy-binding <servicio> \
-  --member=serviceAccount:cloud-tasks-invoker@<proyecto>.iam.gserviceaccount.com \
-  --role=roles/run.invoker
 ```
+
+No hay binding de `roles/run.invoker` que dar: el worker corre en **Railway**, no en Cloud Run (ver [Infraestructura](infraestructura.md)). Lo que protege `/api/tasks/*` es la propia app, que valida el token OIDC con el que Cloud Tasks firma cada petición: firma, `audience` (el origen de `TASKS_WORKER_BASE_URL` más el path de la petición, nunca el `Host` entrante, que un atacante controla) y que el `email` del token sea exactamente `TASKS_INVOKER_SERVICE_ACCOUNT`. En producción, sin esa service account configurada el worker rechaza todo.
 
 `--max-dispatches-per-second` es el límite real hacia Meta: ajústalo a la cuota de tu número. Después, definir las variables `GCP_PROJECT_ID`, `CLOUD_TASKS_QUEUE`, `TASKS_WORKER_BASE_URL` y `TASKS_INVOKER_SERVICE_ACCOUNT`. Ver [Configuración](configuracion.md).
 
@@ -227,12 +241,14 @@ Para volver al modo inline sin desmontar nada: `QUEUE_DRIVER=inline`.
 
 ## Historial y seguimiento
 
-`WhatsApp → Historial` (`/whatsapp/history`) lista los envíos con filtros por estado (`pending`, `sending`, `completed`, `failed`), modo (`import`, `manual`) y rango de fechas. Al abrir un envío se ve el detalle por destinatario, con búsqueda por RFC.
+`Ofertas → Ver envíos anteriores` (`/ofertas/historial`) lista los envíos con filtros por estado (`pending`, `sending`, `completed`, `failed`), modo (`import`, `manual`, `status`) y rango de fechas; los filtros viven en la URL, así que un envío raro se puede compartir por chat. Al abrir un envío (`/ofertas/[envioId]`) se ve el detalle por destinatario, con búsqueda por RFC y filtro por cómo terminó cada mensaje.
 
 ### Estados de entrega
 
 | Estado | Significado |
 |---|---|
+| `pending` | fila reclamada por el envío inline, todavía sin salir hacia Meta |
+| (vacío / NULL) | mensaje **encolado**: el `delivery_status` queda en NULL hasta que el worker lo toma. La UI lo llama `queued` |
 | `sent` | Meta aceptó el mensaje y está en cola de entrega |
 | `delivered` | llegó al dispositivo |
 | `read` | el destinatario lo abrió |
@@ -244,7 +260,7 @@ Para volver al modo inline sin desmontar nada: `QUEUE_DRIVER=inline`.
 
 ## Auditoría de teléfonos
 
-`Ajustes → Auditoría de teléfonos` (`/settings/whatsapp/phone-audit`) clasifica el teléfono de todos los empleados. Formato objetivo: **`521` + 10 dígitos = 13 dígitos**.
+`Ajustes → Teléfonos` (`/ajustes/telefonos`) clasifica el teléfono de todos los empleados. Formato objetivo: **`521` + 10 dígitos = 13 dígitos**.
 
 | Problema | Descripción |
 |---|---|

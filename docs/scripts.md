@@ -19,13 +19,17 @@ pnpm dlx tsx scripts/<archivo>.ts
 | `inspect-template.ts` | Vuelca el texto real de la plantilla y muestra placeholders y blancos. Solo lectura; útil antes de mutar | alias `@/`, Google |
 | `setup-test-employee.ts` | Deja **un empleado de prueba LISTO** para el pipeline (datos personales completos + oferta elegible + cuenta activa). Persiste; `--cleanup --rfc=…` para borrarlo. Args: `--telefono`, `--rfc`, `--nombre`, `--apellido-paterno`, `--email`, `--monto`… Para la [primera prueba E2E](primera-prueba-e2e.md) | alias `@/`, `.env.local`, **muta la DB** |
 | `demo-contract-from-db.ts` | Demuestra que con los datos EN la DB el contrato sale completo: llena un empleado, genera el PDF y **revierte**. Prueba de un solo tiro | alias `@/`, Google |
+| `google-auth.ts` | Autorización OAuth de Google, **una sola vez**: genera `token.json` en la raíz, que es lo que `src/lib/google/auth.ts` necesita para copiar la plantilla y exportarla a PDF. Sin ese token no se genera ningún contrato. Requiere `google_oauth_client.json` (tipo "Desktop app") y las APIs de Drive y Docs activas; abre un servidor en `localhost:3333` para el redirect | credenciales OAuth en la raíz |
+| `trigger-contract.ts` | Dispara el pipeline completo para un RFC desde la terminal, sin navegador ni sesión: llama directo a `requestContractFromWhatsApp`. Args: `--rfc=`, `--callback=`, `--allow-no-callback` | alias `@/`, `.env.local`, **EFECTOS REALES: crea documento en EasyLex (gasta firma) y manda un WhatsApp** |
+| `fetch-signed-contract.ts` | Descarga el PDF **firmado** de un documento de EasyLex sin depender del webhook ni de un deploy público. Args: `--doc=doc-XXXX` o `--rfc=` (toma el último intento) | alias `@/`, `.env.local` |
+| `fix-template-text.ts` | Correcciones puntuales de TEXTO en la plantilla de Google Docs (typos). Verifica que cada cadena aparezca el número esperado de veces antes de tocar nada. Dry-run por defecto; `--apply` | alias `@/`, Google, **muta el Doc** |
 | `create-pdf-template-fixed.ts` | Generador de un solo uso: estampa el AcroForm sobre el PDF original y escribe `src/lib/easylex/templates/contrato-prestamo.pdf`. Contiene la tabla de coordenadas de cada campo | ruta absoluta local |
 | `inspect-pdf.ts` | Abre un PDF con `pdf-lib` y muestra páginas, dimensiones y campos de formulario existentes | ruta absoluta local |
 | `extract-pdf-text.ts` | Decodifica los content streams del PDF y extrae el texto de los operadores `Tj` y `TJ` | ruta absoluta local |
 
 > Los tres últimos tienen **codificada la ruta absoluta** `/Users/joseangel/Downloads/LOZAV Préstamo mercantil V2.pdf`. Solo funcionan en la máquina del autor; en otra hay que editar la constante. Se conservan porque documentan cómo se construyó la plantilla del contrato.
 
-`verify-whatsapp-setup.ts` es el único de utilidad operativa recurrente. El resto pertenece al trabajo puntual sobre el PDF del contrato.
+`verify-whatsapp-setup.ts` es el único de utilidad operativa recurrente, y `google-auth.ts` se corre una vez por máquina o cuenta. El resto se reparte entre el trabajo puntual sobre el PDF del contrato y las pruebas de extremo a extremo del pipeline (`trigger-contract.ts`, `fetch-signed-contract.ts`).
 
 ## Diagnóstico de EasyLex (`*.mjs`)
 
@@ -43,5 +47,8 @@ node scripts/<archivo>.mjs
 | `dump-easylex-settings.mjs` | Imprime las banderas `easylex_validate_*` de `company_settings` | Solo lectura |
 | `inspect-employee.mjs` | Estado de contrato de un empleado por RFC (oferta, solicitudes, intentos, banco) | Solo lectura |
 | `demo-webhook-sign.mjs` | Prueba E2E del webhook de firma: crea un contrato mock, dispara `DOCUMENT_SIGNED` al handler real (firma HMAC si hay secreto), verifica y limpia | **Requiere dev server**; no gasta firma |
+| `solicitar-link.mjs` | No es diagnóstico de EasyLex, pero corre igual con `node` y es donde se lo busca: genera un link `/solicitar/<token>` firmado para probar el auto-servicio en el navegador de la laptop, sin celular, sin túnel y sin plantilla de WhatsApp. Réplica exacta de `signSolicitarToken`. Args: `[employeeId]` | Lee `SOLICITAR_TOKEN_SECRET`; imprime **solo la URL**, no el secreto |
+| `set-easylex-validation.mjs` | Deja `company_settings` en la combinación de validación que EasyLex acepta: biométrico y prueba de vida exigen `id` y `picture` en true | **muta la DB** |
+| `probe-easylex-sendemail.mjs` | Crea un documento con `sendEmail=true` para ver el formato exacto de la URL de firma canónica que manda EasyLex. Args: `<email>` | **Gasta 1 firma y manda 1 correo** |
 
 Ver también: [EasyLex y contratos](easylex-contratos.md) · [WhatsApp](whatsapp.md)
